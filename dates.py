@@ -1,0 +1,26 @@
+from datetime import datetime
+from pycdlib.dates import VolumeDescriptorDate, DirectoryRecordDate
+
+
+def datetime_from_iso_date(iso_date):
+    year = None
+    if isinstance(iso_date, VolumeDescriptorDate):
+        year = iso_date.year
+        day = iso_date.dayofmonth
+    elif isinstance(iso_date, DirectoryRecordDate):
+        year = 1900 + iso_date.years_since_1900
+        day = iso_date.day_of_month
+    else:
+        return None
+
+    if year < 1970:
+        return None
+
+    return datetime(
+        year,
+        iso_date.month,
+        day,
+        iso_date.hour,
+        iso_date.minute,
+        iso_date.second,
+    )
