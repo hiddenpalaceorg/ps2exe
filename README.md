@@ -46,3 +46,6 @@
     - ~~PS2 games can be detetcted if "BOOT2" is present in system.cnf~~
     - Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.
     - Sega CD games can be detected if the string "SEGADISCSYSTEM" is present at 0x10 in a .bin and 0x0 in an .iso.
+    - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
+9. (?) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. add results to a column on the sheet.
+10. detect media type (CD-R or DVD-R). unsure if we can do this.
