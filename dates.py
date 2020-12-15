@@ -13,8 +13,11 @@ def datetime_from_iso_date(iso_date):
     else:
         return None
 
-    if year < 1970:
+    if not year:
         return None
+
+    if year < 1970:
+        year += 100
 
     return datetime(
         year,
