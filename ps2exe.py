@@ -27,6 +27,7 @@ def get_iso_binwrapper(wrapper):
     while True:
         try:
             iso.open_fp(wrapper)
+            wrapper.repair_padding = False
             return iso
         except (PyCdlibInvalidISO, struct.error) as e:
             # Handle typical errors related to bad padding

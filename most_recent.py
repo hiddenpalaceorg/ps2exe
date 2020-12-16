@@ -16,6 +16,8 @@ def get_most_recent_file_dr(iso_dir, most_recent_file=None):
             continue
         if file.is_dir():
             most_recent_file = get_most_recent_file_dr(file.children, most_recent_file)
+            if most_recent_file:
+                most_recent_file_date = datetime_from_iso_date(most_recent_file.date)
             continue
         file_date = datetime_from_iso_date(file.date)
 
@@ -38,7 +40,7 @@ def get_most_recent_file_info(iso, exe_date):
             most_recent_file_hash.update(chunk)
 
     return {
-        "most_recent_file": most_recent_path,
+        "most_recent_file": most_recent_path.replace(";1", ""),
         "most_recent_file_date": most_recent_file_date,
         "most_recent_file_hash": most_recent_file_hash.hexdigest()
     }
