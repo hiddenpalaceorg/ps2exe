@@ -16,6 +16,9 @@ class BinWrapper:
         self.detect_sector_size()
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
 
+    def close(self):
+        self.fp.close()
+
     def seek(self, pos, whence=os.SEEK_SET):
         LOGGER.debug(f"seek {pos} {whence}")
         if whence == os.SEEK_SET:
@@ -30,6 +33,21 @@ class BinWrapper:
     def tell(self):
         LOGGER.debug("tell")
         return self.pos
+
+    def peek(self, n=-1):
+        cur_pos = self.fp.tell()
+        original_pos = self.pos
+        buffer = self.read(n)
+        self.fp.seek(cur_pos)
+        self.pos = original_pos
+
+        # if the directory record is less than 30 bytes (it can't be that small),
+        # then it's probably garbage padding. Fill the rest of this sector with zeroes
+        lenbyte = bytearray([buffer[0]])[0]
+        if lenbyte and lenbyte < 30:
+            return b'\x00'
+
+        return buffer
 
     def read(self, n=-1):
         length = n
@@ -49,52 +67,7 @@ class BinWrapper:
             length -= sector_read_length
 
         # LOGGER.debug()(buffer)
-        buffer = b"".join(buffer)
-        if not self.repair_padding:
-            return buffer
-
-        # Fool pycdlib to think that the end of a sector is zero-padded
-        # even if mastering caused garbage data to be written to the padding section
-        lenbyte = bytearray([buffer[0]])[0]
-        # Detect if this sector is a directory record
-        orig_buffer = buffer
-        if lenbyte > 1 and buffer[32:33] == b"\x01":
-            offset = 0
-            while offset < n:
-                lenbyte = bytearray([buffer[offset]])[0]
-                # if the directory record is less than 30 bytes (it can't be that small),
-                # then it's probably garbage padding. Fill the rest of this sector with zeroes
-                if lenbyte < 30:
-                    padsize = sector_read_length - (offset % sector_read_length)
-                    buffer = buffer[:offset] + b'\x00' * padsize + buffer[offset+padsize:]
-
-                    offset = offset + padsize
-                else:
-                    file_length = bytearray([buffer[offset+32]])[0]
-                    file_name = buffer[offset+33:offset+33+file_length]
-                    file_flags = buffer[offset+26]
-                    is_dir = file_flags & 2
-                    month = buffer[offset + 19]
-                    day = buffer[offset + 20]
-                    hour = buffer[offset + 21]
-                    minute = buffer[offset + 22]
-                    second = buffer[offset + 23]
-                    # Garbage data detected in this sector (the filename field
-                    # is not actually a file), zero pad it
-                    is_valid_file = (month <= 12 and
-                                     day <= 31 and
-                                     hour <= 23 and
-                                     minute <= 59 and
-                                     second <= 59) and \
-                                    (file_name not in [b"\x00", b"\x01"] or (not is_dir and file_name[-2:-1] != b";"))
-                    if not is_valid_file:
-                        padsize = sector_read_length - (offset % sector_read_length)
-                        buffer = buffer[:offset] + b'\x00' * padsize + buffer[offset + padsize:]
-
-                        offset = offset + padsize
-                        continue
-                    offset += lenbyte
-        return buffer
+        return b"".join(buffer)
 
     def length(self):
         self.fp.seek(0, os.SEEK_END)
