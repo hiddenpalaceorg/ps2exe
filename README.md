@@ -40,7 +40,7 @@
 4. ~~skip any file with a filename that contains (Track #) where # is a number higher than 1~~
 5. ~~report filename, checksum, and timestamp of latest modified file~~
 6. ~~Discs that report 1900 as a year in the TOC should be 2000.~~
-7. add saturn/sega cd supprt for the main exe (note: the exe is always the first file sorted alphanumerically on the root of the disc). naybe we should interpret the ip/header as well https://www.retroreversing.com/sega-saturn-initial-program-ip/ ?
+7. add saturn/sega cd supprt for the main exe (note: the exe is always the first file sorted alphanumerically on the root of the disc). naybe we should interpret the ip/header as well https://github.com/GerbilSoft/rom-properties/blob/61999700a70b98acd457d7cf35efb437d597c79b/src/libromdata/Console/saturn_structs.h ?
 8. add philips cd-i support. the main executable filename differs from game to game, but the it can be determined in LBA 16 at address 0x23E (maybe 0x9556 in each .bin).
 9. add system detector
     - ~~PS1 games can be detected if "BOOT" is present in system.cnf.~~
