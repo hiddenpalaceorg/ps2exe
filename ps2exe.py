@@ -6,6 +6,7 @@ import re
 import struct
 import sys
 
+from iso_accessor import IsoAccessor
 from pycdlib.pycdlibexception import PyCdlibInvalidISO
 
 from bin_wrapper import BinWrapper
@@ -21,56 +22,51 @@ except ImportError:
 LOGGER = logging.getLogger(__name__)
 
 
-def get_iso_binwrapper(wrapper):
-    iso = pycdlib.PyCdlib()
-
-    while True:
-        try:
-            iso.open_fp(wrapper)
-            wrapper.repair_padding = False
-            return iso
-        except (PyCdlibInvalidISO, struct.error) as e:
-            # Handle typical errors related to bad padding
-            if str(e) != "Invalid padding on ISO" \
-                    and not str(e).startswith('unpack_from requires a buffer of at least 33'):
-                raise
-            if wrapper.repair_padding:
-                raise
-            wrapper.repair_padding = True
-            return get_iso_binwrapper(wrapper)
-
-
 def get_iso_info(iso_filename):
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
     LOGGER.info("Reading %s", basename.decode())
 
+    iso = pycdlib.PyCdlib()
     fp = open(iso_filename, "rb")
-    try:
-        wrapper = BinWrapper(fp)
-        iso = get_iso_binwrapper(wrapper)
+    info = {"name": basename.decode(), "path": iso_filename}
 
+    wrapper = BinWrapper(fp)
+    try:
+        iso.open_fp(wrapper)
+        info.update(get_pvd_info(iso))
+    except Exception:
+        # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
+        if not iso.pvd:
+            LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
+            return
+        info.update(get_pvd_info(iso))
+
+    try:
+        iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
     except Exception:
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
         return
 
-    info = {"name": basename.decode(), "path": iso_filename}
-
-    result = hash_exe(iso)
+    result = hash_exe(iso_accessor)
     if result is not None:
         info.update(result)
 
     info.update(get_pvd_info(iso))
 
-    info.update(get_most_recent_file_info(iso, info.get("exe_date")))
+    if iso._initialized:
+        info.update(get_most_recent_file_info(iso, info.get("exe_date")))
+    else:
+        info.update(get_most_recent_file_info(iso_accessor, info.get("exe_date")))
 
-    iso.close()
+    if iso._initialized:
+        iso.close()
     fp.close()
 
     return info
 
 
 def process_path(path):
-    if re.search("\(Track (?:[2-9]|\d\d\d*)\)\.bin|\.(html|jpeg|jpg|cue|ccd|sub)", path):
+    if re.search("\(Track (?:[2-9]|\d\d\d*)\)\.bin|\.(html|jpeg|jpg|cue|ccd|sub|zip|part)", path):
         return
 
     size = os.path.getsize(path)
@@ -112,6 +108,9 @@ if __name__ == '__main__':
                         type=str,
                         default='results.csv')
 
+    parser.add_argument("-l", "--log", dest="logLevel", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Set the logging level", default="INFO")
+
     group = parser.add_mutually_exclusive_group(required=True)
 
     group.add_argument("input_dir", nargs="?")
@@ -123,6 +122,8 @@ if __name__ == '__main__':
                        required=False)
 
     args = parser.parse_args()
+
+    logging.basicConfig(level=getattr(logging, args.logLevel))
 
     results = []
 

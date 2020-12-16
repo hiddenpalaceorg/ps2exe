@@ -19,10 +19,13 @@ def datetime_from_iso_date(iso_date):
     if year < 1970:
         year += 100
 
+    month = iso_date.month
+    if iso_date.month == 0:
+        month = 1
 
     dt = datetime.datetime(
         year,
-        iso_date.month,
+        month,
         day,
         iso_date.hour,
         iso_date.minute,
