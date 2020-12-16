@@ -40,12 +40,14 @@
 4. ~~skip any file with a filename that contains (Track #) where # is a number higher than 1~~
 5. ~~report filename, checksum, and timestamp of latest modified file~~
 6. ~~Discs that report 1900 as a year in the TOC should be 2000.~~
-7. add saturn/sega cd supprt for the main exe (note: the exe is always the first file sorted alphanumerically on the root of the disc).
-8. add system detector
+7. add saturn/sega cd supprt for the main exe (note: the exe is always the first file sorted alphanumerically on the root of the disc). naybe we should interpret the ip/header as well https://www.retroreversing.com/sega-saturn-initial-program-ip/ ?
+8. add philips cd-i support. the main executable filename differs from game to game, but the it can be determined in LBA 16 at address 0x23E (maybe 0x9556 in each .bin).
+9. add system detector
     - ~~PS1 games can be detected if "BOOT" is present in system.cnf.~~
     - ~~PS2 games can be detetcted if "BOOT2" is present in system.cnf~~
     - Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.
     - Sega CD games can be detected if the string "SEGADISCSYSTEM" is present at 0x10 in a .bin and 0x0 in an .iso.
+    - Philips CD-i games can be detected if the file "path_tbl" is located at the root of the disc.
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
-9. (?) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. add results to a column on the sheet.
-10. detect media type (CD-R or DVD-R). unsure if we can do this.
+10. (?) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. add results to a column on the sheet.
+11. detect media type (CD-R or DVD-R). unsure if we can do this.
