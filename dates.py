@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 from pycdlib.dates import VolumeDescriptorDate, DirectoryRecordDate
 
 
@@ -19,11 +19,14 @@ def datetime_from_iso_date(iso_date):
     if year < 1970:
         year += 100
 
-    return datetime(
+
+    dt = datetime.datetime(
         year,
         iso_date.month,
         day,
         iso_date.hour,
         iso_date.minute,
         iso_date.second,
+        tzinfo=datetime.timezone(datetime.timedelta(minutes=15 * iso_date.gmtoffset))
     )
+    return dt

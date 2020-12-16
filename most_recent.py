@@ -9,6 +9,7 @@ def get_most_recent_file_dr(iso_dir, most_recent_file=None):
         most_recent_file_date = datetime_from_iso_date(most_recent_file.date)
     else:
         most_recent_file_date = datetime.datetime.min
+        most_recent_file_date = most_recent_file_date.replace(tzinfo=datetime.timezone.utc)
 
     for file in iso_dir:
         if file.is_dot() or file.is_dotdot():
