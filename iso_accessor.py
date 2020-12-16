@@ -3,6 +3,26 @@ import datetime
 from pathlab import IsoAccessor as _IsoAccessor
 from pathlab.iso import SECTOR
 
+class _ScandirIter:
+    """
+    For compatibility with different python versions.
+    Pathlib:
+    - prior 3.8 - Use it as an iterator
+    - 3.8 - Use it as an context manager
+    """
+
+    def __init__(self, iterator):
+        self.iterator = iterator
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def __iter__(self):
+        return self.iterator
+
 
 class IsoAccessor(_IsoAccessor):
     def _load_children(self, record):
@@ -40,3 +60,6 @@ class IsoAccessor(_IsoAccessor):
         offset = int.from_bytes(self.fileobj.read(1), byteorder="little", signed=True)
         t = t.replace(tzinfo=datetime.timezone(datetime.timedelta(minutes=15 * offset)))
         return t
+
+    def scandir(self, path):
+        return _ScandirIter((self.factory(path, name) for name in self.listdir(path)))
