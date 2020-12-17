@@ -38,7 +38,7 @@ def hash_exe(iso, system_type):
                 except FileNotFoundError:
                     pass
         if exe_filename:
-            exe_filename.upper()
+            exe_filename = exe_filename.upper()
     elif system_type == "saturn":
         exe_filename = next(root.iterdir()).name
 
