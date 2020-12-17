@@ -23,6 +23,26 @@ except ImportError:
 LOGGER = logging.getLogger(__name__)
 
 
+def get_system_type(fp, isoaccessor):
+    fp.seek(0)
+    if fp.read(15) == b"SEGA SEGASATURN":
+        return "saturn"
+
+    try:
+        with isoaccessor.IsoPath("/SYSTEM.CNF").open() as f:
+            system_cnf = f.read()
+            if "BOOT2" in system_cnf:
+                return "ps2"
+            elif "BOOT" in system_cnf:
+                return "ps1"
+    except FileNotFoundError:
+        try:
+            with isoaccessor.IsoPath("/PSX.EXE").open():
+                return "ps1"
+        except FileNotFoundError:
+            pass
+
+
 def get_iso_info(iso_filename):
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
     LOGGER.info("Reading %s", basename.decode())
@@ -48,7 +68,10 @@ def get_iso_info(iso_filename):
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
         return
 
-    result = hash_exe(iso_accessor)
+    system = get_system_type(wrapper, iso_accessor)
+    info.update({"system": system})
+
+    result = hash_exe(iso_accessor, system)
     if result is not None:
         info.update(result)
 

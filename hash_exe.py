@@ -13,46 +13,50 @@ def get_file_list(root):
 
 
 
-def hash_exe(iso):
+def hash_exe(iso, system_type):
     root = iso.IsoPath("/")
-    file_list = get_file_list(root)
-    if "/SYSTEM.CNF" in file_list:
-        with iso.IsoPath("/SYSTEM.CNF").open() as f:
-            system_cnf = f.read()
+    exe_filename = None
+    if system_type in ["ps2", "ps1"]:
+        try:
+            with iso.IsoPath("/SYSTEM.CNF").open() as f:
+                system_cnf = f.read()
 
-        exe_filename = None
-        system = None
-        for line in system_cnf.splitlines():
-            if "BOOT" in line:
-                if "BOOT2" in line:
-                    system = "ps2"
-                else:
-                    system = "ps1"
-                match = re.match(r"BOOT.?\s*=\s*cdrom0?:\\?\\?([^;]*)", line)
-                if match:
-                    exe_filename = match.group(1).replace("\\", "/")
+            for line in system_cnf.splitlines():
+                if "BOOT" in line:
+                    match = re.match(r"BOOT.?\s*=\s*cdrom0?:\\?\\?([^;]*)", line)
+                    if match:
+                        exe_filename = match.group(1).replace("\\", "/")
+                    break
 
-                break
+            if exe_filename is None:
+                raise Exception(f"exe not found, SYSTEM.CNF: {system_cnf}")
+        except FileNotFoundError:
+            if system_type == "ps1":
+                try:
+                    with iso.IsoPath("/PSX.EXE").open():
+                        exe_filename = "PSX.EXE"
+                except FileNotFoundError:
+                    pass
+        if exe_filename:
+            exe_filename.upper()
+    elif system_type == "saturn":
+        exe_filename = next(root.iterdir()).name
 
-        if exe_filename is None:
-            raise Exception(f"exe not found, SYSTEM.CNF: {system_cnf}")
-
-    elif "/PSX.EXE" in file_list:
-        system = "ps1"
-        exe_filename = "PSX.EXE"
-    else:
-        LOGGER.warning(f"SYSTEM.CNF or PSX.EXE not found, might not be a PS1/PS2 iso. Files: %s, iso: %s",
+    if exe_filename is None:
+        file_list = get_file_list(root)
+        LOGGER.warning(f"Executable file not found. Files: %s, iso: %s",
                        file_list, iso.file.fp.name)
         return
 
     LOGGER.info("Found exe: %s", exe_filename)
-    exe_filename = exe_filename.upper().strip()
+    exe_filename = exe_filename.strip()
     exe_path = iso.IsoPath("/" + exe_filename)
 
     try:
         with exe_path.open(mode='rb') as f:
             exe = f.read()
     except Exception:
+        file_list = get_file_list(root)
         LOGGER.exception(f"Could not read exe %s, file list: %s iso: %s", exe_filename, file_list, iso.file.fp.name)
         return
 
@@ -62,7 +66,6 @@ def hash_exe(iso):
     datetime = exe_path.stat().create_time
 
     return {
-        "system": system,
         "exe_filename": exe_filename,
         "exe_date": datetime,
         "md5": md5,
