@@ -47,8 +47,10 @@
     - ~~PS2 games can be detetcted if "BOOT2" is present in system.cnf~~
     - Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.
     - Sega CD games can be detected if the string "SEGADISCSYSTEM" is present at 0x10 in a .bin and 0x0 in an .iso.
+    - Sega Dreamcast games can be detected if "1ST_READ.BIN" is present on the track that contains game data. Alternatively, Dreamcast games also have a IP.BIN/Disc header that contains the string "SEGA SEGAKATANA" at 0x10 in every data track (track01.bin should always be a data track).
     - Philips CD-i games can be detected if the file "path_tbl" is located at the root of the disc.
     - Panasonic 3DO can be detected if the word "CD-ROM" can be found at 0x38 in the .img. 3DO doesn't seem to use typical cdfs.
+    - Microsoft Xbox games can be detected if 'default.xbe' is present on the disc. Some prototypes will either be on normal DVD-Rs with a normal PC readable file system, some prototypes will use the xbox file system as its first partition, and some will be on pressed discs that use two partitions (a dvd video partition followed by a xbox file system partition where game data is stored).
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
 10. (?) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. add results to a column on the sheet.
 11. detect media type (CD-R or DVD-R). unsure if we can do this.
