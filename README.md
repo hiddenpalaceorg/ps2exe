@@ -48,6 +48,7 @@
     - Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.
     - Sega CD games can be detected if the string "SEGADISCSYSTEM" is present at 0x10 in a .bin and 0x0 in an .iso.
     - Philips CD-i games can be detected if the file "path_tbl" is located at the root of the disc.
+    - Panasonic 3DO can be detected if the word "CD-ROM" can be found at 0x38 in the .img. 3DO doesn't seem to use typical cdfs.
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
 10. (?) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. add results to a column on the sheet.
 11. detect media type (CD-R or DVD-R). unsure if we can do this.
