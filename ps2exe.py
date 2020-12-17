@@ -118,7 +118,7 @@ def get_iso_info(iso_filename):
 
 
 def process_path(path):
-    if re.search("\(Track (?:[2-9]|\d\d\d*)\)\.bin|\.(html|jpeg|jpg|cue|ccd|sub|zip|part)", path):
+    if re.search("\(Track (?:\d?[2-9]|[1-9]\d+)\)\.bin|\.(html|jpeg|jpg|cue|ccd|sub|zip|part)", path):
         return
 
     size = os.path.getsize(path)
