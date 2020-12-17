@@ -12,6 +12,7 @@ from pycdlib.pycdlibexception import PyCdlibInvalidISO
 from bin_wrapper import BinWrapper
 from hash_exe import hash_exe
 from most_recent import get_most_recent_file_info
+from patches import apply_patches
 from pvd import get_pvd_info
 
 try:
@@ -36,7 +37,7 @@ def get_iso_info(iso_filename):
         info.update(get_pvd_info(iso))
     except Exception:
         # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
-        if not iso.pvd:
+        if not hasattr(iso, "pvd"):
             LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
             return
         info.update(get_pvd_info(iso))
@@ -126,6 +127,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=getattr(logging, args.logLevel))
 
     results = []
+    apply_patches()
 
     if args.file:
         result = process_path(args.file)

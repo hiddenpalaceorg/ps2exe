@@ -41,8 +41,8 @@ def hash_exe(iso):
         system = "ps1"
         exe_filename = "PSX.EXE"
     else:
-        LOGGER.error(f"SYSTEM.CNF or PSX.EXE not found, might not be a PS1/PS2 iso. Files: %s, iso: %s",
-                     file_list, iso.file.fp.name)
+        LOGGER.warning(f"SYSTEM.CNF or PSX.EXE not found, might not be a PS1/PS2 iso. Files: %s, iso: %s",
+                       file_list, iso.file.fp.name)
         return
 
     LOGGER.info("Found exe: %s", exe_filename)

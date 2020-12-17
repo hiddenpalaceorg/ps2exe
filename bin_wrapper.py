@@ -1,6 +1,7 @@
 import os
 import logging
-import re
+
+from scrambled_wrapper import ScrambleWrapper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -12,6 +13,9 @@ class BinWrapper:
         self.fp = fp
         self.pos = 0
         self.repair_padding = False
+
+        if self.is_scrambled():
+            self.fp = ScrambleWrapper(self.fp)
 
         self.detect_sector_size()
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
@@ -72,6 +76,11 @@ class BinWrapper:
     def length(self):
         self.fp.seek(0, os.SEEK_END)
         return self.fp.tell() // self.sector_size * 2048
+
+    def is_scrambled(self):
+        self.fp.seek(128)
+        data = self.fp.read(12)
+        return data == b"\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00"
 
     def detect_sector_size(self):
         self.fp.seek(0x8001)
