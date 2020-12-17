@@ -1,5 +1,6 @@
 import argparse
 import csv
+import datetime
 import logging
 import os
 import re
@@ -21,6 +22,29 @@ except ImportError:
     pass
 
 LOGGER = logging.getLogger(__name__)
+
+
+def get_saturn_header_info(fp):
+    fp.seek(0x10)
+    header_info = {
+        "header_maker_id": fp.read(16),
+        "header_product_number": fp.read(10),
+        "header_product_version": fp.read(6),
+        "header_release_date": fp.read(8),
+        "header_device_info": fp.read(8),
+        "header_regions": fp.read(10),
+    }
+    fp.seek(22, os.SEEK_CUR)
+    header_info["header_title"] = fp.read(112)
+
+    header_info = {header_key: header_item.decode().strip() for header_key, header_item in header_info.items()}
+
+    if header_info["header_release_date"]:
+        header_info["header_release_date"] = datetime.datetime.strptime(
+            header_info['header_release_date'], '%Y%m%d'
+        ).date()
+
+    return header_info
 
 
 def get_system_type(fp, isoaccessor):
@@ -71,9 +95,13 @@ def get_iso_info(iso_filename):
     system = get_system_type(wrapper, iso_accessor)
     info.update({"system": system})
 
-    result = hash_exe(iso_accessor, system)
-    if result is not None:
-        info.update(result)
+    if system:
+        result = hash_exe(iso_accessor, system)
+        if result is not None:
+            info.update(result)
+
+    if system == "saturn":
+        info.update(get_saturn_header_info(wrapper))
 
     info.update(get_pvd_info(iso))
 
@@ -121,6 +149,13 @@ csv_headers = (
     "volume_modification_date",
     "volume_expiration_date",
     "volume_effective_date",
+    "header_maker_id",
+    "header_product_number",
+    "header_product_version",
+    "header_release_date",
+    "header_device_info",
+    "header_regions",
+    "header_title",
 )
 
 if __name__ == '__main__':
