@@ -43,7 +43,7 @@
 7. ~~add saturn/sega cd supprt for the main exe (note: the exe is always the first file sorted alphanumerically on the root of the disc). naybe we should interpret the ip/header as well https://github.com/GerbilSoft/rom-properties/blob/61999700a70b98acd457d7cf35efb437d597c79b/src/libromdata/Console/saturn_structs.h ?~~
 8. add philips cd-i support. the main executable filename differs from game to game, but the it can be determined in LBA 16 at address 0x23E (maybe 0x9556 in each .bin).
 9. add panasonic 3do support. the main executable will always be named "launchme", and should be found at the root.  3DO uses something called "OperaFS". The first 132 bytes of sector 0 is the volume header. operafs doesn't include timestamps, so we can only really grab the launchme hash.
-9. add system detector
+10. add system detector
     - ~~PS1 games can be detected if "BOOT" is present in system.cnf.~~
     - ~~PS2 games can be detetcted if "BOOT2" is present in system.cnf~~
     - ~~Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.~~
@@ -53,5 +53,5 @@
     - Panasonic 3DO can be detected if the word "CD-ROM" can be found at 0x38 in the .img.
     - Microsoft Xbox games can be detected if 'default.xbe' is present on the disc. Some prototypes will either be on normal DVD-Rs with a normal PC readable file system, some prototypes will use the xbox file system as its first partition, and some will be on pressed discs that use two partitions (a dvd video partition followed by a xbox file system partition where game data is stored).
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
-10. (?) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. add results to a column on the sheet.
-11. detect media type (CD-R or DVD-R). unsure if we can do this.
+11. (?) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. add results to a column on the sheet.
+12. detect media type (CD-R or DVD-R). unsure if we can do this.
