@@ -4,17 +4,17 @@ import datetime
 import logging
 import os
 import re
-import struct
 import sys
 
+import cdi
 from iso_accessor import IsoAccessor
-from pycdlib.pycdlibexception import PyCdlibInvalidISO
 
 from bin_wrapper import BinWrapper
 from hash_exe import hash_exe
 from most_recent import get_most_recent_file_info
 from patches import apply_patches
 from pvd import get_pvd_info
+from scrambled_wrapper import ScrambleWrapper
 
 try:
     import pycdlib
@@ -47,13 +47,22 @@ def get_saturn_header_info(fp):
     return header_info
 
 
-def get_system_type(fp, isoaccessor):
+def get_system_type(fp):
     fp.seek(0)
     if fp.read(15) == b"SEGA SEGASATURN":
         return "saturn"
 
+    fp.seek(0x8001)
+    if fp.read(5) == b"CD-I ":
+        return "cdi"
+
     try:
-        with isoaccessor.IsoPath("/SYSTEM.CNF").open() as f:
+        iso_accessor = IsoAccessor(fp, ignore_susp=True)
+    except Exception:
+        return
+
+    try:
+        with iso_accessor.IsoPath("/SYSTEM.CNF").open() as f:
             system_cnf = f.read()
             if "BOOT2" in system_cnf:
                 return "ps2"
@@ -61,7 +70,7 @@ def get_system_type(fp, isoaccessor):
                 return "ps1"
     except FileNotFoundError:
         try:
-            with isoaccessor.IsoPath("/PSX.EXE").open():
+            with iso_accessor.IsoPath("/PSX.EXE").open():
                 return "ps1"
         except FileNotFoundError:
             pass
@@ -76,9 +85,12 @@ def get_iso_info(iso_filename):
     info = {"name": basename.decode(), "path": iso_filename}
 
     wrapper = BinWrapper(fp)
+    system = get_system_type(wrapper)
+    info.update({"system": system})
     try:
-        iso.open_fp(wrapper)
-        info.update(get_pvd_info(iso))
+        if system != 'cdi':
+            iso.open_fp(wrapper)
+            info.update(get_pvd_info(iso))
     except Exception:
         # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
         if not hasattr(iso, "pvd"):
@@ -87,13 +99,14 @@ def get_iso_info(iso_filename):
         info.update(get_pvd_info(iso))
 
     try:
-        iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
+        if system != 'cdi':
+            iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
+        else:
+            iso_accessor = cdi.Disc(fp, headers=True, scrambled=isinstance(wrapper.fp, ScrambleWrapper))
+            iso_accessor.read()
     except Exception:
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
         return
-
-    system = get_system_type(wrapper, iso_accessor)
-    info.update({"system": system})
 
     if system:
         result = hash_exe(iso_accessor, system)
@@ -103,7 +116,10 @@ def get_iso_info(iso_filename):
     if system == "saturn":
         info.update(get_saturn_header_info(wrapper))
 
-    info.update(get_pvd_info(iso))
+    if system != 'cdi':
+        info.update(get_pvd_info(iso))
+    else:
+        info.update(cdi.get_disklabel_info(iso_accessor.disclabels[0]))
 
     if iso._initialized:
         info.update(get_most_recent_file_info(iso, info.get("exe_date")))

@@ -1,7 +1,11 @@
 import logging
 import re
 import hashlib
+from os.path import basename
+
 import pycdlib
+
+import cdi
 from dates import datetime_from_iso_date
 
 
@@ -12,8 +16,51 @@ def get_file_list(root):
     return [child.path for child in root.glob("*")]
 
 
+def get_cdi_file_list(root):
+    return [file.name for file in root if file.name not in [b"\x00", b"\x01"]]
+
+
+def hash_cdi_exe(iso):
+    exe_filename = getattr(iso.disclabels[0], "app_id")
+    root = iso.path_tbl[0]
+
+    if exe_filename is None:
+        file_list = get_cdi_file_list(root)
+        LOGGER.warning(f"Executable file not found. Files: %s",
+                       file_list)
+        return
+    LOGGER.info("Found exe: %s", exe_filename)
+
+    exe_basename = basename(exe_filename)
+    exe_file = None
+    for directory in iso.path_tbl.directories:
+        for file in directory.contents:
+            if file.name == exe_basename:
+                exe_file = file
+                break
+        if exe_file:
+            break
+
+    if exe_file is None:
+        file_list = get_cdi_file_list(root)
+        LOGGER.warning(f"Executable file not found. Files: %s",
+                       file_list)
+        return
+    md5 = cdi.get_file_hash(iso, exe_file)
+    LOGGER.info("md5 %s", md5)
+
+    datetime = exe_file.creation_date
+
+    return {
+        "exe_filename": exe_filename.decode(),
+        "exe_date": datetime,
+        "md5": md5,
+    }
+
 
 def hash_exe(iso, system_type):
+    if system_type == 'cdi':
+        return hash_cdi_exe(iso)
     root = iso.IsoPath("/")
     exe_filename = None
     if system_type in ["ps2", "ps1"]:

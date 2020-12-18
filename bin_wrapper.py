@@ -15,7 +15,7 @@ class BinWrapper:
         self.repair_padding = False
 
         if self.is_scrambled():
-            self.fp = ScrambleWrapper(self.fp)
+            self.fp = ScrambleWrapper(self.fp, offset=128)
 
         self.detect_sector_size()
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
@@ -86,7 +86,7 @@ class BinWrapper:
         self.fp.seek(0x8001)
         ident = self.fp.read(5)
         LOGGER.debug(ident)
-        if ident == b"CD001":
+        if ident == b"CD001" or ident == b"CD-I ":
             self.sector_size = 2048
             self.sector_offset = 0
             return
@@ -94,7 +94,7 @@ class BinWrapper:
         self.fp.seek(0x9311)
         ident = self.fp.read(5)
         LOGGER.debug(ident)
-        if ident == b"CD001":
+        if ident == b"CD001" or ident == b"CD-I ":
             self.sector_size = 2352
             self.sector_offset = 16
             return
@@ -102,9 +102,14 @@ class BinWrapper:
         self.fp.seek(0x9319)
         ident = self.fp.read(5)
         LOGGER.debug(ident)
-        if ident == b"CD001":
+        if ident == b"CD001" or ident == b"CD-I ":
             self.sector_size = 2352
             self.sector_offset = 24
+            return
+        elif bytes(bytearray(v ^ [0x02,0xFE,0x81,0x80,0x60][k] for k,v in enumerate(ident))) == b"CD-I ":
+            self.sector_size = 2352
+            self.sector_offset = 24
+            self.fp = ScrambleWrapper(self.fp, offset=0)
             return
 
         raise BinWrapperException("Cannot detect sector size, is this a disc image?")

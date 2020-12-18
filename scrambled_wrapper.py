@@ -159,38 +159,40 @@ class ScrambleWrapperException(Exception):
 
 
 class ScrambleWrapper:
-    def __init__(self, fp):
+    def __init__(self, fp, offset):
         self.fp = fp
         self.pos = 0
+        self.offset = offset
 
     def close(self):
         self.fp.close()
 
     def seek(self, pos, whence=os.SEEK_SET):
-        pos += 128
+        pos += self.offset
         self.fp.seek(pos, whence)
 
     def tell(self):
-        return self.fp.tell() - 128
+        return self.fp.tell() - self.offset
 
     def peek(self, n=-1):
         data = self.fp.peek(n)
         current_pos = self.tell()
-        return self.unscramble_data(data, current_pos)
+        return unscramble_data(data, current_pos)
 
     def read(self, n=-1):
         current_pos = self.tell()
         data = self.fp.read(n)
-        return self.unscramble_data(data, current_pos)
+        return unscramble_data(data, current_pos)
 
-    def unscramble_data(self, data, current_pos):
-        pos_in_sector = current_pos % 2352
-        unscrambled_data = bytearray()
-        for b in data:
-            unscrambled_data.append(b ^ lookup_table[pos_in_sector])
-            pos_in_sector += 1
-            if pos_in_sector == 2352:
-                pos_in_sector = 0
-        return bytes(unscrambled_data)
+
+def unscramble_data(data, current_pos):
+    pos_in_sector = current_pos % 2352
+    unscrambled_data = bytearray()
+    for b in data:
+        unscrambled_data.append(b ^ lookup_table[pos_in_sector])
+        pos_in_sector += 1
+        if pos_in_sector == 2352:
+            pos_in_sector = 0
+    return bytes(unscrambled_data)
 
 

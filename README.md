@@ -41,7 +41,7 @@
 5. ~~report filename, checksum, and timestamp of latest modified file~~
 6. ~~Discs that report 1900 as a year in the TOC should be 2000.~~
 7. ~~add saturn/sega cd supprt for the main exe (note: the exe is always the first file sorted alphanumerically on the root of the disc). naybe we should interpret the ip/header as well https://github.com/GerbilSoft/rom-properties/blob/61999700a70b98acd457d7cf35efb437d597c79b/src/libromdata/Console/saturn_structs.h ?~~
-8. add philips cd-i support. the main executable filename differs from game to game, but the it can be determined in LBA 16 at address 0x23E (maybe 0x9556 in each .bin).
+8. ~~add philips cd-i support. the main executable filename differs from game to game, but the it can be determined in LBA 16 at address 0x23E (maybe 0x9556 in each .bin).~~
 9. add panasonic 3do support. the main executable will always be named "launchme", and should be found at the root.  3DO uses something called "OperaFS". The first 132 bytes of sector 0 is the volume header. operafs doesn't include timestamps, so we can only really grab the launchme hash.
 10. add system detector
     - ~~PS1 games can be detected if "BOOT" is present in system.cnf.~~
@@ -49,7 +49,7 @@
     - ~~Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.~~
     - Sega CD games can be detected if the string "SEGADISCSYSTEM" is present at 0x10 in a .bin and 0x0 in an .iso.
     - Sega Dreamcast games can be detected if "1ST_READ.BIN" is present on the track that contains game data. Alternatively, Dreamcast games also have a IP.BIN/Disc header that contains the string "SEGA SEGAKATANA" at 0x10 in every data track (track01.bin should always be a data track).
-    - Philips CD-i games can be detected if the file "path_tbl" is located at the root of the disc.
+    - ~~Philips CD-i games can be detected if the file "path_tbl" is located at the root of the disc.~~
     - Panasonic 3DO can be detected if the word "CD-ROM" can be found at 0x38 in the .img.
     - Microsoft Xbox games can be detected if 'default.xbe' is present on the disc. Some prototypes will either be on normal DVD-Rs with a normal PC readable file system, some prototypes will use the xbox file system as its first partition, and some will be on pressed discs that use two partitions (a dvd video partition followed by a xbox file system partition where game data is stored).
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
