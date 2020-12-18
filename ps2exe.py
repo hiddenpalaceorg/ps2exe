@@ -1,6 +1,5 @@
 import argparse
 import csv
-import datetime
 import logging
 import os
 import re
@@ -37,12 +36,10 @@ def get_saturn_header_info(fp):
     fp.seek(22, os.SEEK_CUR)
     header_info["header_title"] = fp.read(112)
 
-    header_info = {header_key: header_item.decode().strip() for header_key, header_item in header_info.items()}
-
-    if header_info["header_release_date"]:
-        header_info["header_release_date"] = datetime.datetime.strptime(
-            header_info['header_release_date'], '%Y%m%d'
-        ).date()
+    header_info = {
+        header_key: header_item.decode(errors="replace").strip()
+        for header_key, header_item in header_info.items()
+    }
 
     return header_info
 
