@@ -6,6 +6,7 @@ import re
 import sys
 
 import cdi
+from hash_contents import get_all_files_hash
 from iso_accessor import IsoAccessor
 
 from bin_wrapper import BinWrapper
@@ -120,8 +121,10 @@ def get_iso_info(iso_filename):
 
     if iso._initialized:
         info.update(get_most_recent_file_info(iso, info.get("exe_date")))
+        info.update(get_all_files_hash(iso))
     else:
         info.update(get_most_recent_file_info(iso_accessor, info.get("exe_date")))
+        info.update(get_all_files_hash(iso_accessor))
 
     if iso._initialized:
         iso.close()
@@ -169,6 +172,7 @@ csv_headers = (
     "header_device_info",
     "header_regions",
     "header_title",
+    "all_files_hash",
 )
 
 if __name__ == '__main__':

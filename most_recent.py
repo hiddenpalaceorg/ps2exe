@@ -94,7 +94,7 @@ def get_most_recent_file_info(iso, exe_date):
                 most_recent_file_hash.update(chunk)
         most_recent_file_hash = most_recent_file_hash.hexdigest()
     elif hasattr(iso, "path_tbl"):
-        most_recent_file_hash = cdi.get_file_hash(iso, most_recent_file)
+        most_recent_file_hash = cdi.get_file_hash(iso, most_recent_file).hexdigest()
     else:
         with iso.open_file_from_iso(iso_path=most_recent_path) as f:
             while chunk := f.read(8192):

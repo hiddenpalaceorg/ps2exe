@@ -46,7 +46,7 @@ def hash_cdi_exe(iso):
         LOGGER.warning(f"Executable file not found. Files: %s",
                        file_list)
         return
-    md5 = cdi.get_file_hash(iso, exe_file)
+    md5 = cdi.get_file_hash(iso, exe_file).hexdigest()
     LOGGER.info("md5 %s", md5)
 
     datetime = exe_file.creation_date

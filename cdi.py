@@ -299,7 +299,7 @@ def get_file_hash(iso, file):
         hash.update(file_data)
         lbn += 1
         size_left -= block.data_size
-    return hash.hexdigest()
+    return hash
 
 
 def get_disklabel_info(disclabel):

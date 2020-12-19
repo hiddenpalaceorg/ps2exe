@@ -1,5 +1,6 @@
 import os
 import logging
+import mmap
 
 from scrambled_wrapper import ScrambleWrapper
 
@@ -10,7 +11,7 @@ class BinWrapperException(Exception):
 
 class BinWrapper:
     def __init__(self, fp):
-        self.fp = fp
+        self.fp = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
         self.pos = 0
         self.repair_padding = False
 
