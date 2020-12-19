@@ -289,9 +289,9 @@ class Disc(object):
         return self.sectors[key]
 
 
-def get_file_hash(iso, file):
+def get_file_hash(iso, file, algo=hashlib.md5):
     lbn = file.first_lbn
-    hash = hashlib.md5()
+    hash = algo()
     size_left = file.size
     while size_left > 0:
         block = iso.block(lbn)

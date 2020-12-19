@@ -18,6 +18,10 @@ class BinWrapper:
         if self.is_scrambled():
             self.fp = ScrambleWrapper(self.fp, offset=128)
 
+        if not LOGGER.isEnabledFor(logging.DEBUG):
+            LOGGER.debug = lambda x: x
+
+
         self.detect_sector_size()
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
 
@@ -57,22 +61,23 @@ class BinWrapper:
     def read(self, n=-1):
         length = n
         LOGGER.debug(f"read {length}")
-        buffer = []
+        buffer = bytearray()
 
         while length > 0:
             sector = self.pos // 2048
             pos_in_sector = self.pos % 2048
             sector_read_length = min(length, 2048 - pos_in_sector)
+            pos = sector * self.sector_size + self.sector_offset + self.pos % 2048
 
             LOGGER.debug(f"{self.pos=} {sector=} {pos_in_sector=} {sector_read_length=}")
-            self.fp.seek(sector * self.sector_size + self.sector_offset + self.pos % 2048)
-            buffer.append(self.fp.read(sector_read_length))
+
+            buffer.extend(self.fp[pos:pos+sector_read_length])
 
             self.pos += sector_read_length
             length -= sector_read_length
 
         # LOGGER.debug()(buffer)
-        return b"".join(buffer)
+        return bytes(buffer)
 
     def length(self):
         self.fp.seek(0, os.SEEK_END)

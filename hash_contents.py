@@ -1,4 +1,5 @@
 import hashlib
+import xxhash
 
 import cdi
 
@@ -14,7 +15,7 @@ def get_file_hashes_pycdlib(iso, iso_dir, file_hashes=None):
             file_hashes = get_file_hashes_pycdlib(iso, file.children, file_hashes)
             continue
 
-        file_hash = hashlib.md5()
+        file_hash = xxhash.xxh64()
         file_path = iso.full_path_from_dirrecord(file)
         with iso.open_file_from_iso(iso_path=file_path) as f:
             for chunk in iter(lambda: f.read(65535), b""):
@@ -30,9 +31,9 @@ def get_file_hashes_pathlab(root_dir):
     for file in root_dir.rglob("*"):
         if file.is_dir():
             continue
-        file_hash = hashlib.md5()
+        file_hash = xxhash.xxh64()
         with file.open(mode='rb') as f:
-            while chunk := f.read(8192):
+            while chunk := f.read(65535):
                 file_hash.update(chunk)
         file_hashes[file.path] = file_hash.digest()
     return file_hashes
@@ -46,7 +47,7 @@ def get_file_hashes_cdi(iso, path_tbl):
             if file.name == b"\x00" or file.name == b"\x01" or file.attributes.directory:
                 continue
 
-            file_hashes[file.name] = cdi.get_file_hash(iso, file).digest()
+            file_hashes[file.name] = cdi.get_file_hash(iso, file, xxhash.xxh64).digest()
     return file_hashes
 
 
