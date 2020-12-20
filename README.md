@@ -1,9 +1,9 @@
 # Usage:
---append-output - appends current scan to a pre-existing .csv
---ignore-existing - overwrites existing .csv
---no-contents-checksum - skips the composite checksum calculations (speed up)
--o *filename.csv* - output to a specific name (default is results.csv)
--f *filename.iso* - pass a single file to the script
+1. --append-output - appends current scan to a pre-existing .csv
+2. --ignore-existing - overwrites existing .csv
+3. --no-contents-checksum - skips the composite checksum calculations (speed up)
+4. -o *filename.csv* - output to a specific name (default is results.csv)
+5. -f *filename.iso* - pass a single file to the script
 
 # TODO:
 1. ~~if there's no system.cnf, find psx.exe at the root and get the timestamp/checksum of it~~
