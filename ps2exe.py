@@ -199,7 +199,7 @@ if __name__ == '__main__':
                        type=str,
                        required=False)
 
-    group.add_argument('-no-contents-checksum',
+    parser.add_argument('--no-contents-checksum',
                        help="Disable calculating the hash of the image contents",
                        action='store_true',
                        default=False)
