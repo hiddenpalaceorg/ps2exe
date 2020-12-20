@@ -204,6 +204,16 @@ if __name__ == '__main__':
                        action='store_true',
                        default=False)
 
+    parser.add_argument('--append-output',
+                       help="Append to file instead of overwriting",
+                       action='store_true',
+                       default=False)
+
+    parser.add_argument('--ignore-existing',
+                       help="Don't process discs already in the output csv",
+                       action='store_true',
+                       default=False)
+
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.logLevel))
@@ -211,10 +221,34 @@ if __name__ == '__main__':
     results = []
     apply_patches()
 
+    if args.output == '-':
+        csv_file = sys.stdout
+    else:
+        if args.append_output:
+            csv_file = open(args.output, "a+", newline='')
+        else:
+            csv_file = open(args.output, "w", newline='')
+
+    writer = csv.DictWriter(csv_file, fieldnames=csv_headers)
+    if csv_file.tell() == 0:
+        writer.writeheader()
+        csv_file.flush()
+
+    existing_files = []
+    if args.ignore_existing:
+        with open(args.output, "a+", newline='') as f:
+            reader = csv.DictReader(f)
+            if f.tell() != 0:
+                f.seek(0)
+                next(reader)
+                existing_files = [line["path"] for line in reader]
+                csv_file.seek(0, os.SEEK_END)
+
     if args.file:
-        result = process_path(args.file, args.no_contents_checksum)
-        if result:
-            results.append(result)
+        if args.file not in existing_files:
+            result = process_path(args.file, args.no_contents_checksum)
+            if result:
+                writer.writerow(result)
     elif args.input_dir:
         i = 0
         max_n = 2000000
@@ -222,9 +256,12 @@ if __name__ == '__main__':
         for root, dirnames, filenames in os.walk(args.input_dir):
             for filename in filenames:
                 path = os.path.join(root, filename)
+                if path in existing_files:
+                    continue
                 result = process_path(path, args.no_contents_checksum)
                 if result:
-                    results.append(result)
+                    writer.writerow(result)
+                    csv_file.flush()
                 i += 1
 
                 if i > max_n:
@@ -233,12 +270,3 @@ if __name__ == '__main__':
             if i > max_n:
                 break
 
-    if args.output == '-':
-        csv_file = sys.stdout
-    else:
-        csv_file = open(args.output, "w", newline='')
-
-    writer = csv.DictWriter(csv_file, fieldnames=csv_headers)
-    writer.writeheader()
-    for result in results:
-        writer.writerow(result)
