@@ -167,23 +167,22 @@ class ScrambleWrapper:
     def close(self):
         self.fp.close()
 
-    def seek(self, pos, whence=os.SEEK_SET):
-        pos += self.offset
-        self.fp.seek(pos, whence)
+    def seek(self, pos, **_):
+        self.pos += (pos + self.offset)
 
     def tell(self):
-        return self.fp.tell() - self.offset
+        return self.pos - self.offset
 
     def peek(self, n=-1):
-        data = self.fp.peek(n)
-        current_pos = self.tell()
-        return unscramble_data(data, current_pos)
+        return unscramble_data(self.fp[self.pos:self.pos+n], self.pos)
 
     def read(self, n=-1):
-        current_pos = self.tell()
-        data = self.fp.read(n)
-        return unscramble_data(data, current_pos)
+        data = unscramble_data(self.fp[self.pos:self.pos+n], self.pos)
+        self.pos += n
+        return data
 
+    def __getitem__(self, item):
+        return unscramble_data(self.fp[item], item.start if isinstance(item, slice) else item)
 
 def unscramble_data(data, current_pos):
     pos_in_sector = current_pos % 2352

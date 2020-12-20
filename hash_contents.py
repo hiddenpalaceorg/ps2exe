@@ -47,7 +47,10 @@ def get_file_hashes_cdi(iso, path_tbl):
             if file.name == b"\x00" or file.name == b"\x01" or file.attributes.directory:
                 continue
 
-            file_hashes[file.name] = cdi.get_file_hash(iso, file, xxhash.xxh64).digest()
+            try:
+                file_hashes[file.name] = cdi.get_file_hash(iso, file, xxhash.xxh64).digest()
+            except IndexError:
+                continue
     return file_hashes
 
 

@@ -74,7 +74,7 @@ def get_system_type(fp):
             pass
 
 
-def get_iso_info(iso_filename):
+def get_iso_info(iso_filename, disable_contents_checksum):
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
     LOGGER.info("Reading %s", basename.decode())
 
@@ -121,10 +121,12 @@ def get_iso_info(iso_filename):
 
     if iso._initialized:
         info.update(get_most_recent_file_info(iso, info.get("exe_date")))
-        info.update(get_all_files_hash(iso))
+        if not disable_contents_checksum:
+            info.update(get_all_files_hash(iso))
     else:
         info.update(get_most_recent_file_info(iso_accessor, info.get("exe_date")))
-        info.update(get_all_files_hash(iso_accessor))
+        if not disable_contents_checksum:
+            info.update(get_all_files_hash(iso_accessor))
 
     if iso._initialized:
         iso.close()
@@ -133,7 +135,7 @@ def get_iso_info(iso_filename):
     return info
 
 
-def process_path(path):
+def process_path(path, disable_contents_checksum):
     if re.search("\(Track (?:\d?[2-9]|[1-9]\d+)\)\.bin|\.(html|jpeg|jpg|cue|ccd|sub|zip|part)", path):
         return
 
@@ -143,7 +145,7 @@ def process_path(path):
         return
 
     try:
-        return get_iso_info(path)
+        return get_iso_info(path, disable_contents_checksum)
     except Exception:
         LOGGER.exception("Error reading %s", path)
 
@@ -193,9 +195,14 @@ if __name__ == '__main__':
 
     group.add_argument('-f',
                        '--file',
-                       help="Speicific file to parse",
+                       help="Specific file to parse",
                        type=str,
                        required=False)
+
+    group.add_argument('-no-contents-checksum',
+                       help="Disable calculating the hash of the image contents",
+                       action='store_true',
+                       default=False)
 
     args = parser.parse_args()
 
@@ -205,7 +212,7 @@ if __name__ == '__main__':
     apply_patches()
 
     if args.file:
-        result = process_path(args.file)
+        result = process_path(args.file, args.no_contents_checksum)
         if result:
             results.append(result)
     elif args.input_dir:
@@ -215,7 +222,7 @@ if __name__ == '__main__':
         for root, dirnames, filenames in os.walk(args.input_dir):
             for filename in filenames:
                 path = os.path.join(root, filename)
-                result = process_path(path)
+                result = process_path(path, args.no_contents_checksum)
                 if result:
                     results.append(result)
                 i += 1
