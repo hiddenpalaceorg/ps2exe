@@ -9,6 +9,7 @@ verify_ssl = true
 pycdlib = "*"
 pathlab = "*"
 xxhash = "*"
+numpy = "==1.19.3"
 
 [requires]
 python_version = "3.8"

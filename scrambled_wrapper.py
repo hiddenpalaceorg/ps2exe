@@ -1,9 +1,10 @@
 import os
 import logging
+import numpy as np
 
 LOGGER = logging.getLogger(__name__)
 
-lookup_table = [
+lookup_table = bytearray([
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x80,0x00,0x60,
     0x00,0x28,0x00,0x1E,0x80,0x08,0x60,0x06,0xA8,0x02,0xFE,0x81,0x80,0x60,0x60,0x28,
     0x28,0x1E,0x9E,0x88,0x68,0x66,0xAE,0xAA,0xFC,0x7F,0x01,0xE0,0x00,0x48,0x00,0x36,
@@ -151,7 +152,7 @@ lookup_table = [
     0x22,0x85,0xD9,0xA3,0x1A,0xF9,0xCB,0x02,0xD7,0x41,0x9E,0xB0,0x68,0x74,0x2E,0xA7,
     0x5C,0x7A,0xB9,0xE3,0x32,0xC9,0xD5,0x96,0xDF,0x2E,0xD8,0x1C,0x5A,0x89,0xFB,0x26,
     0xC3,0x5A,0xD1,0xFB,0x1C,0x43,0x49,0xF1,0xF6,0xC4,0x46,0xD3,0x72,0xDD,0xE5,0x99
-]
+])
 
 
 class ScrambleWrapperException(Exception):
@@ -167,31 +168,35 @@ class ScrambleWrapper:
     def close(self):
         self.fp.close()
 
-    def seek(self, pos, **_):
-        self.pos += (pos + self.offset)
+    def seek(self, pos, whence=os.SEEK_SET):
+        self.fp.seek(pos+self.offset, whence)
+        self.pos = self.fp.tell()
 
     def tell(self):
         return self.pos - self.offset
 
     def peek(self, n=-1):
-        return unscramble_data(self.fp[self.pos:self.pos+n], self.pos)
+        return unscramble_data(self.fp[self.pos:self.pos+n], self.tell())
 
     def read(self, n=-1):
-        data = unscramble_data(self.fp[self.pos:self.pos+n], self.pos)
+        data = unscramble_data(self.fp[self.pos:self.pos+n], self.tell())
         self.pos += n
         return data
 
     def __getitem__(self, item):
-        return unscramble_data(self.fp[item], item.start if isinstance(item, slice) else item)
+        if isinstance(item, slice):
+            current_pos = item.start
+            item = slice(item.start+self.offset, item.stop+self.offset)
+        else:
+            current_pos = item
+            item += self.offset
+        return unscramble_data(self.fp[item], current_pos)
 
 def unscramble_data(data, current_pos):
     pos_in_sector = current_pos % 2352
-    unscrambled_data = bytearray()
-    for b in data:
-        unscrambled_data.append(b ^ lookup_table[pos_in_sector])
-        pos_in_sector += 1
-        if pos_in_sector == 2352:
-            pos_in_sector = 0
-    return bytes(unscrambled_data)
+    tbl = bytes(lookup_table[pos_in_sector:pos_in_sector+len(data)])
+    key = np.frombuffer(tbl, dtype=np.dtype('B'))
+    data = np.frombuffer(data, dtype=np.dtype('B'))
+    return np.bitwise_xor(key, data).tostring()
 
 

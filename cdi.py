@@ -24,10 +24,10 @@ def dl_datetime(seq):
     if seq == b'0'*16:
         return None
     else:
-        year, month,  day    = int(seq[ 0: 4]), int(seq[ 4: 6]), int(seq[ 6: 8])
-        hour, minute, second = int(seq[ 8:10]), int(seq[10:12]), int(seq[12:14])
-        us = int(seq[14:16])*10000
         try:
+            year, month,  day    = int(seq[ 0: 4]), int(seq[ 4: 6]), int(seq[ 6: 8])
+            hour, minute, second = int(seq[ 8:10]), int(seq[10:12]), int(seq[12:14])
+            us = int(seq[14:16])*10000
             return datetime.datetime(year, month, day, hour, minute, second, us)
         except ValueError:
             return datetime.datetime.min

@@ -230,7 +230,7 @@ if __name__ == '__main__':
             csv_file = open(args.output, "w", newline='')
 
     writer = csv.DictWriter(csv_file, fieldnames=csv_headers)
-    if csv_file.tell() == 0:
+    if sys.stdout == sys.stdout or csv_file.tell() == 0:
         writer.writeheader()
         csv_file.flush()
 
