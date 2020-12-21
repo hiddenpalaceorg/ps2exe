@@ -1,4 +1,6 @@
 import hashlib
+
+import pycdlib.pycdlibio
 import xxhash
 
 import cdi
@@ -16,8 +18,11 @@ def get_file_hashes_pycdlib(iso, iso_dir, file_hashes=None):
             continue
 
         file_hash = xxhash.xxh64()
-        file_path = iso.full_path_from_dirrecord(file)
-        with iso.open_file_from_iso(iso_path=file_path) as f:
+        try:
+            file_path = iso.full_path_from_dirrecord(file)
+        except UnicodeDecodeError:
+            file_path = file.file_ident.decode(errors="replace")
+        with pycdlib.pycdlibio.PyCdlibIO(file.inode, iso.logical_block_size) as f:
             for chunk in iter(lambda: f.read(65535), b""):
                 file_hash.update(chunk)
         file_hashes[file_path] = file_hash.digest()
