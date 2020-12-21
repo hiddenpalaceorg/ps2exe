@@ -23,13 +23,17 @@ def datetime_from_iso_date(iso_date):
     if iso_date.month == 0:
         month = 1
 
-    dt = datetime.datetime(
-        year,
-        month,
-        day,
-        iso_date.hour,
-        iso_date.minute,
-        iso_date.second,
-        tzinfo=datetime.timezone(datetime.timedelta(minutes=15 * iso_date.gmtoffset))
-    )
+    try:
+        dt = datetime.datetime(
+            year,
+            month,
+            day,
+            iso_date.hour,
+            iso_date.minute,
+            iso_date.second,
+            tzinfo=datetime.timezone(datetime.timedelta(minutes=15 * iso_date.gmtoffset))
+        )
+    except ValueError:
+        dt = datetime.datetime.min
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt
