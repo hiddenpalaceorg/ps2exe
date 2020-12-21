@@ -92,7 +92,7 @@ def hash_exe(iso, system_type):
     if exe_filename is None:
         file_list = get_file_list(root)
         LOGGER.warning(f"Executable file not found. Files: %s, iso: %s",
-                       file_list, iso.file.fp.name)
+                       file_list, iso.file.file)
         return
 
     LOGGER.info("Found exe: %s", exe_filename)
@@ -104,7 +104,7 @@ def hash_exe(iso, system_type):
             exe = f.read()
     except Exception:
         file_list = get_file_list(root)
-        LOGGER.exception(f"Could not read exe %s, file list: %s iso: %s", exe_filename, file_list, iso.file.fp.name)
+        LOGGER.exception(f"Could not read exe %s, file list: %s iso: %s", exe_filename, file_list, iso.file.file)
         return
 
     md5 = hashlib.md5(exe).hexdigest()

@@ -12,6 +12,7 @@ class BinWrapperException(Exception):
 class BinWrapper:
     def __init__(self, fp):
         self.fp = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
+        self.file = fp.name
         self.pos = 0
         self.repair_padding = False
 
