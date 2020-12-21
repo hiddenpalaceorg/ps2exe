@@ -61,8 +61,8 @@ def get_system_type(fp):
         return
 
     try:
-        with iso_accessor.IsoPath("/SYSTEM.CNF").open() as f:
-            system_cnf = f.read()
+        with iso_accessor.IsoPath("/SYSTEM.CNF").open(mode="rb") as f:
+            system_cnf = f.read().decode(errors="ignore")
             if "BOOT2" in system_cnf:
                 return "ps2"
             elif "BOOT" in system_cnf:

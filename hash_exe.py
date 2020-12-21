@@ -65,8 +65,8 @@ def hash_exe(iso, system_type):
     exe_filename = None
     if system_type in ["ps2", "ps1"]:
         try:
-            with iso.IsoPath("/SYSTEM.CNF").open() as f:
-                system_cnf = f.read()
+            with iso.IsoPath("/SYSTEM.CNF").open(mode="rb") as f:
+                system_cnf = f.read().decode(errors="ignore")
 
             for line in system_cnf.splitlines():
                 if "BOOT" in line:
