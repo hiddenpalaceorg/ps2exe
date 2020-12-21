@@ -92,9 +92,11 @@ def get_iso_info(iso_filename, disable_contents_checksum):
             info.update(get_pvd_info(iso))
     except Exception:
         # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
-        if not hasattr(iso, "pvd"):
+        if not hasattr(iso, "pvd") and not hasattr(iso, "pvds"):
             LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
             return
+        if not hasattr(iso, "pvd") and hasattr(iso, "pvds"):
+            iso.pvd = iso.pvds[0]
         info.update(get_pvd_info(iso))
 
     try:
