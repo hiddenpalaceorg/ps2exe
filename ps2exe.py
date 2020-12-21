@@ -1,5 +1,6 @@
 import argparse
 import csv
+import io
 import logging
 import os
 import re
@@ -230,17 +231,26 @@ if __name__ == '__main__':
             csv_file = open(args.output, "w", newline='')
 
     writer = csv.DictWriter(csv_file, fieldnames=csv_headers)
-    if sys.stdout == sys.stdout or csv_file.tell() == 0:
+    if csv_file == sys.stdout or csv_file.tell() == 0:
         writer.writeheader()
         csv_file.flush()
 
     existing_files = []
     if args.ignore_existing:
-        with open(args.output, "a+", newline='') as f:
-            reader = csv.DictReader(f)
+        class NotNullTextWrapper(io.TextIOWrapper):
+
+            def read(self, *args, **kwargs):
+                data = super().read(*args, **kwargs)
+                return data.replace('\x00', '')
+
+            def readline(self, *args, **kwargs):
+                data = super().readline(*args, **kwargs)
+                return data.replace('\x00', '')
+        with open(args.output, "ba+") as f, \
+                NotNullTextWrapper(f) as text_file:
+            reader = csv.DictReader(text_file)
             if f.tell() != 0:
                 f.seek(0)
-                next(reader)
                 existing_files = [line["path"] for line in reader]
                 csv_file.seek(0, os.SEEK_END)
 
