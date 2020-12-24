@@ -60,7 +60,7 @@
     - Panasonic 3DO can be detected if the word "CD-ROM" can be found at 0x38 in the .img.
     - Microsoft Xbox games can be detected if 'default.xbe' is present on the disc. Some prototypes will either be on normal DVD-Rs with a normal PC readable file system, some prototypes will use the xbox file system as its first partition, and some will be on pressed discs that use two partitions (a dvd video partition followed by a xbox file system partition where game data is stored).
     - Commodore Amiga CD32.
-    - PlayStation Portable - games can exist on DVD-Rs in a specific format or on raw UMD dumps.
+    - ~~PlayStation Portable - games can exist on DVD-Rs in a specific format or on raw UMD dumps.~~
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
 11. (HIGH PRIORITY) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. parse the log output and include just the total warning and total error count into to respective columns. maybe save the total output for the current run session in a separate log file for review. Make this optional with a parameter/flag. (HIGH PRIORITY)
 12. detect media type (CD-R or DVD-R). unsure if we can do this.
