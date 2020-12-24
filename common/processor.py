@@ -9,6 +9,9 @@ from cdi.path_reader import CdiPathReader
 LOGGER = logging.getLogger(__name__)
 
 class BaseIsoProcessor:
+    def get_disc_type(self):
+        return {"disc_type": "unknown"}
+
     def get_file_list(self):
         return [self.iso_path_reader.get_file_path(file) for file in
                 self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir())]
@@ -22,6 +25,25 @@ class BaseIsoProcessor:
         fp.seek(0)
         if fp.read(15) == b"SEGA SEGASATURN":
             return "saturn"
+
+        fp.seek(0x8008)
+        if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
+            return "cdi"
+
+        fp.seek(0x8001)
+        if fp.peek(5) == b'CD-I ':
+            return "cdi"
+
+        pvd = iso_path_reader.get_pvd()
+        if pvd.system_identifier.strip() == b'PSP GAME':
+            return "psp"
+
+        try:
+            user_l0 = iso_path_reader.get_file("/USER_L0.IMG")
+            with iso_path_reader.open_file(user_l0):
+                return "psp"
+        except FileNotFoundError:
+            pass
 
         try:
             system_cnf = iso_path_reader.get_file("/SYSTEM.CNF")
@@ -39,17 +61,10 @@ class BaseIsoProcessor:
             except FileNotFoundError:
                 pass
 
-        fp.seek(0x8008)
-        if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
-            return "cdi"
-
-        fp.seek(0x8001)
-        if fp.peek(5) == b'CD-I ':
-            return "cdi"
-
-    def __init__(self, iso_path_reader, filename):
+    def __init__(self, iso_path_reader, filename, system_type):
         self.iso_path_reader = iso_path_reader
         self.filename = filename
+        self.system_type = system_type
 
     def get_exe_filename(self):
         raise NotImplementedError
@@ -140,6 +155,8 @@ class BaseIsoProcessor:
     def get_extra_fields(self):
         return {}
 
+    def get_pvd_info(self):
+        return self.iso_path_reader.get_pvd_info()
 
 class GenericIsoProcessor(BaseIsoProcessor):
     def hash_exe(self):

@@ -7,6 +7,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 class SaturnIsoProcessor(BaseIsoProcessor):
+    def get_disc_type(self):
+        return {"disc_type": "cdr"}
+
     def get_exe_filename(self):
         root = self.iso_path_reader.get_root_dir()
         exe_file = next(self.iso_path_reader.iso_iterator(root, recursive=False), None)

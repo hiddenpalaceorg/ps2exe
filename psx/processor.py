@@ -7,6 +7,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PsxIsoProcessor(BaseIsoProcessor):
+    def get_disc_type(self):
+        if self.system_type == "ps1":
+            return {"disc_type": "cdr"}
+        return {"disc_type": "unknown"}
+
     def get_exe_filename(self):
         exe_filename = None
         try:

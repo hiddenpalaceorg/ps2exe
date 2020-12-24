@@ -1,3 +1,4 @@
+import io
 import logging
 
 import pycdlib
@@ -12,6 +13,7 @@ from iso_accessor import IsoAccessor
 from cdi.processor import CdiIsoProcessor
 from cdi.utils import Disc
 from psx.processor import PsxIsoProcessor
+from psp.processor import PspIsoProcessor
 from saturn.processor import SaturnIsoProcessor
 from scrambled_wrapper import ScrambleWrapper
 
@@ -22,7 +24,11 @@ LOGGER = logging.getLogger(__name__)
 class IsoProcessorFactory:
     @staticmethod
     def get_iso_path_reader(fp):
-        wrapper = BinWrapper(fp)
+        if isinstance(fp, io.IOBase):
+            wrapper = BinWrapper(fp)
+        else:
+            wrapper = fp
+
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":
             cdi = Disc(fp, headers=True, scrambled=isinstance(wrapper.fp, ScrambleWrapper))
@@ -54,6 +60,8 @@ class IsoProcessorFactory:
             return PsxIsoProcessor
         elif system_type == "saturn":
             return SaturnIsoProcessor
+        elif system_type == "psp":
+            return PspIsoProcessor
 
         return GenericIsoProcessor
 

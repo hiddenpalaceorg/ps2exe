@@ -5,6 +5,8 @@ from common.processor import BaseIsoProcessor
 LOGGER = logging.getLogger(__name__)
 
 class CdiIsoProcessor(BaseIsoProcessor):
+    def get_disc_type(self):
+        return {"disc_type": "cdr"}
 
     def get_exe_filename(self):
         app_id = getattr(self.iso_path_reader.get_pvd(), "application_identifier", None)

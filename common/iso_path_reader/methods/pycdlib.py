@@ -24,9 +24,9 @@ class PyCdLibPathReader(IsoPathReader):
 
     def get_file_path(self, file):
         try:
-            return self.iso.full_path_from_dirrecord(file)
+            return self.iso.full_path_from_dirrecord(file).replace(";1", "")
         except UnicodeDecodeError:
-            return file.file_ident.decode(errors="replace")
+            return file.file_ident.decode(errors="replace").replace(";1", "")
 
     def get_file_date(self, file):
         return datetime_from_iso_date(file.date)

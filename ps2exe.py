@@ -36,9 +36,11 @@ def get_iso_info(iso_filename, disable_contents_checksum):
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
         return
 
-    iso_processor = iso_processor_class(iso_path_reader, iso_filename)
+    iso_processor = iso_processor_class(iso_path_reader, iso_filename, system)
 
-    info.update(iso_path_reader.get_pvd_info())
+    info.update(iso_processor.get_disc_type())
+
+    info.update(iso_processor.get_pvd_info())
 
     info.update(iso_processor.hash_exe())
     info.update(iso_processor.get_most_recent_file_info(info.get("exe_date")))
@@ -70,6 +72,7 @@ def process_path(path, disable_contents_checksum):
 
 csv_headers = (
     "system",
+    "disc_type",
     "md5",
     "exe_filename",
     "exe_date",
@@ -93,6 +96,15 @@ csv_headers = (
     "header_regions",
     "header_title",
     "all_files_hash",
+    "alt_exe_filename",
+    "alt_exe_date",
+    "alt_md5",
+    "sfo_category",
+    "sfo_disc_id",
+    "sfo_disc_version",
+    "sfo_parental_level",
+    "sfo_psp_system_version",
+    "sfo_title",
 )
 
 if __name__ == '__main__':
