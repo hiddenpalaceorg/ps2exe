@@ -1,8 +1,8 @@
 import datetime
-import hashlib
-import mmap
 
 # shorthand parsing methods. They take a sequence of characters (bytes) as input.
+import mmap
+
 import scrambled_wrapper
 
 
@@ -28,18 +28,20 @@ def dl_datetime(seq):
             year, month,  day    = int(seq[ 0: 4]), int(seq[ 4: 6]), int(seq[ 6: 8])
             hour, minute, second = int(seq[ 8:10]), int(seq[10:12]), int(seq[12:14])
             us = int(seq[14:16])*10000
-            return datetime.datetime(year, month, day, hour, minute, second, us)
+            dt = datetime.datetime(year, month, day, hour, minute, second, us)
         except ValueError:
-            return datetime.datetime.min
+            dt = datetime.datetime.min
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt
 
 # the directory entry datetime format
 def dir_datetime(seq):
     assert len(seq) == 6
 
-    year, month,  day    = 1900+number(seq[0:1]), number(seq[1:2]), number(seq[2:3])
-    hour, minute, second = number(seq[3:4]), number(seq[4:5]), number(seq[5:6])
+    year, month,  day    = 1900+seq[0], seq[1], seq[2]
+    hour, minute, second = seq[3], seq[4], seq[5]
 
-    return datetime.datetime(year, month, day, hour, minute, second)
+    return datetime.datetime(year, month, day, hour, minute, second, tzinfo=datetime.timezone.utc)
 
 class Subheader(object):
     "A sector sub-header"
@@ -51,10 +53,10 @@ class Subheader(object):
         #     assert data[i] == data[4+i], "Redundant subheader data does not match"
 
         # fill in fields
-        self.file_number    = number(data[0:1])
-        self.channel_number = number(data[1:2])
-        self.submode_raw    = number(data[2:3])
-        self.coding_raw     = number(data[3:4])
+        self.file_number    = data[0]
+        self.channel_number = data[1]
+        self.submode_raw    = data[2]
+        self.coding_raw     = data[3]
 
     def _submode_flag(bit, doc):
         "helper for bit flag boilerplate"
@@ -100,32 +102,32 @@ class DiscLabel(object):
 
     def __init__(self, sector):
         self.sector = sector
-        self.type = number(sector.data[0:1])
+        self.type = sector.data[0]
         if self.type == DiscLabel.STANDARD:
-            self.standard_id    = rawstring(sector.data[  1:  6])
-            self.version        = number(sector.data[  6:  7])
-            self.volume_flags   = number(sector.data[  7:  8])
-            self.system_id      = string(sector.data[  8: 40])
-            self.volume_id      = string(sector.data[ 40: 72])
-            self.volume_size    = number(sector.data[ 84: 88])
-            self.charset        = string(sector.data[ 88:120])
-            self.album_size     = number(sector.data[122:124])
-            self.album_idx      = number(sector.data[126:128])
-            self.block_size     = number(sector.data[130:132])
-            self.path_tbl_size  = number(sector.data[136:140])
-            self.path_tbl_addr  = number(sector.data[148:152])
-            self.album_id       = string(sector.data[190:318])
-            self.publisher_id   = string(sector.data[318:446])
-            self.data_preparer  = string(sector.data[446:574])
-            self.app_id         = string(sector.data[574:702])
+            self.standard_id = rawstring(sector.data[1:  6])
+            self.version = sector.data[6]
+            self.volume_flags = sector.data[7]
+            self.system_id = string(sector.data[8: 40])
+            self.volume_id = string(sector.data[40: 72])
+            self.volume_size = number(sector.data[84: 88])
+            self.charset = string(sector.data[88:120])
+            self.album_size = number(sector.data[122:124])
+            self.album_idx = number(sector.data[126:128])
+            self.block_size = number(sector.data[130:132])
+            self.path_tbl_size = number(sector.data[136:140])
+            self.path_tbl_addr = number(sector.data[148:152])
+            self.album_id = string(sector.data[190:318])
+            self.publisher_id = string(sector.data[318:446])
+            self.data_preparer = string(sector.data[446:574])
+            self.application_identifier = string(sector.data[574:702])
             self.copyright_file = string(sector.data[702:734])
-            self.abstract_file  = string(sector.data[739:771])
-            self.biblio_file    = string(sector.data[776:808])
-            self.creation_date  = dl_datetime(sector.data[813:829])
-            self.mod_date       = dl_datetime(sector.data[830:846])
-            self.exp_date       = dl_datetime(sector.data[847:863])
+            self.abstract_file = string(sector.data[739:771])
+            self.biblio_file = string(sector.data[776:808])
+            self.creation_date = dl_datetime(sector.data[813:829])
+            self.mod_date = dl_datetime(sector.data[830:846])
+            self.exp_date = dl_datetime(sector.data[847:863])
             self.effective_date = dl_datetime(sector.data[864:880])
-            self.fs_version     = number(sector.data[881:882])
+            self.fs_version = sector.data[881]
 
 class FileAttr(object):
     def __init__(self, flags):
@@ -162,18 +164,24 @@ class File(object):
         self.number        = number
 
 class Directory(object):
-    def __init__(self, name, attr_size, sector, parent):
+    def __init__(self, name, attr_size, sector, lbn, parent):
         self.name       = name
         self.attr_size  = attr_size
         self.sector     = sector
         self.parent     = parent
-
+        dir_length = number(sector.data[14:18])
         # read actual sector
         self.contents = []
-        offset = 0
+        offset = total_len = 0
         while True:
             file_record_length = number(sector.data[offset+ 0:offset+ 1])
-            if file_record_length == 0:
+            if file_record_length == 0  and total_len < dir_length:
+                lbn += 1
+                total_len += (sector.data_size - offset)
+                offset = 0
+                sector = sector.disc.block(lbn)
+                continue
+            if file_record_length == 0 or total_len >= dir_length:
                 break
 
             file_attr_size     = number(sector.data[offset+ 1:offset+ 2])
@@ -198,6 +206,7 @@ class Directory(object):
             self.contents.append(f)
 
             offset += file_record_length
+            total_len += file_record_length
 
     def __getitem__(self, key):
         return self.contents[key]
@@ -217,7 +226,7 @@ class PathTable(object):
             parent_dir = number(sector.data[offset+6:offset+8])
             name       = string(sector.data[offset+8:offset+8+name_size])
 
-            self.directories.append(Directory(name, attr_size, sector.disc.block(dir_addr), parent_dir))
+            self.directories.append(Directory(name, attr_size, sector.disc.block(dir_addr), sector.disc.sector2lbn(dir_addr), parent_dir))
             offset += 8+name_size + (name_size%2)   # last term is padding byte if name size is uneven
 
     def __getitem__(self, key):
@@ -246,7 +255,8 @@ class Disc(object):
 
     def read_sectors(self):
         offset = Disc.HEADER_LEN if self.headers else 0
-        while offset < self.image_file.size():
+        size = self.image_file.size()
+        while offset < size:
             new_sector = Sector(self, offset)
             offset += (Sector.FULL_SIZE+Disc.HEADER_LEN) if self.headers else Sector.FULL_SIZE
             self.sectors.append(new_sector)
@@ -260,7 +270,10 @@ class Disc(object):
                     self.block_offset = idx - Disc.FIRST_DISCLABEL_IDX
 
                 if dl.type == DiscLabel.TERMINATOR:
-                    break
+                    if len(self.disclabels):
+                        break
+                    else:
+                        continue
                 else:
                     self.disclabels.append(dl)
 
@@ -287,28 +300,3 @@ class Disc(object):
 
     def __getitem__(self, key):
         return self.sectors[key]
-
-
-def get_file_hash(iso, file, algo=hashlib.md5):
-    lbn = file.first_lbn
-    hash = algo()
-    size_left = file.size
-    while size_left > 0:
-        block = iso.block(lbn)
-        file_data = block.data[0:min(block.data_size, size_left)]
-        hash.update(file_data)
-        lbn += 1
-        size_left -= block.data_size
-    return hash
-
-
-def get_disklabel_info(disclabel):
-    return {
-        "system_identifier": disclabel.system_id.decode(),
-        "volume_identifier": disclabel.volume_id.decode(),
-        "volume_set_identifier": disclabel.album_id.decode(),
-        "volume_creation_date": disclabel.creation_date,
-        "volume_modification_date": disclabel.mod_date,
-        "volume_expiration_date": disclabel.exp_date,
-        "volume_effective_date": disclabel.effective_date,
-    }

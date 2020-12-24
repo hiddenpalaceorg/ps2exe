@@ -6,16 +6,9 @@ import os
 import re
 import sys
 
-import cdi
-from hash_contents import get_all_files_hash
-from iso_accessor import IsoAccessor
-
-from bin_wrapper import BinWrapper
-from hash_exe import hash_exe
-from most_recent import get_most_recent_file_info
+from common.factory import IsoProcessorFactory
+from common.processor import BaseIsoProcessor
 from patches import apply_patches
-from pvd import get_pvd_info
-from scrambled_wrapper import ScrambleWrapper
 
 try:
     import pycdlib
@@ -25,114 +18,36 @@ except ImportError:
 LOGGER = logging.getLogger(__name__)
 
 
-def get_saturn_header_info(fp):
-    fp.seek(0x10)
-    header_info = {
-        "header_maker_id": fp.read(16),
-        "header_product_number": fp.read(10),
-        "header_product_version": fp.read(6),
-        "header_release_date": fp.read(8),
-        "header_device_info": fp.read(8),
-        "header_regions": fp.read(10),
-    }
-    fp.seek(22, os.SEEK_CUR)
-    header_info["header_title"] = fp.read(112)
-
-    header_info = {
-        header_key: header_item.decode(errors="replace").strip()
-        for header_key, header_item in header_info.items()
-    }
-
-    return header_info
-
-
-def get_system_type(fp):
-    fp.seek(0)
-    if fp.read(15) == b"SEGA SEGASATURN":
-        return "saturn"
-
-    fp.seek(0x8001)
-    if fp.read(5) == b"CD-I ":
-        return "cdi"
-
-    try:
-        iso_accessor = IsoAccessor(fp, ignore_susp=True)
-    except Exception:
-        return
-
-    try:
-        with iso_accessor.IsoPath("/SYSTEM.CNF").open(mode="rb") as f:
-            system_cnf = f.read().decode(errors="ignore")
-            if "BOOT2" in system_cnf:
-                return "ps2"
-            elif "BOOT" in system_cnf:
-                return "ps1"
-    except FileNotFoundError:
-        try:
-            with iso_accessor.IsoPath("/PSX.EXE").open():
-                return "ps1"
-        except FileNotFoundError:
-            pass
-
-
 def get_iso_info(iso_filename, disable_contents_checksum):
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
     LOGGER.info("Reading %s", basename.decode())
 
-    iso = pycdlib.PyCdlib()
     fp = open(iso_filename, "rb")
     info = {"name": basename.decode(), "path": iso_filename}
 
-    wrapper = BinWrapper(fp)
-    system = get_system_type(wrapper)
-    info.update({"system": system})
-    try:
-        if system != 'cdi':
-            iso.open_fp(wrapper)
-            info.update(get_pvd_info(iso))
-    except Exception:
-        # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
-        if not hasattr(iso, "pvd") and not hasattr(iso, "pvds"):
-            LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
-            return
-        if not hasattr(iso, "pvd") and hasattr(iso, "pvds"):
-            iso.pvd = iso.pvds[0]
-        info.update(get_pvd_info(iso))
-
-    try:
-        if system != 'cdi':
-            iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
-        else:
-            iso_accessor = cdi.Disc(fp, headers=True, scrambled=isinstance(wrapper.fp, ScrambleWrapper))
-            iso_accessor.read()
-    except Exception:
+    if not (iso_path_reader := IsoProcessorFactory.get_iso_path_reader(fp)):
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
         return
 
-    if system:
-        result = hash_exe(iso_accessor, system)
-        if result is not None:
-            info.update(result)
+    system = BaseIsoProcessor.get_system_type(iso_path_reader)
+    info.update({"system": system})
 
-    if system == "saturn":
-        info.update(get_saturn_header_info(wrapper))
+    if not (iso_processor_class := IsoProcessorFactory.get_iso_processor_class(system)):
+        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
+        return
 
-    if system != 'cdi':
-        info.update(get_pvd_info(iso))
-    else:
-        info.update(cdi.get_disklabel_info(iso_accessor.disclabels[0]))
+    iso_processor = iso_processor_class(iso_path_reader, iso_filename)
 
-    if iso._initialized:
-        info.update(get_most_recent_file_info(iso, info.get("exe_date")))
-        if not disable_contents_checksum:
-            info.update(get_all_files_hash(iso))
-    else:
-        info.update(get_most_recent_file_info(iso_accessor, info.get("exe_date")))
-        if not disable_contents_checksum:
-            info.update(get_all_files_hash(iso_accessor))
+    info.update(iso_path_reader.get_pvd_info())
 
-    if iso._initialized:
-        iso.close()
+    info.update(iso_processor.hash_exe())
+    info.update(iso_processor.get_most_recent_file_info(info.get("exe_date")))
+
+    if not disable_contents_checksum:
+        info.update(iso_processor.get_all_files_hash())
+
+    info.update(iso_processor.get_extra_fields())
+
     fp.close()
 
     return info
