@@ -70,7 +70,7 @@
     - ~~PS1 games can be detected if "BOOT" is present in system.cnf.~~
     - ~~PS2 games can be detetcted if "BOOT2" is present in system.cnf~~
     - ~~Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.~~
-    - Sega CD games can be detected if the string "SEGADISCSYSTEM" is present at 0x10 in a .bin and 0x0 in an .iso.
+    - ~~Sega CD games can be detected if the string "SEGADISCSYSTEM" is present at 0x10 in a .bin and 0x0 in an .iso.
     - Sega Dreamcast games can be detected if "1ST_READ.BIN" is present on the track that contains game data. Alternatively, Dreamcast games also have a IP.BIN/Disc header that contains the string "SEGA SEGAKATANA" at 0x10 in every data track (track01.bin should always be a data track).
     - ~~Philips CD-i games can be detected if the file "path_tbl" is located at the root of the disc.~~
     - ~~Panasonic 3DO can be detected if the word "CD-ROM" can be found at 0x38 in the .img.~~
