@@ -6,11 +6,12 @@ from p3do.operafs.directory_header import DirectoryHeader
 
 class Directory:
 
-    def __init__(self, fp, loc, name):
+    def __init__(self, fp, loc, name, parent_name=''):
         self.name = name
         self.directories: List[Directory] = []
         self.entries: List[DirectoryEntry] = []
         self._headers: List[DirectoryHeader] = []
+        self.path = "/".join(filter(None, [parent_name, name]))
         fp.seek(loc)
         first_header: DirectoryHeader = DirectoryHeader(fp, fp.read(DirectoryHeader.SIZE), loc)
         self._headers.append(first_header)
@@ -25,7 +26,8 @@ class Directory:
         for header in self._headers:
             for entry in header.entries:
                 if entry.flags & DirectoryEntry.FLAG_DIRECTORY == DirectoryEntry.FLAG_DIRECTORY:
-                    self.directories.append(Directory(fp, entry.copy_offset * 2048, entry.file_name))
+                    directory = Directory(fp, entry.copy_offset * 2048, entry.file_name, name)
+                    self.directories.append(directory)
                 elif entry.flags & DirectoryEntry.FLAG_FILE == DirectoryEntry.FLAG_FILE:
-                    entry.path = "/" + "/".join(filter(None, [name, entry.file_name]))
+                    entry.path = "/" + "/".join(filter(None, [self.path, entry.file_name]))
                     self.entries.append(entry)

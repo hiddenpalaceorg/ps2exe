@@ -19,3 +19,5 @@ class DirectoryHeader:
             entry = DirectoryEntry(fp.read(DirectoryEntry.SIZE))
             self.entries.append(entry)
             entry_offset += entry.size
+            if entry_offset + DirectoryEntry.SIZE > 2048:
+                break
