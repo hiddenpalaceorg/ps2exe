@@ -17,6 +17,7 @@ from p3do.processor import P3doIsoProcessor
 from psx.processor import PsxIsoProcessor
 from psp.processor import PspIsoProcessor
 from saturn.processor import SaturnIsoProcessor
+from megacd.processor import MegaCDIsoProcessor
 from scrambled_wrapper import ScrambleWrapper
 from p3do.operafs import OperaFs
 
@@ -68,6 +69,8 @@ class IsoProcessorFactory:
             return PsxIsoProcessor
         elif system_type == "saturn":
             return SaturnIsoProcessor
+        elif system_type == "megacd":
+            return MegaCDIsoProcessor
         elif system_type == "psp":
             return PspIsoProcessor
         elif system_type == "3do":
