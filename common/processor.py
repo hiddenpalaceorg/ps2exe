@@ -26,6 +26,10 @@ class BaseIsoProcessor:
         if fp.read(15) == b"SEGA SEGASATURN":
             return "saturn"
 
+        fp.seek(0)
+        if fp.read(14) == b"SEGADISCSYSTEM":
+            return "megacd"
+
         fp.seek(0x28)
         if fp.peek(6) == b"CD-ROM":
             return "3do"
