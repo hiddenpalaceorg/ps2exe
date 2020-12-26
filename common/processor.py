@@ -26,13 +26,19 @@ class BaseIsoProcessor:
         if fp.read(15) == b"SEGA SEGASATURN":
             return "saturn"
 
-        fp.seek(0x8008)
-        if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
-            return "cdi"
+        fp.seek(0x28)
+        if fp.peek(6) == b"CD-ROM":
+            return "3do"
 
         fp.seek(0x8001)
         if fp.peek(5) == b'CD-I ':
             return "cdi"
+
+        fp.seek(0x8008)
+        if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
+            return "cdi"
+
+
 
         pvd = iso_path_reader.get_pvd()
         if pvd.system_identifier.strip() == b'PSP GAME':

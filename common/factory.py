@@ -12,11 +12,13 @@ from iso_accessor import IsoAccessor
 
 from cdi.processor import CdiIsoProcessor
 from cdi.utils import Disc
+from p3do.path_reader import P3doPathReader
+from p3do.processor import P3doIsoProcessor
 from psx.processor import PsxIsoProcessor
 from psp.processor import PspIsoProcessor
 from saturn.processor import SaturnIsoProcessor
 from scrambled_wrapper import ScrambleWrapper
-
+from p3do.operafs import OperaFs
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +30,12 @@ class IsoProcessorFactory:
             wrapper = BinWrapper(fp)
         else:
             wrapper = fp
+
+        wrapper.seek(0x28)
+        if wrapper.peek(6) == b"CD-ROM":
+            reader = OperaFs(wrapper)
+            reader.initialize()
+            return P3doPathReader(reader, wrapper)
 
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":
@@ -62,6 +70,8 @@ class IsoProcessorFactory:
             return SaturnIsoProcessor
         elif system_type == "psp":
             return PspIsoProcessor
+        elif system_type == "3do":
+            return P3doIsoProcessor
 
         return GenericIsoProcessor
 
