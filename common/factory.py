@@ -14,6 +14,7 @@ from cdi.processor import CdiIsoProcessor
 from cdi.utils import Disc
 from p3do.path_reader import P3doPathReader
 from p3do.processor import P3doIsoProcessor
+from cd32.processor import CD32IsoProcessor
 from psx.processor import PsxIsoProcessor
 from psp.processor import PspIsoProcessor
 from saturn.processor import SaturnIsoProcessor
@@ -75,6 +76,8 @@ class IsoProcessorFactory:
             return PspIsoProcessor
         elif system_type == "3do":
             return P3doIsoProcessor
+        elif system_type == "cd32":
+            return CD32IsoProcessor
 
         return GenericIsoProcessor
 

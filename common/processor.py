@@ -55,6 +55,15 @@ class BaseIsoProcessor:
         except FileNotFoundError:
             pass
 
+        for dir in ["/S", "/s"]:
+            try:
+                for file in iso_path_reader.iso_iterator(iso_path_reader.get_file(dir)):
+                    file_path = iso_path_reader.get_file_path(file)
+                    if file_path.lower() == "/s/startup-sequence":
+                        return "cd32"
+            except FileNotFoundError:
+                pass
+
         try:
             system_cnf = iso_path_reader.get_file("/SYSTEM.CNF")
             with iso_path_reader.open_file(system_cnf) as f:
