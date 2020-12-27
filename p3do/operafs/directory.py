@@ -19,7 +19,7 @@ class Directory:
         while next_header_block != 0xffffffff:
             header_location = loc + (next_header_block * 2048)
             fp.seek(header_location)
-            header: DirectoryHeader = DirectoryHeader(fp, fp.read(DirectoryHeader.SIZE), loc)
+            header: DirectoryHeader = DirectoryHeader(fp, fp.read(DirectoryHeader.SIZE), header_location)
             next_header_block = header.next_block
             self._headers.append(header)
 

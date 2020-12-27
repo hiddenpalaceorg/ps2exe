@@ -17,10 +17,10 @@ class P3doPathReader(IsoPathReader):
             yield from self.iso_iterator(dir, recursive)
 
     def get_file(self, path):
-        file_basename = basename(path)
         for file in self.iso_iterator(self.get_root_dir(), recursive=True):
-            if file.file_name == file_basename:
+            if file.path == path:
                 return file
+        raise FileNotFoundError
 
     def get_file_path(self, file):
         if hasattr(file, "path"):
