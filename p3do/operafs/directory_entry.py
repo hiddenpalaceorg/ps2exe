@@ -17,6 +17,8 @@ class DirectoryEntry:
         self.flags, self.id, entry_type, self.block_size, \
         self.byte_length, self.block_length, self.burst, self.gap, file_name, \
         self.last_copy_number, self.copy_offset = struct.unpack(self.FMT, data)
+        if not self.id:
+            return
         self.entry_type = entry_type.strip().decode()
         self.file_name = file_name.rstrip(b'\x00').decode()
 

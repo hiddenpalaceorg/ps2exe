@@ -31,7 +31,7 @@ class BaseIsoProcessor:
             return "megacd"
 
         fp.seek(0x28)
-        if fp.peek(6) == b"CD-ROM":
+        if fp.peek(6).lower() == b"cd-rom":
             return "3do"
 
         fp.seek(0x8001)

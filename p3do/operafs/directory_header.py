@@ -17,6 +17,8 @@ class DirectoryHeader:
         while entry_offset < self.first_free:
             fp.seek(loc + self.first_entry + entry_offset)
             entry = DirectoryEntry(fp.read(DirectoryEntry.SIZE))
+            if not entry.id:
+                break
             self.entries.append(entry)
             entry_offset += entry.size
             if entry_offset + DirectoryEntry.SIZE > 2048:

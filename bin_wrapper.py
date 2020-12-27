@@ -92,14 +92,14 @@ class BinWrapper:
     def detect_sector_size(self):
         self.fp.seek(0x28)
         ident = self.fp.read(6)
-        if ident == b"CD-ROM":
+        if ident.lower() == b"cd-rom":
             self.sector_size = 2048
             self.sector_offset = 0
             return
 
         self.fp.seek(0x38)
         ident = self.fp.read(6)
-        if ident == b"CD-ROM":
+        if ident.lower() == b"cd-rom":
             self.sector_size = 2352
             self.sector_offset = 16
             return
