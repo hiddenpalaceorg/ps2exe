@@ -56,7 +56,7 @@ def get_iso_info(iso_filename, disable_contents_checksum):
 
 
 def process_path(path, disable_contents_checksum):
-    if re.search("\(Track (?:\d?[2-9]|[1-9]\d+)\)\.bin|\.(html|htm|jpeg|jpg|png|bmp|gif|txt|cue|ccd|sub|dat|json|c2|scm|7z|rar|zip|part)", path):
+    if re.search("\(Track (?:\d?[2-9]|[1-9]\d+)\)\.bin|\.(html|htm|jpeg|jpg|png|bmp|gif|txt|cue|ccd|sub|wav|mp3|dat|json|c2|scm|7z|rar|zip|part)", path):
         return
 
     size = os.path.getsize(path)
