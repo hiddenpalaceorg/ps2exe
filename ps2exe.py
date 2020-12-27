@@ -25,7 +25,7 @@ def get_iso_info(iso_filename, disable_contents_checksum):
     fp = open(iso_filename, "rb")
     info = {"name": basename.decode(), "path": iso_filename}
 
-    if not (iso_path_reader := IsoProcessorFactory.get_iso_path_reader(fp)):
+    if not (iso_path_reader := IsoProcessorFactory.get_iso_path_reader(fp, basename)):
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
         return
 
@@ -55,8 +55,32 @@ def get_iso_info(iso_filename, disable_contents_checksum):
     return info
 
 
-def process_path(path, disable_contents_checksum):
-    if re.search("\(Track (?:\d?[2-9]|[1-9]\d+)\)\.bin|\.(html|htm|jpeg|jpg|png|bmp|gif|txt|cue|ccd|sub|wav|mp3|dat|json|c2|scm|7z|rar|zip|part)", path):
+def process_path(path, disable_contents_checksum, allowed_extensions):
+    disallowed_extensions ={
+        "html",
+        "htm",
+        "jpeg",
+        "jpg",
+        "png",
+        "bmp",
+        "gif",
+        "txt",
+        "cue",
+        "ccd",
+        "sub",
+        "dat",
+        "json",
+        "c2",
+        "scm",
+        "7z",
+        "rar",
+        "zip",
+        "part",
+        "wav",
+        "mp3",
+    }
+    disallowed_extensions = "|".join(disallowed_extensions - set(allowed_extensions))
+    if re.search(rf"\(Track (?:\d?[2-9]|[1-9]\d+)\)\.bin|\.({disallowed_extensions})", path):
         return
 
     size = os.path.getsize(path)
@@ -144,6 +168,11 @@ if __name__ == '__main__':
                        action='store_true',
                        default=False)
 
+    parser.add_argument('--allow-extensions',
+                       help="Allow these normally ignored extensions to be processed",
+                       nargs='+',
+                       default=[])
+
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.logLevel))
@@ -185,7 +214,7 @@ if __name__ == '__main__':
 
     if args.file:
         if args.file not in existing_files:
-            result = process_path(args.file, args.no_contents_checksum)
+            result = process_path(args.file, args.no_contents_checksum, args.allow_extensions)
             if result:
                 writer.writerow(result)
     elif args.input_dir:
@@ -197,7 +226,7 @@ if __name__ == '__main__':
                 path = os.path.join(root, filename)
                 if path in existing_files:
                     continue
-                result = process_path(path, args.no_contents_checksum)
+                result = process_path(path, args.no_contents_checksum, args.allow_extensions)
                 if result:
                     writer.writerow(result)
                     csv_file.flush()

@@ -1,10 +1,13 @@
 import io
 import logging
+import os
+import sys
 
 import pycdlib
 
 from bin_wrapper import BinWrapper
 from cdi.path_reader import CdiPathReader
+from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
 from common.processor import GenericIsoProcessor
@@ -21,13 +24,38 @@ from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from scrambled_wrapper import ScrambleWrapper
 from p3do.operafs import OperaFs
+from xbox.path_reader import XboxPathReader
+from xbox.processor import XboxIsoProcessor
+from xbox.xdvdfs.xdvdfs import XDvdFs
+
+try:
+    import libarchive
+except TypeError:
+    libarchive_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "libarchive")
+    if os.name == "nt":
+        if sys.maxsize > 2**32:
+            libarchive_path = os.path.join(libarchive_path, "win64", "libarchive.dll")
+        else:
+            libarchive_path = os.path.join(libarchive_path, "win32", "libarchive.dll")
+    elif sys.platform == "linux":
+        libarchive_path = os.path.join(libarchive_path, "linux", "libarchive.so")
+    elif sys.platform == "darwin":
+        libarchive_path = os.path.join(libarchive_path, "macosx", "libarchive.dylib")
+
+    os.environ["LIBARCHIVE"] = libarchive_path
+    import libarchive
 
 LOGGER = logging.getLogger(__name__)
 
 
 class IsoProcessorFactory:
     @staticmethod
-    def get_iso_path_reader(fp):
+    def get_iso_path_reader(fp, file_name):
+        file_ext = os.path.splitext(file_name)[1]
+        if file_ext in [b".7z", b".rar", b".zip"]:
+            with libarchive.file_reader(fp.name) as archive:
+                return CompressedPathReader(archive, fp)
+
         if isinstance(fp, io.IOBase):
             wrapper = BinWrapper(fp)
         else:
@@ -44,6 +72,17 @@ class IsoProcessorFactory:
             cdi = Disc(fp, headers=True, scrambled=isinstance(wrapper.fp, ScrambleWrapper))
             cdi.read()
             return CdiPathReader(cdi, fp)
+
+        # Redump-style dual layer DVD
+        if wrapper.length() == 7825162240:
+            wrapper.seek(0x18310000)
+            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
+                reader = XDvdFs(wrapper, 0x18310000)
+                return XboxPathReader(reader, wrapper)
+        wrapper.seek(0x10000)
+        if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
+            reader = XDvdFs(wrapper, 0x10000)
+            return XboxPathReader(reader, wrapper)
 
         wrapper.seek(0)
 
@@ -78,6 +117,8 @@ class IsoProcessorFactory:
             return P3doIsoProcessor
         elif system_type == "cd32":
             return CD32IsoProcessor
+        elif system_type == "xbox":
+            return XboxIsoProcessor
 
         return GenericIsoProcessor
 

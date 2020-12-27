@@ -30,6 +30,9 @@ class BinWrapper:
         self.fp.close()
 
     def seek(self, pos, whence=os.SEEK_SET):
+        if self.sector_offset == 0:
+            return self.fp.seek(pos, whence)
+
         LOGGER.debug(f"seek {pos} {whence}")
         if whence == os.SEEK_SET:
             self.pos = pos
@@ -41,10 +44,16 @@ class BinWrapper:
             raise BinWrapperException("Unsupported")
 
     def tell(self):
+        if self.sector_offset == 0:
+            return self.fp.tell()
+
         LOGGER.debug("tell")
         return self.pos
 
     def peek(self, n=-1):
+        if self.sector_offset == 0:
+            return self.fp[self.fp.tell():self.fp.tell()+n]
+
         cur_pos = self.fp.tell()
         original_pos = self.pos
         buffer = self.read(n)
@@ -54,12 +63,14 @@ class BinWrapper:
         # if the directory record is less than 30 bytes (it can't be that small),
         # then it's probably garbage padding. Fill the rest of this sector with zeroes
         lenbyte = bytearray([buffer[0]])[0]
-        if lenbyte and lenbyte < 30:
+        if n == 1 and lenbyte and lenbyte < 30:
             return b'\x00'
 
         return buffer
 
     def read(self, n=-1):
+        if self.sector_offset == 0:
+            return self.fp.read(n)
         length = n
         LOGGER.debug(f"read {length}")
         buffer = bytearray()

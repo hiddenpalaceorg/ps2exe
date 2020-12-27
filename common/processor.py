@@ -5,6 +5,8 @@ import logging
 import xxhash
 
 from cdi.path_reader import CdiPathReader
+from common.iso_path_reader.methods.compressed import CompressedPathReader
+from xbox.path_reader import XboxPathReader
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +22,12 @@ class BaseIsoProcessor:
     def get_system_type(iso_path_reader):
         if isinstance(iso_path_reader, CdiPathReader):
             return "cdi"
+
+        if isinstance(iso_path_reader, XboxPathReader):
+            return "xbox"
+
+        if isinstance(iso_path_reader, CompressedPathReader):
+            return "xbox"
 
         fp = iso_path_reader.fp
         fp.seek(0)
@@ -41,8 +49,6 @@ class BaseIsoProcessor:
         fp.seek(0x8008)
         if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
             return "cdi"
-
-
 
         pvd = iso_path_reader.get_pvd()
         if pvd.system_identifier.strip() == b'PSP GAME':
@@ -79,6 +85,13 @@ class BaseIsoProcessor:
                     return "ps1"
             except FileNotFoundError:
                 pass
+
+        try:
+            psx_exe = iso_path_reader.get_file("/DEFAULT.XBE")
+            with iso_path_reader.open_file(psx_exe):
+                return "xbox"
+        except FileNotFoundError:
+            pass
 
     def __init__(self, iso_path_reader, filename, system_type):
         self.iso_path_reader = iso_path_reader
