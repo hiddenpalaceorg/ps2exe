@@ -20,7 +20,10 @@ class DirectoryEntry:
         if not self.id:
             return
         self.entry_type = entry_type.strip().decode()
-        self.file_name = file_name.rstrip(b'\x00').decode()
+        try:
+            self.file_name = file_name.rstrip(b'\x00').decode()
+        except UnicodeDecodeError:
+            self.file_name = file_name.rstrip(b'\x00').decode("s-jis")
 
     @property
     def size(self):
