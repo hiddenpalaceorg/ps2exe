@@ -26,7 +26,10 @@ class DirectoryEntry:
         try:
             self.file_name = file_name.rstrip(b'\x00').decode()
         except UnicodeDecodeError:
-            self.file_name = file_name.rstrip(b'\x00').decode("s-jis")
+            try:
+                self.file_name = file_name.rstrip(b'\x00').decode("s-jis")
+            except UnicodeDecodeError:
+                self.file_name = file_name.rstrip(b'\x00').decode(encoding="cp1252", errors="replace")
 
     @property
     def size(self):
