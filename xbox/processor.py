@@ -2,12 +2,15 @@ import datetime
 import logging
 import struct
 
+from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.processor import BaseIsoProcessor
 
 LOGGER = logging.getLogger(__name__)
 
 class XboxIsoProcessor(BaseIsoProcessor):
     def get_disc_type(self):
+        if isinstance(self.iso_path_reader, CompressedPathReader):
+            return {"disc_type": "hdd"}
         return {"disc_type": "dvdr"}
 
     def get_exe_filename(self):
