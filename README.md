@@ -66,8 +66,15 @@
 13. add ps3 support. ps3 will either originate from dvd-rs or bd-rs somewhat encrypted, using a udf file system - so volume information, timestamps, latest mod file, etc can be determined. starting from the root of a ps3 you'll find PS3_GAME (where the game files are stored), PS3_UPDATE (contains firmware update files, ignore this completely), and PS3_DISC.SFB. 
     - PS3_DISC.SFB contains metadata for the disc itself, which we can pull version number, game title, and disc id (https://www.psdevwiki.com/ps3/PS3_DISC.SFB for more info).
     - Inside the PS3_GAME folder you'll find PARAM.SFO. Just like the PSP, this file contains a ton of information about the game itself (mostly used by the XMB/firmware). More information here: https://www.psdevwiki.com/ps3/PARAM.SFO
-    - However, the contents of the USRDIR are encrypted. I don't know what can be done in the case of the script, as prototypes can be decrypted uses sony's official tools. there might be something out there that can finally universally decrypt these files. more research needed.
-14. add system detector
+    - However, the contents of the USRDIR are encrypted. I don't know what can be done in the case of the script, as prototypes can be decrypted uses sony's official tools. there might be something out there that can finally universally decrypt these files. more research needed. We can probably not worry about this for now, since the timestamps are at least part of the filesystem unlike xbox games.
+14. add dreamcast support. you can pretty much lift drx's script to implement this. however, at the time drx's script was written, redump was still using GDI to represent games. now, redump uses split bin/cue to describe the various data tracks, so drx's script has to be ammended to support these too. 
+    - track1 will always be a iso 9660 track viewable in a PC that contains non important files, so skip this when doing composite checks. 
+    - dreamcast games will often have at most two other data tracks aside from track1, one track (usually precedes the track contains the game's data) containing padding, and the other track that contains the game's actual data. 
+    - the data tracks in a dreamcast game use iso 9660, so edc/ecc is supported (which drx also implemented).
+    - 1ST_READ.BIN is always the main exe, and is always present at the root of the disc. wince games should still use 1st_read, but can use other executables. don't worry about these.
+    - dreamcast games have headers that are similar to saturn discs, so the struct used for the saturn should still apply.
+    - dumps can also exist as disc juggler (cdi) files, usually older prototypes back before the age of gdi. unsure if we can easily support these as its a proprietary format.
+15. add system detector
     - ~~PS1 games can be detected if "BOOT" is present in system.cnf.~~
     - ~~PS2 games can be detetcted if "BOOT2" is present in system.cnf~~
     - ~~Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.~~
@@ -81,5 +88,5 @@
     - PlayStation 3 games can be determined if PS3_DISC.SFB or /PS3_GAME is present at the root of the disc.
     - ~~PlayStation Portable - games can exist on DVD-Rs in a specific format or on raw UMD dumps.~~
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
-15. (HIGH PRIORITY) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. parse the log output and include just the total warning and total error count into to respective columns. maybe save the total output for the current run session in a separate log file for review. Make this optional with a parameter/flag. (HIGH PRIORITY)
-16. detect media type (CD-R or DVD-R). unsure if we can do this. (partially implemented on a system by system basis)
+16. (HIGH PRIORITY) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. parse the log output and include just the total warning and total error count into to respective columns. maybe save the total output for the current run session in a separate log file for review. Make this optional with a parameter/flag. (HIGH PRIORITY)
+17. detect media type (CD-R or DVD-R). unsure if we can do this. (partially implemented on a system by system basis)
