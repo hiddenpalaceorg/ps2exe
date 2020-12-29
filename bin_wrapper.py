@@ -101,16 +101,16 @@ class BinWrapper:
         return data == b"\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00"
 
     def detect_sector_size(self):
-        self.fp.seek(0x28)
-        ident = self.fp.read(6)
-        if ident.lower() == b"cd-rom":
+        self.fp.seek(0)
+        ident = self.fp.read(7)
+        if ident == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             self.sector_size = 2048
             self.sector_offset = 0
             return
 
-        self.fp.seek(0x38)
-        ident = self.fp.read(6)
-        if ident.lower() == b"cd-rom":
+        self.fp.seek(0x10)
+        ident = self.fp.read(7)
+        if ident == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             self.sector_size = 2352
             self.sector_offset = 16
             return

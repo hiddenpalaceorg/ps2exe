@@ -38,8 +38,8 @@ class BaseIsoProcessor:
         if fp.read(14) == b"SEGADISCSYSTEM":
             return "megacd"
 
-        fp.seek(0x28)
-        if fp.peek(6).lower() == b"cd-rom":
+        fp.seek(0)
+        if fp.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             return "3do"
 
         fp.seek(0x8001)

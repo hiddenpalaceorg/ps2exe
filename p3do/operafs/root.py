@@ -19,4 +19,9 @@ class Root:
 
         self.root_copies = []
         for copy_location in self.copy_locations:
-            self.root_copies.append(Directory(fp, copy_location, None))
+            try:
+                self.root_copies.append(Directory(fp, copy_location, None))
+            except:
+                if len(self.root_copies):
+                    return
+                raise

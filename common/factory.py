@@ -61,8 +61,8 @@ class IsoProcessorFactory:
         else:
             wrapper = fp
 
-        wrapper.seek(0x28)
-        if wrapper.peek(6).lower() == b"cd-rom":
+        wrapper.seek(0)
+        if wrapper.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             reader = OperaFs(wrapper)
             reader.initialize()
             return P3doPathReader(reader, wrapper)

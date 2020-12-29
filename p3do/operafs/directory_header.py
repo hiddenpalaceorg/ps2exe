@@ -21,5 +21,5 @@ class DirectoryHeader:
                 break
             self.entries.append(entry)
             entry_offset += entry.size
-            if entry_offset + DirectoryEntry.SIZE > 2048:
+            if entry_offset + DirectoryEntry.SIZE > 2048 or entry_offset + DirectoryEntry.SIZE > self.first_free:
                 break
