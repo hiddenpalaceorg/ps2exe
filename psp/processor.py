@@ -114,7 +114,10 @@ class PspIsoProcessor(BaseIsoProcessor):
                 value_raw = f.read(v_total)
 
                 if v_type in (0x0204, 0x0004):
-                    value = value_raw.rstrip(b'\x00').decode()
+                    try:
+                        value = value_raw.rstrip(b'\x00').decode()
+                    except UnicodeDecodeError:
+                        value = value_raw.rstrip(b'\x00').decode(encoding="cp1252", errors="ignore")
                 elif v_type == 0x0404:
                     # Reverse index to read as little-endian
                     # NOTE: Method for raw string to int?
