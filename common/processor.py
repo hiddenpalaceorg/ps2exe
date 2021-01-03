@@ -70,6 +70,9 @@ class BaseIsoProcessor:
         if pvd.system_identifier.strip() == b'PSP GAME':
             return "psp"
 
+        if pvd.volume_identifier.strip() == b'PS3VOLUME':
+            return "ps3"
+
         fp.seek(0x8008)
         if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
             return "cdi"

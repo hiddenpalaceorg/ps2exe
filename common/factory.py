@@ -20,6 +20,7 @@ from p3do.processor import P3doIsoProcessor
 from cd32.processor import CD32IsoProcessor
 from psx.processor import PsxIsoProcessor
 from psp.processor import PspIsoProcessor
+from ps3.processor import Ps3IsoProcessor
 from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from scrambled_wrapper import ScrambleWrapper
@@ -119,6 +120,8 @@ class IsoProcessorFactory:
             return MegaCDIsoProcessor
         elif system_type == "psp":
             return PspIsoProcessor
+        elif system_type == "ps3":
+            return Ps3IsoProcessor
         elif system_type == "3do":
             return P3doIsoProcessor
         elif system_type == "cd32":
