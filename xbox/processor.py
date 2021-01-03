@@ -2,6 +2,8 @@ import datetime
 import logging
 import struct
 
+import xxhash
+
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.processor import BaseIsoProcessor
 
@@ -25,8 +27,23 @@ class XboxIsoProcessor(BaseIsoProcessor):
         # could not find default.xbe in root, use first xbe we can find
         for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir()):
             file_path = self.iso_path_reader.get_file_path(file)
-            if file_path.lower().endswith(".xbe") or file_path.lower().endswith(".xex"):
+            file_path_lower = file_path.lower()
+            if (file_path_lower.endswith(".xbe") or file_path_lower.endswith(".xex")) and \
+                    "dashupdate.xbe" not in file_path_lower:
                 return file_path
+
+    def get_file_hashes(self):
+        file_hashes = {}
+        root = self.iso_path_reader.get_root_dir()
+        for file in self.iso_path_reader.iso_iterator(root, recursive=True):
+            file_path = self.iso_path_reader.get_file_path(file)
+
+            if "dashupdate.xbe" in file_path.lower():
+                continue
+
+            if file_hash := self.iso_path_reader.get_file_hash(file, xxhash.xxh64):
+                file_hashes[file_path] = file_hash.digest()
+        return file_hashes
 
     def get_most_recent_file_info(self, exe_date):
         return {}
