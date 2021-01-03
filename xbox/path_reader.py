@@ -1,8 +1,9 @@
 import io
-from os.path import basename
+import logging
 
 from common.iso_path_reader.methods.base import IsoPathReader
 
+LOGGER = logging.getLogger(__name__)
 
 class XboxPathReader(IsoPathReader):
     def get_root_dir(self):
@@ -45,7 +46,12 @@ class XboxPathReader(IsoPathReader):
     def get_file_hash(self, file, algo):
         hash = algo()
         size_left = file.size
-        self.fp.seek(file.offset)
+        try:
+            self.fp.seek(file.offset)
+        except ValueError:
+            LOGGER.warning("File %s out of iso range", self.get_file_path(file))
+            return
+
         while size_left > 0:
             chunk_size = min(65535, size_left)
             chunk = self.fp.read(chunk_size)

@@ -20,26 +20,22 @@ class Directory:
         self.parseDirectoryRecord(self.offset)
 
     def parseDirectoryRecord(self, offset):
-        self.fp.seek(offset)
-        left_subtree_offset, right_subtree_offset, start_sector, \
-        file_size, file_flags, file_name_size = struct.unpack("HHIIBB", self.fp.read(14))
-        left_subtree_offset *= 4
-        right_subtree_offset *= 4
-        file_name = self.fp.read(file_name_size).decode()
-        if left_subtree_offset:
-            self.parseDirectoryRecord(self.offset + left_subtree_offset)
-
-        if file_flags & 0x10:
-            if file_size:
-                self.directories.append(Directory(self.fp, self.volume, start_sector, file_name, self.name))
-        else:
-            file_offset = self.volume.volume_base_offset + (start_sector * self.volume.sector_size)
-            entry = DirectoryEntry(file_name, file_offset, file_size)
-            entry.path = "/" + "/".join(filter(None, [self.path, entry.file_name]))
-            self.entries.append(entry)
-
-
-        if right_subtree_offset:
-            self.parseDirectoryRecord(self.offset + right_subtree_offset)
-
-
+        s = []
+        root = DirectoryEntry(self.fp, self.volume, offset)
+        s.append(root)
+        while len(s) > 0:
+            if root.left_subtree_offset:
+                root = DirectoryEntry(self.fp, self.volume, self.offset + root.left_subtree_offset)
+                s.append(root)
+            else:
+                root = s.pop()
+                if root.file_flags & 0x10:
+                    if root.size:
+                        dir = Directory(self.fp, self.volume, root.start_sector, root.file_name, self.name)
+                        self.directories.append(dir)
+                else:
+                    root.path = "/" + "/".join(filter(None, [self.path, root.file_name]))
+                    self.entries.append(root)
+                if root.right_subtree_offset:
+                    root = DirectoryEntry(self.fp, self.volume, self.offset + root.right_subtree_offset)
+                    s.append(root)

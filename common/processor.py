@@ -6,6 +6,8 @@ import xxhash
 
 from cdi.path_reader import CdiPathReader
 from common.iso_path_reader.methods.compressed import CompressedPathReader
+from common.iso_path_reader.methods.pathlab import PathlabPathReader
+from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
 from xbox.path_reader import XboxPathReader
 
 LOGGER = logging.getLogger(__name__)
@@ -22,12 +24,6 @@ class BaseIsoProcessor:
     def get_system_type(iso_path_reader):
         if isinstance(iso_path_reader, CdiPathReader):
             return "cdi"
-
-        if isinstance(iso_path_reader, XboxPathReader):
-            return "xbox"
-
-        if isinstance(iso_path_reader, CompressedPathReader):
-            return "xbox"
 
         fp = iso_path_reader.fp
         fp.seek(0)
@@ -46,20 +42,37 @@ class BaseIsoProcessor:
         if fp.peek(5) == b'CD-I ':
             return "cdi"
 
-        fp.seek(0x8008)
-        if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
-            return "cdi"
-
-        pvd = iso_path_reader.get_pvd()
-        if pvd.system_identifier.strip() == b'PSP GAME':
-            return "psp"
-
         try:
             user_l0 = iso_path_reader.get_file("/USER_L0.IMG")
             with iso_path_reader.open_file(user_l0):
                 return "psp"
         except FileNotFoundError:
             pass
+
+        if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader, PathlabPathReader)):
+            for sys_type, exe in (("xbox360", "/default.xex"), ("xbox", "/default.xbe")):
+                try:
+                    default_xbe = iso_path_reader.get_file(exe)
+                    with iso_path_reader.open_file(default_xbe):
+                        return sys_type
+                except FileNotFoundError:
+                    pass
+
+            # could not find default.xbe in root, use first xbe we can find
+            for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir()):
+                file_path = iso_path_reader.get_file_path(file)
+                if file_path.lower().endswith(".xbe"):
+                    return "xbox"
+                elif file_path.lower().endswith(".xex"):
+                    return "xbox360"
+
+        pvd = iso_path_reader.get_pvd()
+        if pvd.system_identifier.strip() == b'PSP GAME':
+            return "psp"
+
+        fp.seek(0x8008)
+        if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
+            return "cdi"
 
         for dir in ["/S", "/s"]:
             try:

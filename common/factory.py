@@ -25,7 +25,7 @@ from megacd.processor import MegaCDIsoProcessor
 from scrambled_wrapper import ScrambleWrapper
 from p3do.operafs import OperaFs
 from xbox.path_reader import XboxPathReader
-from xbox.processor import XboxIsoProcessor
+from xbox.processor import XboxIsoProcessor, Xbox360IsoProcessor
 from xbox.xdvdfs.xdvdfs import XDvdFs
 
 try:
@@ -79,6 +79,12 @@ class IsoProcessorFactory:
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0x18310000)
                 return XboxPathReader(reader, wrapper)
+        # 360 ISO
+        elif wrapper.length() == 7834892288:
+            wrapper.seek(0xFDA0000)
+            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
+                reader = XDvdFs(wrapper, 0xFDA0000)
+                return XboxPathReader(reader, wrapper)
         wrapper.seek(0x10000)
         if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
             reader = XDvdFs(wrapper, 0x10000)
@@ -119,6 +125,8 @@ class IsoProcessorFactory:
             return CD32IsoProcessor
         elif system_type == "xbox":
             return XboxIsoProcessor
+        elif system_type == "xbox360":
+            return Xbox360IsoProcessor
 
         return GenericIsoProcessor
 

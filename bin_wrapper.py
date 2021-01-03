@@ -144,4 +144,11 @@ class BinWrapper:
             self.fp = ScrambleWrapper(self.fp, offset=0)
             return
 
+        self.fp.seek(0x10000)
+        ident = self.fp.read(20)
+        if ident == b"MICROSOFT*XBOX*MEDIA":
+            self.sector_size = 2048
+            self.sector_offset = 0
+            return
+
         raise BinWrapperException("Cannot detect sector size, is this a disc image?")

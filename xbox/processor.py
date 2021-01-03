@@ -14,17 +14,18 @@ class XboxIsoProcessor(BaseIsoProcessor):
         return {"disc_type": "dvdr"}
 
     def get_exe_filename(self):
-        try:
-            default_xbe = self.iso_path_reader.get_file("/default.xbe")
-            with self.iso_path_reader.open_file(default_xbe):
-                return "/default.xbe"
-        except FileNotFoundError:
-            pass
+        for exe in ["/default.xex", "/default.xbe"]:
+            try:
+                default_xbe = self.iso_path_reader.get_file(exe)
+                with self.iso_path_reader.open_file(default_xbe):
+                    return exe
+            except FileNotFoundError:
+                pass
 
         # could not find default.xbe in root, use first xbe we can find
         for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir()):
             file_path = self.iso_path_reader.get_file_path(file)
-            if file_path.lower().endswith(".xbe"):
+            if file_path.lower().endswith(".xbe") or file_path.lower().endswith(".xex"):
                 return file_path
 
     def get_most_recent_file_info(self, exe_date):
@@ -56,4 +57,12 @@ class XboxIsoProcessor(BaseIsoProcessor):
                     result["header_product_number"] = "%03d" % cert_game_id
             return result
         except FileNotFoundError:
+            return {}
+
+class Xbox360IsoProcessor(XboxIsoProcessor):
+    def __init__(self, iso_path_reader, filename, system_type):
+        LOGGER.warning("Xbox 360 Support is preliminary and does not process the executable contents yet")
+        super().__init__(iso_path_reader, filename, system_type)
+
+    def get_extra_fields(self):
             return {}
