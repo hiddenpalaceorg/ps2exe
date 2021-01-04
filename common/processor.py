@@ -70,8 +70,12 @@ class BaseIsoProcessor:
         if pvd.system_identifier.strip() == b'PSP GAME':
             return "psp"
 
-        if pvd.volume_identifier.strip() == b'PS3VOLUME':
-            return "ps3"
+        try:
+            ps3_exe = iso_path_reader.get_file("/PS3_GAME/USRDIR/EBOOT.BIN")
+            with iso_path_reader.open_file(ps3_exe):
+                return "ps3"
+        except FileNotFoundError:
+            pass
 
         fp.seek(0x8008)
         if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
