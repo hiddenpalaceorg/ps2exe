@@ -11,6 +11,7 @@ pathlab = "*"
 xxhash = "*"
 numpy = "==1.19.3"
 libarchive-c = "*"
+pefile = "*"
 
 [requires]
 python_version = "3.8"

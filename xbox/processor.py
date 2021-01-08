@@ -1,8 +1,17 @@
+import ctypes
 import datetime
+import hashlib
+import io
 import logging
+import os
 import struct
+import subprocess
+import sys
+from hashlib import sha1
 
+import pefile
 import xxhash
+from Crypto.Cipher import AES
 
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.processor import BaseIsoProcessor
@@ -76,10 +85,497 @@ class XboxIsoProcessor(BaseIsoProcessor):
         except FileNotFoundError:
             return {}
 
+
+char_t = ctypes.c_char
+uint8_t  = ctypes.c_byte
+uint16_t = ctypes.c_ushort
+uint32_t = ctypes.c_uint
+
+
+# ImageXEXHeader for "XEX?" format, which doesn't contain a SecurityInfo struct (>=1529)
+class ImageXEXHeader_3F(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Magic", uint32_t),
+        ("ModuleFlags", uint32_t),
+        ("SizeOfHeaders", uint32_t),
+        ("SizeOfDiscardableHeaders", uint32_t),
+        ("LoadAddress", uint32_t),
+        ("Unknown14", uint32_t),
+        ("HeaderDirectoryEntryCount", uint32_t),
+    ]
+
+
+class ImageXEXHeader(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Magic", uint32_t),
+        ("ModuleFlags", uint32_t),
+        ("SizeOfHeaders", uint32_t),
+        ("SizeOfDiscardableHeaders", uint32_t),
+        ("SecurityInfo", uint32_t),
+        ("HeaderDirectoryEntryCount", uint32_t),
+    ]
+
+
+class XEX2HVImageInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Signature", uint8_t * 0x100),
+        ("InfoSize", uint32_t),
+        ("ImageFlags", uint32_t),
+        ("LoadAddress", uint32_t),
+        ("ImageHash", uint8_t * 0x14),
+        ("ImportTableCount", uint32_t),
+        ("ImportDigest", uint8_t * 0x14),
+        ("MediaID", uint8_t * 0x10),
+        ("ImageKey", uint8_t * 0x10),
+        ("ExportTableAddress", uint32_t),
+        ("HeaderHash", uint8_t * 0x14),
+        ("GameRegion", uint32_t),
+    ]
+
+
+class XEX2SecurityInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Size", uint32_t),
+        ("ImageSize", uint32_t),
+        ("ImageInfo", XEX2HVImageInfo),
+        ("AllowedMediaTypes", uint32_t),
+        ("PageDescriptorCount", uint32_t),
+    ]
+
+
+class XEX1HVImageInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Signature", uint8_t * 0x100),
+        ("ImageHash", uint8_t * 0x14),
+        ("ImportDigest", uint8_t * 0x14),
+        ("LoadAddress", uint32_t),
+        ("ImageKey", uint8_t * 0x10),
+        ("MediaID", uint8_t * 0x10),
+        ("GameRegion", uint32_t),
+        ("ImageFlags", uint32_t),
+        ("ExportTableAddress", uint32_t),
+    ]
+
+
+class XEX1SecurityInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Size", uint32_t),
+        ("ImageSize", uint32_t),
+        ("ImageInfo", XEX1HVImageInfo),
+        ("AllowedMediaTypes", uint32_t),
+        ("PageDescriptorCount", uint32_t),
+    ]
+
+
+class XEX25HVImageInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Signature", uint8_t * 0x100),
+        ("ImageHash", uint8_t * 0x14),
+        ("ImportDigest", uint8_t * 0x14),
+        ("LoadAddress", uint32_t),
+        ("ImageKey", uint8_t * 0x10),
+        ("ImageFlags", uint32_t),
+        ("ExportTableAddress", uint32_t),
+    ]
+
+
+class XEX25SecurityInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Size", uint32_t),
+        ("ImageSize", uint32_t),
+        ("ImageInfo", XEX25HVImageInfo),
+        ("AllowedMediaTypes", uint32_t),
+        ("PageDescriptorCount", uint32_t),
+    ]
+
+
+class XEX2DHVImageInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Signature", uint8_t * 0x100),
+        ("ImageHash", uint8_t * 0x14),
+        ("ImportDigest", uint8_t * 0x14),
+        ("LoadAddress", uint32_t),
+        ("ImageFlags", uint32_t),
+        ("ExportTableAddress", uint32_t),
+        ("Unknown", uint32_t),
+    ]
+
+
+class XEX2DSecurityInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Size", uint32_t),
+        ("ImageInfo", XEX2DHVImageInfo),
+        ("AllowedMediaTypes", uint32_t),
+        ("PageDescriptorCount", uint32_t),
+    ]
+
+
+class XEXFileDataDescriptor(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Size", uint32_t),  # (Size - 8) / sizeof(XEXRawBaseFileBlock or XEXDataDescriptor) = num blocks
+        ("Flags", uint16_t),  # enum: EncryptionType   (0: decrypted / 1: encrypted)
+        ("Format", uint16_t),  # enum: CompressionType (0: none / 1: raw / 2: compressed / 3: delta-compressed)
+    ]
+
+
+# After XEXFileDataDescriptor when Format == 1 (aka "uncompressed")
+class XEXRawBaseFileBlock(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Size", uint32_t),
+        ("ZeroSize", uint32_t),  # num zeroes to insert after this block
+    ]
+
+
+# After XEXFileDataDescriptor when Format == 2 (aka compressed)
+# (first block has WindowSize prepended to it!)
+class XEXCompressedBaseFileBlock(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Size", uint32_t),
+        ("DataDigest", uint8_t * 0x14),
+    ]
+
+
+# Optional XEX Headers
+class Version(ctypes.BigEndianStructure):
+    _pack_ = 1
+    _fields_ = [
+        ("Major", uint8_t, 4),
+        ("Minor", uint8_t, 4),
+        ("Build", uint16_t, 16),
+        ("QFE", uint8_t, 8),
+    ]
+
+
+class XEX2ExecutionID(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("MediaId", uint32_t),
+        ("Version", Version),
+        ("BaseVersion", Version),
+        ("TitleId", uint32_t),
+        ("Platform", uint8_t),
+        ("ExecutableType", uint8_t),
+        ("DiscNum", uint8_t),
+        ("DiscsInSet", uint8_t),
+        ("SaveGameId", uint32_t),
+    ]
+
+
+class XEX2VitalStats(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Checksum", uint32_t),
+        ("Timestamp", uint32_t),
+    ]
+
+
+class ImageXEXDirectoryEntry(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Key", uint32_t),
+        ("Value", uint32_t),
+    ]
+
+
+class XEX2ResourceInfo(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Size", uint32_t),
+        ("ResourceId", char_t * 8),
+        ("ValueAddress", uint32_t),
+        ("ResourceSize", uint32_t),
+    ]
+
+
 class Xbox360IsoProcessor(XboxIsoProcessor):
-    def __init__(self, iso_path_reader, filename, system_type):
-        LOGGER.warning("Xbox 360 Support is preliminary and does not process the executable contents yet")
-        super().__init__(iso_path_reader, filename, system_type)
+    XEX2_HEADER_RESOURCE_INFO = 0x2FF
+    XEX_FILE_DATA_DESCRIPTOR_HEADER = 0x3FF
+    XEX_HEADER_EXECUTION_ID = 0x40006
+    XEX_HEADER_VITAL_STATS = 0x00018002
+
+    retail_key = b'\x20\xB1\x85\xA5\x9D\x28\xFD\xC3\x40\x58\x3F\xBB\x08\x96\xBF\x91'
+    devkit_key = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+    unused_key = b'\xA2\x6C\x10\xF7\x1F\xD9\x35\xE9\x8B\x99\x92\x2C\xE9\x32\x15\x72'
+
+    xex_keys = [retail_key, devkit_key, unused_key]
+    xex_key_names = ["retail", "devkit", "xex1"]
+
+    _MAGIC_XEX32 = b"XEX2"  # >=1888
+    _MAGIC_XEX31 = b"XEX1"  # >=1838
+    _MAGIC_XEX25 = b"XEX%"  # >=1746
+    _MAGIC_XEX2D = b"XEX-"  # >=1640
+    _MAGIC_XEX3F = b"XEX?"  # >=1529
+
+    xex_header = None
+    xex_magic = None
+    optional_headers = {}
+    optional_header_locations = {}
+    xex_security_info = None
+
+    def read_struct(self, f, struct):
+        s = struct()
+        slen = ctypes.sizeof(s)
+        bytes = f.read(slen)
+        fit = min(len(bytes), slen)
+        ctypes.memmove(ctypes.addressof(s), bytes, fit)
+        return s
+
+    def read_dwordBE(self, f):
+        s = f.read(4)
+        if len(s) < 4:
+            return 0
+        return struct.unpack('>I', s)[0]
+
+    def parse_xex_header(self, f):
+        # Read XEX header & directory entry headers
+        f.seek(0)
+        xex_magic = f.read(4)
+        f.seek(0)
+        if xex_magic == self._MAGIC_XEX3F:
+            self.xex_header = self.read_struct(f, ImageXEXHeader_3F)
+        else:
+            self.xex_header = self.read_struct(f, ImageXEXHeader)
+
+        self.optional_header_locations = {}
+        for i in range(0, self.xex_header.HeaderDirectoryEntryCount):
+            dir_header = self.read_struct(f, ImageXEXDirectoryEntry)
+            self.optional_header_locations[dir_header.Key] = dir_header.Value
+
+        if xex_magic != self._MAGIC_XEX3F:
+            f.seek(self.xex_header.SecurityInfo)
+            if xex_magic == self._MAGIC_XEX32:
+                self.xex_security_info = self.read_struct(f, XEX2SecurityInfo)
+            elif xex_magic == self._MAGIC_XEX31:
+                self.xex_security_info = self.read_struct(f, XEX1SecurityInfo)
+            elif xex_magic == self._MAGIC_XEX25:
+                self.xex_security_info = self.read_struct(f, XEX25SecurityInfo)
+            elif xex_magic == self._MAGIC_XEX2D:
+                self.xex_security_info = self.read_struct(f, XEX2DSecurityInfo)
+
+        for key in self.optional_header_locations:
+            header_value = self.optional_header_locations[key]
+            entry_size = key & 0xFF
+            if entry_size <= 1:
+                # value is stored in the header itself
+                self.optional_headers[key] = header_value
+                continue
+
+            f.seek(header_value)
+            # value is pointer to a structure...
+            if key == self.XEX2_HEADER_RESOURCE_INFO:
+                self.optional_headers[key] = self.read_struct(f, XEX2ResourceInfo)
+            elif key == self.XEX_FILE_DATA_DESCRIPTOR_HEADER:
+                self.optional_headers[key] = self.read_struct(f, XEXFileDataDescriptor)
+            elif key == self.XEX_HEADER_VITAL_STATS:
+                self.optional_headers[key] = self.read_struct(f, XEX2VitalStats)
+            elif key == self.XEX_HEADER_EXECUTION_ID:
+                self.optional_headers[key] = self.read_struct(f, XEX2ExecutionID)
+
+    def get_pe(self, f, decryption_key):
+        aes = None
+        if decryption_key:
+            aes = AES.new(decryption_key, AES.MODE_CBC, b'\0' * 16)
+
+        compression_flag = self.optional_headers[self.XEX_FILE_DATA_DESCRIPTOR_HEADER].Format
+
+        # No compression
+        if compression_flag == 0:
+            f.seek(self.xex_header.SizeOfHeaders)
+            return io.BytesIO(f.read(self.xex_security_info.ImageSize))
+        # Simple Compression
+        elif compression_flag == 1:
+            data_descriptor = self.optional_headers[self.XEX_FILE_DATA_DESCRIPTOR_HEADER]
+
+            f.seek(self.optional_header_locations[self.XEX_FILE_DATA_DESCRIPTOR_HEADER] + 8)
+            num_blocks = (data_descriptor.Size - 8) // 8
+            # Read block descriptor structs
+            xex_blocks = []
+            for i in range(0, num_blocks):
+                block = self.read_struct(f, XEXRawBaseFileBlock)
+                xex_blocks.append(block)
+
+            # Read in basefile
+            pe_data = io.BytesIO()
+
+            f.seek(self.xex_header.SizeOfHeaders)
+            for block in xex_blocks:
+                data_size = block.Size
+                zero_size = block.ZeroSize
+
+                data = f.read(data_size)
+                if aes:
+                    data = aes.decrypt(data)
+                pe_data.write(data)
+                pe_data.write(b'\0' * zero_size)
+            pe_data.seek(0)
+            return pe_data
+        # LZX Compressed
+        elif compression_flag == 2:
+            f.seek(self.optional_header_locations[self.XEX_FILE_DATA_DESCRIPTOR_HEADER] + 8)
+            window_size = self.read_dwordBE(f)
+            temp = window_size
+            window_bits = 0
+            for _ in range(32):
+                temp <<= 1
+                if temp == 0x80000000:
+                    break
+                window_bits += 1
+
+            first_block = self.read_struct(f, XEXCompressedBaseFileBlock)
+            f.seek(self.xex_header.SizeOfHeaders)
+            # Based on: https://github.com/xenia-project/xenia/blob/5f764fc752c82674981a9f402f1bbd96b399112a/src/xenia/cpu/xex_module.cc
+            block_header = first_block
+            compressed_data = io.BytesIO()
+            while block_header.Size != 0:
+                # Read the next block header and current block contents.
+                data = f.read(block_header.Size)
+                if decryption_key:
+                    data = aes.decrypt(data)
+
+                # Verify current block
+                hash = sha1(data)
+                if hash.digest() != bytes(block_header.DataDigest):
+                    LOGGER.warning("Could not decrypt xex")
+                    return None
+
+                temp_stream = io.BytesIO(data)
+                next_block_header = self.read_struct(
+                    temp_stream,
+                    XEXCompressedBaseFileBlock
+                )
+
+                # Does the next block size make sense?
+                if next_block_header.Size > 65536:
+                    # Block size is invalid.
+                    LOGGER.warning("Invalid block size")
+                    return {}
+
+                # Read the current block.
+                block_size = block_header.Size
+                if block_size <= ctypes.sizeof(next_block_header):
+                    # Block is missing the "next block" header...
+                    LOGGER.warning("Could not find next block")
+                    return {}
+
+                block_size -= ctypes.sizeof(next_block_header)
+
+                while block_size > 2:
+                    # Get the chunk size.
+                    chunk_size = struct.unpack('>H', temp_stream.read(2))[0]
+                    block_size -= 2
+                    if chunk_size == 0 or chunk_size > block_size:
+                        # End of block, or not enough data is available.
+                        break
+
+                    p_dblk = temp_stream.read(chunk_size)
+                    if len(p_dblk) != chunk_size:
+                        LOGGER.warning("Could not read chunk")
+                        return None
+
+                    compressed_data.write(p_dblk)
+                    block_size -= chunk_size
+
+                # Next block.
+                block_header = next_block_header
+            compressed_data.seek(0)
+
+            decompressed_size = self.xex_security_info.ImageSize
+
+            lxzd_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lzxd")
+            if os.name == "nt":
+                if sys.maxsize > 2 ** 32:
+                    lxzd_path = os.path.join(lxzd_path, "win64", "lzxd.exe")
+                else:
+                    lxzd_path = os.path.join(lxzd_path, "win64", "lzxd.exe")
+            elif sys.platform == "linux":
+                lxzd_path = os.path.join(lxzd_path, "linux", "lzxd")
+
+            p = subprocess.Popen([lxzd_path, str(decompressed_size), "-", "-"], stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE)
+            xex_pe, output_err = p.communicate(compressed_data.getvalue())
+
+            return io.BytesIO(xex_pe)
+
+    def get_file_hashes(self):
+        return {}
 
     def get_extra_fields(self):
-            return {}
+        result = {}
+        with self.iso_path_reader.open_file(self.iso_path_reader.get_file(self.get_exe_filename())) as f:
+            f.seek(0)
+            self.parse_xex_header(f)
+
+            if self.XEX_FILE_DATA_DESCRIPTOR_HEADER not in self.optional_headers:
+                return result
+            data_descriptor = self.optional_headers[self.XEX_FILE_DATA_DESCRIPTOR_HEADER]
+
+            if self.XEX_HEADER_EXECUTION_ID not in self.optional_headers:
+                return result
+            execution_id = self.optional_headers[self.XEX_HEADER_EXECUTION_ID]
+
+            if self.XEX2_HEADER_RESOURCE_INFO not in self.optional_headers:
+                return result
+            resource_info = self.optional_headers[self.XEX2_HEADER_RESOURCE_INFO]
+
+            if self.XEX_HEADER_VITAL_STATS in self.optional_headers:
+                result["exe_date"] = datetime.datetime.utcfromtimestamp(
+                    self.optional_headers[self.XEX_HEADER_VITAL_STATS].Timestamp
+                )
+
+            title_id = f"{execution_id.TitleId:8X}"
+            header_resource_id = resource_info.ResourceId.decode()
+            if title_id != header_resource_id:
+                return result
+
+            title_bytes = execution_id.TitleId.to_bytes(4, byteorder='big')
+            result["header_maker_id"] = ""
+            for char in range(2):
+                try:
+                    if title_bytes[char] > 0x20:
+                        result["header_maker_id"] += title_bytes[char:char + 1].decode()
+                    else:
+                        result["header_maker_id"] += "\\x" + ('%02X' % title_bytes[char])
+                except UnicodeDecodeError:
+                    result["header_maker_id"] += "\\x" + ('%02X' % title_bytes[char])
+            result["header_product_number"] = "%03d" % int.from_bytes(title_bytes[2:], byteorder="big")
+
+            if self.xex_security_info:
+                if self.xex_magic != self._MAGIC_XEX2D:
+                    image_key = self.xex_security_info.ImageInfo.ImageKey
+
+                base_address = self.xex_security_info.ImageInfo.LoadAddress
+            else:
+                base_address = self.xex_header.LoadAddress
+
+            enc_flag = data_descriptor.Flags
+
+            pe = None
+            for key in self.xex_keys:
+                session_key = None
+                if enc_flag:
+                    aes = AES.new(key, AES.MODE_ECB)
+                    session_key = aes.decrypt(bytearray(image_key))
+                if pe := self.get_pe(f, session_key):
+                    break
+            if not pe:
+                return result
+
+            pe.seek(0)
+            result["alt_exe_date"] = datetime.datetime.utcfromtimestamp(
+                pefile.PE(name=None, data=pe.read(), fast_load=True).FILE_HEADER.TimeDateStamp
+            )
+
+            pe.seek(0)
+            md5 = hashlib.md5(pe.read())
+            result["alt_md5"] = md5.hexdigest()
+
+            xdbf_addr = resource_info.ValueAddress - base_address
+            pe.seek(xdbf_addr)
+            xdbf_data = io.BytesIO(pe.read(resource_info.ResourceSize))
+            from .utils.xdbf import XDBF
+            xdbf = XDBF(xdbf_data)
+            try:
+                result["header_title"] = xdbf.string_table[1].strings[32768].decode()
+            except IndexError:
+                try:
+                    result["header_title"] = xdbf.string_table[xdbf.default_language].strings[32768].decode()
+                except IndexError:
+                    result["header_title"] = None
+
+        return result
