@@ -492,9 +492,6 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
             return io.BytesIO(xex_pe)
 
-    def get_file_hashes(self):
-        return {}
-
     def get_extra_fields(self):
         result = {}
         with self.iso_path_reader.open_file(self.iso_path_reader.get_file(self.get_exe_filename())) as f:
