@@ -404,7 +404,11 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                 pe_data.write(data)
                 pe_data.write(b'\0' * zero_size)
             pe_data.seek(0)
-            return pe_data
+            # Invalid PE header, try a different encryption key
+            if pe_data.read(2) == b'MZ':
+                pe_data.seek(0)
+                return pe_data
+            return None
         # LZX Compressed
         elif compression_flag == 2:
             f.seek(self.optional_header_locations[self.XEX_FILE_DATA_DESCRIPTOR_HEADER] + 8)
