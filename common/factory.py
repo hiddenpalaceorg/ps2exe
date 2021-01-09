@@ -81,7 +81,10 @@ class IsoProcessorFactory:
                 reader = XDvdFs(wrapper, 0x18310000)
                 return XboxPathReader(reader, wrapper)
         # 360 ISO
-        elif wrapper.length() == 7834892288:
+        # Scene releases are the following sizes:
+        # 7,572,881,408 bytes: Xtreme 3.0 rip
+        # 7,835,492,352 or 7,834,892,288 bytes: SplitVid rip
+        elif wrapper.length() in [7572881408, 7835492352, 7834892288]:
             wrapper.seek(0xFDA0000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0xFDA0000)

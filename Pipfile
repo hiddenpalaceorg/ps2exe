@@ -12,6 +12,7 @@ xxhash = "*"
 numpy = "==1.19.3"
 libarchive-c = "*"
 pefile = "*"
+pycryptodome = "*"
 
 [requires]
 python_version = "3.8"
