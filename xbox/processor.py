@@ -4,13 +4,13 @@ import hashlib
 import io
 import logging
 import os
+import re
 import struct
 import subprocess
 import sys
 from hashlib import sha1
 
 import pefile
-import xxhash
 from Crypto.Cipher import AES
 
 from common.iso_path_reader.methods.compressed import CompressedPathReader
@@ -19,6 +19,7 @@ from common.processor import BaseIsoProcessor
 LOGGER = logging.getLogger(__name__)
 
 class XboxIsoProcessor(BaseIsoProcessor):
+    ignored_paths = [re.compile(".*dashupdate.xbe$", re.IGNORECASE)]
     def get_disc_type(self):
         if isinstance(self.iso_path_reader, CompressedPathReader):
             return {"disc_type": "hdd"}
@@ -41,23 +42,11 @@ class XboxIsoProcessor(BaseIsoProcessor):
                     "dashupdate.xbe" not in file_path_lower:
                 return file_path
 
-    def get_file_hashes(self):
-        file_hashes = {}
-        root = self.iso_path_reader.get_root_dir()
-        for file in self.iso_path_reader.iso_iterator(root, recursive=True):
-            file_path = self.iso_path_reader.get_file_path(file)
-
-            if "dashupdate.xbe" in file_path.lower():
-                continue
-
-            if file_hash := self.iso_path_reader.get_file_hash(file, xxhash.xxh64):
-                file_hashes[file_path] = file_hash.digest()
-        return file_hashes
-
     def get_most_recent_file_info(self, exe_date):
         return {}
 
     def get_extra_fields(self):
+        LOGGER.info("Parsing xbe file headers")
         try:
             result = {}
             with self.iso_path_reader.open_file(self.iso_path_reader.get_file(self.get_exe_filename())) as f:
@@ -380,10 +369,12 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
         # No compression
         if compression_flag == 0:
+            LOGGER.info("xex is uncompressed")
             f.seek(self.xex_header.SizeOfHeaders)
             return io.BytesIO(f.read(self.xex_security_info.ImageSize))
         # Simple Compression
         elif compression_flag == 1:
+            LOGGER.debug("xex uses simple compression")
             data_descriptor = self.optional_headers[self.XEX_FILE_DATA_DESCRIPTOR_HEADER]
 
             f.seek(self.optional_header_locations[self.XEX_FILE_DATA_DESCRIPTOR_HEADER] + 8)
@@ -415,6 +406,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             return None
         # LZX Compressed
         elif compression_flag == 2:
+            LOGGER.debug("xex uses LZX compression")
             f.seek(self.optional_header_locations[self.XEX_FILE_DATA_DESCRIPTOR_HEADER] + 8)
             window_size = self.read_dwordBE(f)
             temp = window_size
@@ -494,6 +486,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             elif sys.platform == "linux":
                 lxzd_path = os.path.join(lxzd_path, "linux", "lzxd")
 
+            LOGGER.debug("Decompressing xex using lzxd")
             p = subprocess.Popen([lxzd_path, str(decompressed_size), "-", "-"], stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE)
             xex_pe, output_err = p.communicate(compressed_data.getvalue())
@@ -502,6 +495,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
     def get_extra_fields(self):
         result = {}
+        LOGGER.info("Parsing xex file headers")
         with self.iso_path_reader.open_file(self.iso_path_reader.get_file(self.get_exe_filename())) as f:
             f.seek(0)
             self.parse_xex_header(f)
@@ -555,16 +549,21 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             enc_flag = data_descriptor.Flags
 
             pe = None
-            for key in self.xex_keys:
+            if enc_flag:
+                LOGGER.info("Decrypting xex")
+            for i, key in enumerate(self.xex_keys):
                 session_key = None
                 if enc_flag:
                     aes = AES.new(key, AES.MODE_ECB)
                     session_key = aes.decrypt(bytearray(image_key))
                 if pe := self.get_pe(f, session_key):
+                    if enc_flag:
+                        LOGGER.info("Decrypted using key %s", self.xex_key_names[i])
                     break
             if not pe:
                 return result
 
+            LOGGER.info("Parsing PE file")
             pe.seek(0)
             pe_headers = pefile.PE(name=None, data=pe.read(), fast_load=True)
             result["alt_exe_date"] = datetime.datetime.utcfromtimestamp(
@@ -575,6 +574,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             md5 = hashlib.md5(pe.read())
             result["alt_md5"] = md5.hexdigest()
 
+            LOGGER.info("Parsing XDBF resources")
             xdbf_addr = resource_info.ValueAddress - base_address
             pe.seek(xdbf_addr)
             xdbf_data = io.BytesIO(pe.read(resource_info.ResourceSize))

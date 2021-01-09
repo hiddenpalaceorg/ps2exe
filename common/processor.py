@@ -1,7 +1,9 @@
 import datetime
 import hashlib
 import logging
+import re
 
+import progressbar
 import xxhash
 
 from cdi.path_reader import CdiPathReader
@@ -13,6 +15,8 @@ from xbox.path_reader import XboxPathReader
 LOGGER = logging.getLogger(__name__)
 
 class BaseIsoProcessor:
+    ignored_paths = []
+
     def get_disc_type(self):
         return {"disc_type": "unknown"}
 
@@ -154,15 +158,22 @@ class BaseIsoProcessor:
         }
 
     def get_file_hashes(self):
+        ignored_paths = [re.compile(path) for path in self.ignored_paths]
         file_hashes = {}
         root = self.iso_path_reader.get_root_dir()
-        for file in self.iso_path_reader.iso_iterator(root, recursive=True):
+        file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
+        for file in progressbar.progressbar(file_list):
             file_path = self.iso_path_reader.get_file_path(file)
+
+            if any(regex.match(file_path) for regex in ignored_paths):
+                continue
+
             if file_hash := self.iso_path_reader.get_file_hash(file, xxhash.xxh64):
                 file_hashes[file_path] = file_hash.digest()
         return file_hashes
 
     def get_all_files_hash(self):
+        LOGGER.info("Getting hash of all files")
         file_hashes = self.get_file_hashes()
 
         all_hashes = hashlib.md5()
@@ -174,19 +185,25 @@ class BaseIsoProcessor:
         }
 
     def get_most_recent_file(self):
+        ignored_paths = [re.compile(path) for path in self.ignored_paths]
         most_recent_file_date = datetime.datetime.min
         most_recent_file_date = most_recent_file_date.replace(tzinfo=datetime.timezone.utc)
         most_recent_file = None
         root = self.iso_path_reader.get_root_dir()
-        for file in self.iso_path_reader.iso_iterator(root, recursive=True):
-            file_date = self.iso_path_reader.get_file_date(file)
+        file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
+        for file in progressbar.progressbar(file_list):
+            file_path = self.iso_path_reader.get_file_path(file)
+            if any(regex.match(file_path) for regex in ignored_paths):
+                continue
 
+            file_date = self.iso_path_reader.get_file_date(file)
             if file_date > most_recent_file_date:
                 most_recent_file = file
                 most_recent_file_date = file_date
         return most_recent_file
 
     def get_most_recent_file_info(self, exe_date):
+        LOGGER.info("Getting most recent file")
         most_recent_file = self.get_most_recent_file()
         if not most_recent_file:
             return {}
