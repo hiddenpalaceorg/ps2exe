@@ -288,6 +288,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
     XEX_FILE_DATA_DESCRIPTOR_HEADER = 0x3FF
     XEX_HEADER_EXECUTION_ID = 0x40006
     XEX_HEADER_VITAL_STATS = 0x00018002
+    XEX_ORIGINAL_PE_NAME = 0x183FF
 
     retail_key = b'\x20\xB1\x85\xA5\x9D\x28\xFD\xC3\x40\x58\x3F\xBB\x08\x96\xBF\x91'
     devkit_key = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
@@ -366,6 +367,9 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                 self.optional_headers[key] = self.read_struct(f, XEX2VitalStats)
             elif key == self.XEX_HEADER_EXECUTION_ID:
                 self.optional_headers[key] = self.read_struct(f, XEX2ExecutionID)
+            elif key == self.XEX_ORIGINAL_PE_NAME:
+                size = self.read_dwordBE(f)
+                self.optional_headers[key] = f.read(size - 4)
 
     def get_pe(self, f, decryption_key):
         aes = None
@@ -519,6 +523,10 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                     self.optional_headers[self.XEX_HEADER_VITAL_STATS].Timestamp
                 )
 
+            if self.XEX_ORIGINAL_PE_NAME in self.optional_headers:
+                exe_name = self.optional_headers[self.XEX_ORIGINAL_PE_NAME].strip(b"\x00")
+                result["alt_exe_filename"] = exe_name.decode("cp1252", errors="ignore")
+
             title_id = f"{execution_id.TitleId:8X}"
             header_resource_id = resource_info.ResourceId.decode()
             if title_id != header_resource_id:
@@ -558,8 +566,9 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                 return result
 
             pe.seek(0)
+            pe_headers = pefile.PE(name=None, data=pe.read(), fast_load=True)
             result["alt_exe_date"] = datetime.datetime.utcfromtimestamp(
-                pefile.PE(name=None, data=pe.read(), fast_load=True).FILE_HEADER.TimeDateStamp
+                pe_headers.FILE_HEADER.TimeDateStamp
             )
 
             pe.seek(0)
