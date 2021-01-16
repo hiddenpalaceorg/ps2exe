@@ -31,19 +31,20 @@ class Directory:
             if root.left_subtree_offset and root.left_subtree_offset + 0xD < self.size:
                 root = DirectoryEntry(self.fp, self.volume, self.offset + root.left_subtree_offset)
                 s.append(root)
-            else:
-                root = s.pop()
-                if root.file_flags & 0x10:
-                    if root.size:
+                continue
 
-                        try:
-                            dir = Directory(self.fp, self.volume, root.start_sector, root.file_name, root.size, self.path)
-                        except ValueError:
-                            continue
-                        self.directories.append(dir)
-                else:
-                    root.path = "/" + "/".join(filter(None, [self.path, root.file_name]))
-                    self.entries.append(root)
-                if root.right_subtree_offset and root.right_subtree_offset + 0xD < self.size:
-                    root = DirectoryEntry(self.fp, self.volume, self.offset + root.right_subtree_offset)
-                    s.append(root)
+            root = s.pop()
+            if root.file_flags & 0x10:
+                if root.size:
+                    try:
+                        dir = Directory(self.fp, self.volume, root.start_sector, root.file_name, root.size, self.path)
+                    except ValueError:
+                        continue
+                    self.directories.append(dir)
+            else:
+                root.path = "/" + "/".join(filter(None, [self.path, root.file_name]))
+                self.entries.append(root)
+
+            if root.right_subtree_offset and root.right_subtree_offset + 0xD < self.size:
+                root = DirectoryEntry(self.fp, self.volume, self.offset + root.right_subtree_offset)
+                s.append(root)

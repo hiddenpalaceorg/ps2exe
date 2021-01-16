@@ -91,7 +91,7 @@ class Title:
         self.unknown1 = struct.unpack(byte_order + 'q', data[20:28])[0]
         self.unknown2 = struct.unpack(byte_order + 'i', data[28:32])[0]
         self.last_played = struct.unpack(byte_order + 'q', data[32:40])[0]
-        end_name = 40 + data[40:].find('\x00\x00')
+        end_name = 40 + data[40:].find(b'\x00\x00')
         self.name = data[40:end_name]
 
     # Due to intermittent unicode problems I decided to store the data raw and convert it only when needed
@@ -242,7 +242,7 @@ class XDBF:
 
     def process_entries(self):
         """ Populates the entries list and the various payload dictionaries """
-        for c in range(0, self.entry_count + 20):
+        for c in range(0, self.entry_count):
             self.fd.seek(0x18 + 0x12 * c, 0)
             data = self.fd.read(0x12)
             e = Entry(self, data, self.global_offset, self.fd, self.byte_order)
