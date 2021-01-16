@@ -8,14 +8,18 @@ from xbox.xdvdfs.directory_header import DirectoryHeader
 
 class Directory:
 
-    def __init__(self, fp, volume, loc, name, parent_name=''):
+    def __init__(self, fp, volume, loc, name, size, parent_name=''):
+        # First try to seek to the offset, if this fails, bubble up
+        self.offset = volume.volume_base_offset + (loc * volume.sector_size)
+        fp.seek(self.offset)
+
         self.name = name
+        self.size = size
         self.directories: List[Directory] = []
         self.entries: List[DirectoryEntry] = []
         self._headers: List[DirectoryHeader] = []
         self.path = "/".join(filter(None, [parent_name, name]))
         self.fp = fp
-        self.offset = volume.volume_base_offset + (loc * volume.sector_size)
         self.volume = volume
         self.parseDirectoryRecord(self.offset)
 
@@ -24,18 +28,22 @@ class Directory:
         root = DirectoryEntry(self.fp, self.volume, offset)
         s.append(root)
         while len(s) > 0:
-            if root.left_subtree_offset:
+            if root.left_subtree_offset and root.left_subtree_offset + 0xD < self.size:
                 root = DirectoryEntry(self.fp, self.volume, self.offset + root.left_subtree_offset)
                 s.append(root)
             else:
                 root = s.pop()
                 if root.file_flags & 0x10:
                     if root.size:
-                        dir = Directory(self.fp, self.volume, root.start_sector, root.file_name, self.name)
+
+                        try:
+                            dir = Directory(self.fp, self.volume, root.start_sector, root.file_name, root.size, self.path)
+                        except ValueError:
+                            continue
                         self.directories.append(dir)
                 else:
                     root.path = "/" + "/".join(filter(None, [self.path, root.file_name]))
                     self.entries.append(root)
-                if root.right_subtree_offset:
+                if root.right_subtree_offset and root.right_subtree_offset + 0xD < self.size:
                     root = DirectoryEntry(self.fp, self.volume, self.offset + root.right_subtree_offset)
                     s.append(root)
