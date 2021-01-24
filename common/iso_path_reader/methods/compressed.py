@@ -23,6 +23,7 @@ class CompressedPathReader(IsoPathReader):
             self.files[entry.path] = io.BytesIO()
             for block in entry.get_blocks():
                 self.files[entry.path].write(block)
+                self.files[entry.path].seek(0)
 
     def get_root_dir(self):
         return self.entries
@@ -52,6 +53,7 @@ class CompressedPathReader(IsoPathReader):
         return hash
 
     def open_file(self, file):
+        self.files[file.path].seek(0)
         return self.files[file.path]
 
     def get_file_date(self, file):
