@@ -39,6 +39,10 @@ class BaseIsoProcessor:
             return "megacd"
 
         fp.seek(0)
+        if fp.read(15) == b"SEGA SEGAKATANA":
+            return "dreamcast"
+
+        fp.seek(0)
         if fp.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             return "3do"
 

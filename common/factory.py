@@ -5,12 +5,12 @@ import sys
 
 import pycdlib
 
-from bin_wrapper import BinWrapper
 from cdi.path_reader import CdiPathReader
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
 from common.processor import GenericIsoProcessor
+from dreamcast.processor import DreamcastIsoProcessor
 from iso_accessor import IsoAccessor
 
 from cdi.processor import CdiIsoProcessor
@@ -23,8 +23,8 @@ from psp.processor import PspIsoProcessor
 from ps3.processor import Ps3IsoProcessor
 from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
-from scrambled_wrapper import ScrambleWrapper
 from p3do.operafs import OperaFs
+from utils.files import BinWrapper
 from xbox.path_reader import XboxPathReader
 from xbox.processor import XboxIsoProcessor, Xbox360IsoProcessor
 from xbox.xdvdfs.xdvdfs import XDvdFs
@@ -70,7 +70,7 @@ class IsoProcessorFactory:
 
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":
-            cdi = Disc(fp, headers=True, scrambled=isinstance(wrapper.fp, ScrambleWrapper))
+            cdi = Disc(fp, headers=True, scrambled=wrapper.is_scrambled)
             cdi.read()
             return CdiPathReader(cdi, fp)
 
@@ -133,6 +133,8 @@ class IsoProcessorFactory:
             return XboxIsoProcessor
         elif system_type == "xbox360":
             return Xbox360IsoProcessor
+        elif system_type == "dreamcast":
+            return DreamcastIsoProcessor
 
         return GenericIsoProcessor
 

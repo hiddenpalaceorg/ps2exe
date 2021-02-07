@@ -78,14 +78,21 @@ def process_path(path, disable_contents_checksum, allowed_extensions):
         "part",
         "wav",
         "mp3",
+        "gdi",
+        "raw",
     }
     disallowed_extensions = "|".join(disallowed_extensions - set(allowed_extensions))
-    if re.search(rf"\(Track (?:\d?[2-9]|[1-9]\d+)\)\.bin|\.({disallowed_extensions})", path):
+    ignored_filenames = {
+        "ip.bin"
+    }
+    ignored_filenames = "|".join(ignored_filenames)
+    if re.search(rf"[Tt]rack ?(?:\d?[2-9]|[1-9]\d+)\)?\.bin|({ignored_filenames})|\.({disallowed_extensions})", path):
         return
 
     size = os.path.getsize(path)
 
-    if size < 1024 * 1024 * 2:
+    # Allow bin/iso files to be any size (to detect Dreamcast games via track 1 which can be very small)
+    if not re.search(r"\.(iso|bin)", path) and size < 1024 * 1024 * 2:
         return
 
     try:

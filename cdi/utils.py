@@ -3,7 +3,7 @@ import datetime
 # shorthand parsing methods. They take a sequence of characters (bytes) as input.
 import mmap
 
-import scrambled_wrapper
+from utils.unscambler import unscramble_data
 
 
 def number(seq):
@@ -87,7 +87,7 @@ class Sector(object):
     def __getitem__(self, key):
         data = self.disc.image_file[self.offset:self.offset+self.FULL_SIZE]
         if self.disc.scrambled:
-            data = scrambled_wrapper.unscramble_data(data, self.offset)
+            data = unscramble_data(data, self.offset)
         return data[key]
 
     def __iter__(self, key):

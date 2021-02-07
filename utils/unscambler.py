@@ -1,5 +1,5 @@
-import os
 import logging
+
 import numpy as np
 
 LOGGER = logging.getLogger(__name__)
@@ -154,43 +154,6 @@ lookup_table = bytearray([
     0xC3,0x5A,0xD1,0xFB,0x1C,0x43,0x49,0xF1,0xF6,0xC4,0x46,0xD3,0x72,0xDD,0xE5,0x99
 ])
 
-
-class ScrambleWrapperException(Exception):
-    pass
-
-
-class ScrambleWrapper:
-    def __init__(self, fp, offset):
-        self.fp = fp
-        self.pos = 0
-        self.offset = offset
-
-    def close(self):
-        self.fp.close()
-
-    def seek(self, pos, whence=os.SEEK_SET):
-        self.fp.seek(pos+self.offset, whence)
-        self.pos = self.fp.tell()
-
-    def tell(self):
-        return self.pos - self.offset
-
-    def peek(self, n=-1):
-        return unscramble_data(self.fp[self.pos:self.pos+n], self.tell())
-
-    def read(self, n=-1):
-        data = unscramble_data(self.fp[self.pos:self.pos+n], self.tell())
-        self.pos += n
-        return data
-
-    def __getitem__(self, item):
-        if isinstance(item, slice):
-            current_pos = item.start
-            item = slice(item.start+self.offset, item.stop+self.offset)
-        else:
-            current_pos = item
-            item += self.offset
-        return unscramble_data(self.fp[item], current_pos)
 
 def unscramble_data(data, current_pos):
     pos_in_sector = current_pos % 2352

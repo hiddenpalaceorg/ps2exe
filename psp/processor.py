@@ -1,8 +1,9 @@
 import logging
+import mmap
 from os.path import basename
 
 from post_psx.processor import PostPsxIsoProcessor
-from psp.chained_subimg_reader import ChainedSubImgReader
+from utils.files import ConcatenatedFile
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,12 +18,24 @@ class PspIsoProcessor(PostPsxIsoProcessor):
         for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=False):
             file_basename = basename(iso_path_reader.get_file_path(file))
             if file_basename.startswith("USER_L") and file_basename.endswith(".IMG"):
-                sub_imgs[file_basename] = iso_path_reader.open_file(file)
+                with iso_path_reader.open_file(file) as fp:
+                    buf = mmap.mmap(-1, fp.length())
+                    fp.readinto(buf)
+                    sub_imgs[file_basename] = buf
 
         if sub_imgs:
             self.disc_type = "dvdr"
-            sub_imgs = list(dict(sub_imgs).values())
-            fp = ChainedSubImgReader(sub_imgs)
+
+            offsets = [0]
+            sub_imgs = sorted(sub_imgs.items())
+            files = []
+            for _, sub_img in sub_imgs:
+                offsets.append(len(sub_img))
+                files.append(sub_img)
+            offsets.pop()
+
+            fp = ConcatenatedFile(files, offsets)
+
             from common.factory import IsoProcessorFactory
             iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, '')
 

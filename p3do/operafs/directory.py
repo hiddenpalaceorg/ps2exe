@@ -26,7 +26,7 @@ class Directory:
         for header in self._headers:
             for entry in header.entries:
                 if entry.flags & DirectoryEntry.FLAG_DIRECTORY == DirectoryEntry.FLAG_DIRECTORY:
-                    directory = Directory(fp, entry.copy_offset * 2048, entry.file_name, name)
+                    directory = Directory(fp, entry.copy_offset * 2048, entry.file_name, self.path)
                     self.directories.append(directory)
                 elif entry.flags & DirectoryEntry.FLAG_FILE == DirectoryEntry.FLAG_FILE:
                     entry.path = "/" + "/".join(filter(None, [self.path, entry.file_name]))
