@@ -17,7 +17,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         # Try to find a gdi file in this directory
         for i in file_dir.glob("*.gdi"):
             tracks = self.parse_gdi(i)
-            if tracks[0]["file_name"] != basename(iso_filename):
+            if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
             iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, i.name)
