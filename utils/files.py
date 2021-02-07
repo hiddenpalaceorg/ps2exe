@@ -149,7 +149,7 @@ class BinWrapper(BaseFile):
         if not LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug = lambda x: x
 
-        if not sector_size or not sector_offset:
+        if sector_size is None or sector_offset is None:
             self.detect_sector_size()
         else:
             self.sector_size = sector_size

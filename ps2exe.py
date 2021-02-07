@@ -80,6 +80,7 @@ def process_path(path, disable_contents_checksum, allowed_extensions):
         "mp3",
         "gdi",
         "raw",
+        "cdi",
     }
     disallowed_extensions = "|".join(disallowed_extensions - set(allowed_extensions))
     ignored_filenames = {
