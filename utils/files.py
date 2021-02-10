@@ -125,9 +125,7 @@ class ConcatenatedFile(BaseFile):
             yield i, self.offsets[i], self.offsets[i]+self.lengths[i]
 
     def __len__(self):
-        length = sum(self.lengths)
-
-        return length
+        return self.offsets[-1] + self.lengths[-1]
 
 
 class BinWrapperException(Exception):
