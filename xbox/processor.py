@@ -582,10 +582,10 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             xdbf = XDBF(xdbf_data)
             try:
                 result["header_title"] = xdbf.string_table[1].strings[32768].decode()
-            except (IndexError, ValueError):
+            except (IndexError, KeyError):
                 try:
                     result["header_title"] = xdbf.string_table[xdbf.default_language].strings[32768].decode()
-                except (IndexError, ValueError):
+                except (IndexError, KeyError):
                     result["header_title"] = None
 
         return result
