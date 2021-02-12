@@ -20,10 +20,10 @@ LOGGER = logging.getLogger(__name__)
 
 def get_iso_info(iso_filename, disable_contents_checksum):
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
-    LOGGER.info("Reading %s", basename.decode())
+    LOGGER.info("Reading %s", basename.decode("cp1252"))
 
     fp = open(iso_filename, "rb")
-    info = {"name": basename.decode(), "path": iso_filename}
+    info = {"name": basename.decode("cp1252"), "path": iso_filename}
 
     if not (iso_path_reader := IsoProcessorFactory.get_iso_path_reader(fp, basename)):
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
