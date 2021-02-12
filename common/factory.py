@@ -92,6 +92,13 @@ class IsoProcessorFactory:
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0xFDA0000)
                 return XboxPathReader(reader, wrapper)
+        # 8,738,846,720 bytes: XGD3 disc
+        elif wrapper.length() == 8738846720:
+            wrapper.seek(0x2090000)
+            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
+                reader = XDvdFs(wrapper, 0x2090000)
+                return XboxPathReader(reader, wrapper)
+
         wrapper.seek(0x10000)
         if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
             reader = XDvdFs(wrapper, 0x10000)
