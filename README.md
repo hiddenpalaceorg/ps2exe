@@ -74,7 +74,13 @@
     - 1ST_READ.BIN is always the main exe, and is always present at the root of the disc. wince games should still use 1st_read, but can use other executables. don't worry about these.
     - dreamcast games have headers that are similar to saturn discs, so the struct used for the saturn should still apply.
     - dumps can also exist as disc juggler (cdi) files, usually older prototypes back before the age of gdi. unsure if we can easily support these as its a proprietary format.
-15. add system detector
+15. add gamecube support. apploader.img should always be present at LBA 4, main.dol follows. main.dol is the main executable. However, the file system format for the disc doesn't contain timestamps.
+    - Apploader.img will always contain a date at 0x440 in the file in yyyy/mm/dd format. Use this for the alt_exe_date since it's technically not the exe_date.
+    - For the composite checksum, only include the data that isn't in the SYSTEM partition.
+    - Each GameCube game contains an apploader.img and a main.dol, these two files are not part of the main file system table and are instead part of the SYSTEM partition.
+16. add wii support. 
+    - very similar to the gamecube, however there are additional partitions. only count the partition that actually contains the game data.
+17. add system detector
     - ~~PS1 games can be detected if "BOOT" is present in system.cnf.~~
     - ~~PS2 games can be detetcted if "BOOT2" is present in system.cnf~~
     - ~~Sega Saturn games can be detected if the string "SEGASATURN" is present at 0x15 in an iso.~~
@@ -87,6 +93,8 @@
     ~~- Commodore Amiga CD/CD32 games can be detected if S\Startup-Sequence can be found (case insensitive).~~ 
     - PlayStation 3 games can be determined if PS3_DISC.SFB or /PS3_GAME is present at the root of the disc.
     - ~~PlayStation Portable - games can exist on DVD-Rs in a specific format or on raw UMD dumps.~~
+    - GameCube games can be detected if 
+    - Wii games can be detected if
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
-16. (HIGH PRIORITY) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. parse the log output and include just the total warning and total error count into to respective columns. maybe save the total output for the current run session in a separate log file for review. Make this optional with a parameter/flag. (HIGH PRIORITY)
-17. detect media type (CD-R or DVD-R). unsure if we can do this. (partially implemented on a system by system basis)
+18. (HIGH PRIORITY) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. parse the log output and include just the total warning and total error count into to respective columns. maybe save the total output for the current run session in a separate log file for review. Make this optional with a parameter/flag. (HIGH PRIORITY)
+19. detect media type (CD-R or DVD-R). unsure if we can do this. (partially implemented on a system by system basis)
