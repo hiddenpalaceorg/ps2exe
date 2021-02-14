@@ -1,4 +1,6 @@
+import fnmatch
 import logging
+import os
 import pathlib
 import re
 from os.path import basename
@@ -15,7 +17,9 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         file_dir = pathlib.Path(iso_filename).parent.absolute()
         found = False
         # Try to find a gdi file in this directory
-        for i in file_dir.glob("*.gdi"):
+        rule = re.compile(fnmatch.translate("*.gdi"), re.IGNORECASE)
+        for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
+            i = pathlib.Path(i)
             tracks = self.parse_gdi(i)
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
@@ -28,7 +32,9 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             return
 
         # No gdi file found, try a cue file
-        for i in file_dir.glob("*.cue"):
+        rule = re.compile(fnmatch.translate("*.cue"), re.IGNORECASE)
+        for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
+            i = pathlib.Path(i)
             tracks = self.parse_cue(i)
             if tracks[0]["file_name"] != basename(iso_filename):
                 continue
