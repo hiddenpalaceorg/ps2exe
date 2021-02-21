@@ -114,6 +114,8 @@ class IsoProcessorFactory:
             # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
             if not hasattr(iso, "pvd") and not hasattr(iso, "pvds"):
                 return
+            if not iso.pvds:
+                return
             if not hasattr(iso, "pvd") and hasattr(iso, "pvds") and iso.pvds:
                 iso.pvd = iso.pvds[0]
 
