@@ -75,34 +75,27 @@ class IsoProcessorFactory:
             return CdiPathReader(cdi, fp)
 
         # Redump-style dual layer DVD
-        if wrapper.length() == 7825162240:
+        if wrapper.length() > 405864468:
             wrapper.seek(0x18310000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0x18310000)
                 return XboxPathReader(reader, wrapper)
         # 360 ISO
-        # Scene releases are the following sizes:
-        # 7,572,881,408 bytes: Xtreme 3.0 rip
-        # SplitVid rips:
-        # 7,834,892,288 (1st wave)
-        # 7,835,492,352 (2nd wave)
-        # 7,838,695,424 (3rd-6th wave)
-        elif wrapper.length() in [7572881408, 7835492352, 7834892288, 7838695424]:
+        if wrapper.length() > 265945108:
             wrapper.seek(0xFDA0000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0xFDA0000)
                 return XboxPathReader(reader, wrapper)
-        # 8,738,846,720 bytes: XGD3 disc
-        elif wrapper.length() == 8738846720:
+        if wrapper.length() > 34144276:
             wrapper.seek(0x2090000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0x2090000)
                 return XboxPathReader(reader, wrapper)
-
-        wrapper.seek(0x10000)
-        if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-            reader = XDvdFs(wrapper, 0x10000)
-            return XboxPathReader(reader, wrapper)
+        if len(wrapper) > 65556:
+            wrapper.seek(0x10000)
+            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
+                reader = XDvdFs(wrapper, 0x10000)
+                return XboxPathReader(reader, wrapper)
 
         wrapper.seek(0)
 
