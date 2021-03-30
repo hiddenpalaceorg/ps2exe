@@ -45,8 +45,8 @@ allowed_extensions = [
     ".png",
     ".bmp",
     ".gif",
-    " gdi",
-    " raw",
+    ".gdi",
+    ".raw",
     ".txt",
     ".log",
     ".zip",
@@ -175,12 +175,12 @@ def process(input_dir, out_path, no_hash):
     bar.finish()
 
     with out_path.with_suffix(".txt").open("w") as f:
-        f.write("== Disc contents ==\n")
+        f.write("== Files ==\n")
         f.write("{{filelist|\n")
         for i, item in enumerate(wikifile_info.values()):
             f.write(
                 f"{{{{filelistentry |i={i+1}|icon=file|indent=0|filename={item['filename']}|type=File|date={item['date']}|size={item['size']}|crc32={item['crc32']}|md5={item['md5']}|sha1={item['sha1']}|comment=}}}}\n")
-
+        f.write("|date=yes}}\n")
     return compressed_info
 
 out_columns = [
