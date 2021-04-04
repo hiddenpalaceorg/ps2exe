@@ -52,20 +52,24 @@ allowed_extensions = [
     ".zip",
 ]
 
-def file_info(input_dir, skip_hash):
+def file_info(input_dirs, skip_hash, include_dir):
     LOGGER.info("Computing file information")
     sys.stdout.flush()
     file_info = {}
     rules = [re.compile(fnmatch.translate(f"*{ext}"), re.IGNORECASE) for ext in allowed_extensions]
     total_size = 0
-    files = [file for rule in rules for file in input_dir.iterdir() if rule.match(file.name)]
+    files = []
+    for input_dir in input_dirs:
+        files.extend(file for rule in rules for file in input_dir.iterdir() if rule.match(file.name))
     for file in files:
-        file_info[file.name] = {
-            "filename": file.name,
+        if file.name == "links.txt":
+            continue
+        file_info[file] = {
+            "filename": file.name if not include_dir else "/".join([file.parent.name, file.name]),
             "size": file.stat().st_size,
             "date": datetime.datetime.fromtimestamp(file.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')
         }
-        total_size += file_info[file.name]["size"]
+        total_size += file_info[file]["size"]
 
     if skip_hash:
         return
@@ -77,6 +81,8 @@ def file_info(input_dir, skip_hash):
     bar = progressbar.ProgressBar(max_value=total_size, widgets=widgets)
     procesed_size = 0
     for file in files:
+        if file.name == "links.txt":
+            continue
         with file.open(mode="rb") as f:
             crc = 0
             sha = hashlib.sha1()
@@ -87,14 +93,14 @@ def file_info(input_dir, skip_hash):
                 md5.update(chunk)
                 procesed_size += len(chunk)
                 bar.update(procesed_size)
-        file_info[file.name]["crc32"] = "%08X" % (crc & 0xFFFFFFFF)
-        file_info[file.name]["sha1"] = sha.hexdigest()
-        file_info[file.name]["md5"] = md5.hexdigest()
+        file_info[file]["crc32"] = "%08X" % (crc & 0xFFFFFFFF)
+        file_info[file]["sha1"] = sha.hexdigest()
+        file_info[file]["md5"] = md5.hexdigest()
     bar.finish()
     return file_info
 
 
-def compress(input_dir, output_file):
+def compress(input_dirs, output_file, use_parent_dir):
     LOGGER.info("Compressing")
     sys.stdout.flush()
 
@@ -115,10 +121,20 @@ def compress(input_dir, output_file):
         "-mmtf=on",
         "-bso0",
         "-bsp1",
-        output_file,
+        "-xr!links.txt",
     ]
-    compress_command.extend(input_dir / f"*{ext}" for ext in allowed_extensions)
-    process = subprocess.Popen(compress_command, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    for input_dir in input_dirs:
+        # If we're including the parent dir, use a relative path, otherwise, use absolute
+        if use_parent_dir:
+            compress_command.extend(f"-ir!" + os.path.join(input_dir.name, f"*{ext}") for ext in allowed_extensions)
+        else:
+            compress_command.extend(f"-ir!" + os.path.join(input_dir, f"*{ext}") for ext in allowed_extensions)
+    compress_command.append(output_file)
+
+    if use_parent_dir:
+        process = subprocess.Popen(compress_command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=input_dirs[0].parent)
+    else:
+        process = subprocess.Popen(compress_command, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     widgets = [
         progressbar.widgets.Bar(),
         progressbar.widgets.Percentage(),
@@ -140,12 +156,13 @@ def compress(input_dir, output_file):
     bar.finish()
 
 
-def process(input_dir, out_path, no_hash):
-    LOGGER.info(f"Processing {input_dir}")
+def process(input_dirs, out_path, no_hash):
+    use_parent_dir = len(input_dirs) > 1
+    LOGGER.info(f"Processing {input_dirs[0]}")
 
-    wikifile_info = file_info(input_dir, no_hash)
+    wikifile_info = file_info(input_dirs, no_hash, use_parent_dir)
 
-    compress(input_dir, out_path)
+    compress(input_dirs, out_path, use_parent_dir)
 
     LOGGER.info("Getting 7z hash")
 
@@ -265,6 +282,8 @@ if __name__ == '__main__':
             else:
                 input_file = line[args.input_column]
 
+            input_file_list = input_file.splitlines()
+
             if args.output_column.isnumeric():
                 col_num = int(args.output_column) - 1
                 output_file = list(line.items())[col_num][1]
@@ -275,10 +294,14 @@ if __name__ == '__main__':
                 continue
 
             out_path = output_dir / output_file
-            input_dir = (pathlib.Path(args.input_dir) / input_file).parent
+
+            input_dirs = {}
+            for input_file in input_file_list:
+                input_dirs[(pathlib.Path(args.input_dir) / input_file).parent] = None
+            input_dirs = list(input_dirs.keys())
 
             try:
-                compressed_info = process(input_dir, out_path, args.no_hash)
+                compressed_info = process(input_dirs, out_path, args.no_hash)
             except:
                 LOGGER.exception("Error processing row")
                 continue
