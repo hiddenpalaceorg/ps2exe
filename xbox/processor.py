@@ -35,7 +35,7 @@ class XboxIsoProcessor(BaseIsoProcessor):
                 pass
 
         # could not find default.xbe in root, use first xbe we can find
-        for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir()):
+        for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir(), recursive=True):
             file_path = self.iso_path_reader.get_file_path(file)
             file_path_lower = file_path.lower()
             if (file_path_lower.endswith(".xbe") or file_path_lower.endswith(".xex")) and \

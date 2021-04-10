@@ -67,7 +67,7 @@ class BaseIsoProcessor:
                     pass
 
             # could not find default.xbe in root, use first xbe we can find
-            for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir()):
+            for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
                 file_path = iso_path_reader.get_file_path(file)
                 if file_path.lower().endswith(".xbe"):
                     return "xbox"

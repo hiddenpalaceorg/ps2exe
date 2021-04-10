@@ -1,10 +1,10 @@
-import os
-import struct
-from typing import List, Any
+import logging
+from typing import List
 
 from xbox.xdvdfs.directory_entry import DirectoryEntry
 from xbox.xdvdfs.directory_header import DirectoryHeader
 
+LOGGER = logging.getLogger(__name__)
 
 class Directory:
 
@@ -21,6 +21,9 @@ class Directory:
         self.path = "/".join(filter(None, [parent_name, name]))
         self.fp = fp
         self.volume = volume
+        if self.offset >= self.fp.length():
+            LOGGER.warning("Directory %s outside of the bounds of this image", self.name)
+            return
         self.parseDirectoryRecord(self.offset)
 
     def parseDirectoryRecord(self, offset):
