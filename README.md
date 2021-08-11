@@ -111,3 +111,4 @@
 		- exe_filename is always main.dol.
 		- exe_date might be somewhat decipherable with this method. Each game is compiled with the Dolphin SDK, which contains some additional strings for the version the game was built with. I checked a few games, and I determined that within the .dol segment, four bytes after the string "Kernel built : %s %s" you can find a date that's 0x14 bytes long in a format like "Oct  2 2001.11:02:22". That's generally not far behind the actual build date and if no build date is present, it's usually the latest date that can be found.
 21. add wii supprt (TODO NOTES)
+	- This will be similar to GameCube but with some differences (the biggest of which is that the game partition is encrypted with a retail key for retail games, or a developer key for rvt-rs/protos). Check out the documentation here https://wiibrew.org/wiki/Wii_disc.
