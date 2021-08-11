@@ -98,3 +98,16 @@
     - Default case - mark disc as Asset if no other match is found (still return latest modified file data just in case).
 18. (HIGH PRIORITY) add edccchk support for cd based images (https://github.com/claunia/edccchk). scan images for edc/ecc consistency to check for errors. parse the log output and include just the total warning and total error count into to respective columns. maybe save the total output for the current run session in a separate log file for review. Make this optional with a parameter/flag. (HIGH PRIORITY)
 19. detect media type (CD-R or DVD-R). unsure if we can do this. (partially implemented on a system by system basis)
+20. add gamecube support
+	- GameCube is a bit strange because even though it's in ISO format, it lacks pretty much any useful metadata found on ISO 9660 discs. This means we don't have any timestamps in the TOC, and the iso isn't laid out like a typical disc. However, GameCube discs are pretty simple as a result. They aren't encrypted/obfuscated, and there are no differences between NR/Retail discs. Discs appear to be laid out the same way, however, since the apploader and dol can be various sizes, I can't seem to determine where the apploader ends and where the .dol begins, or when the actual game volume begins either. For us, we can pretty much only grab a few things from the discs (use this: http://hitmen.c02.at/files/yagcd/yagcd/chap13.html#sec13):
+		- For disc type detection, if "0000C2339F3D" is present at 0x1A in the .iso/.gcm, it's a GameCube game. 
+		- Assume disc_type is all NR for GameCube.
+		- header_title can be found at 0x20 in the .iso/.gcm, length is 0x03e0.
+		- header_maker_id can be found 0x0, but treat this as 6 bytes long even if it can be broken down.
+		- header_product_version can be found at 0x7 (decimal, not a string)
+		- composite checksum is 'game volume' + '.dol'
+		- exe checksum is the checksum of just the .dol segment
+		- alt_exe_date is the date found in the apploader (found at 0x2440 in the iso/gcm in yyyy/mm/dd format)
+		- exe_filename is always main.dol.
+		- exe_date might be somewhat decipherable with this method. Each game is compiled with the Dolphin SDK, which contains some additional strings for the version the game was built with. I checked a few games, and I determined that within the .dol segment, four bytes after the string "Kernel built : %s %s" you can find a date that's 0x14 bytes long in a format like "Oct  2 2001.11:02:22". That's generally not far behind the actual build date and if no build date is present, it's usually the latest date that can be found.
+21. add wii supprt (TODO NOTES)
