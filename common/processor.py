@@ -46,6 +46,10 @@ class BaseIsoProcessor:
         if fp.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             return "3do"
 
+        fp.seek(0x1C)
+        if fp.read(4) == b"\xC2\x33\x9F\x3D":
+            return "gamecube"
+
         fp.seek(0x8001)
         if fp.peek(5) == b'CD-I ':
             return "cdi"

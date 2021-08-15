@@ -2,8 +2,10 @@ import io
 import logging
 import os
 import sys
+from pathlib import Path
 
 import pycdlib
+from pyisotools.iso import GamecubeISO
 
 from cdi.path_reader import CdiPathReader
 from common.iso_path_reader.methods.compressed import CompressedPathReader
@@ -11,6 +13,8 @@ from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
 from common.processor import GenericIsoProcessor
 from dreamcast.processor import DreamcastIsoProcessor
+from gamecube.path_reader import GamecubePathReader
+from gamecube.processor import GamecubeIsoProcessor
 from iso_accessor import IsoAccessor
 
 from cdi.processor import CdiIsoProcessor
@@ -67,6 +71,12 @@ class IsoProcessorFactory:
             reader = OperaFs(wrapper)
             reader.initialize()
             return P3doPathReader(reader, wrapper)
+
+        wrapper.seek(0x1C)
+        if wrapper.read(4) == b"\xC2\x33\x9F\x3D":
+            iso_path = Path(fp.name).resolve()
+            iso = GamecubeISO.from_iso(iso_path)
+            return GamecubePathReader(iso, fp)
 
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":
@@ -140,6 +150,8 @@ class IsoProcessorFactory:
             return Xbox360IsoProcessor
         elif system_type == "dreamcast":
             return DreamcastIsoProcessor
+        elif system_type == "gamecube":
+            return GamecubeIsoProcessor
 
         return GenericIsoProcessor
 

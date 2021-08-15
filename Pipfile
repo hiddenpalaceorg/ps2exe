@@ -14,6 +14,7 @@ libarchive-c = "*"
 pefile = "*"
 pycryptodome = "*"
 progressbar2 = "*"
+pyisotools = "*"
 
 [requires]
 python_version = "3.8"

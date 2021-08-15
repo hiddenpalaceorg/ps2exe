@@ -257,6 +257,14 @@ class BinWrapper(BaseFile):
             self.sector_offset = 16
             return
 
+        # Gamecube disc
+        self.mmap.seek(0x1C)
+        ident = self.mmap.read(4)
+        if ident == b"\xC2\x33\x9F\x3D":
+            self.sector_size = 2048
+            self.sector_offset = 0
+            return
+
         # ISO9660 or CD-I discs
         self.mmap.seek(0x8001)
         ident = self.mmap.read(5)
