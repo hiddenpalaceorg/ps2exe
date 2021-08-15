@@ -50,6 +50,14 @@ class BaseIsoProcessor:
         if fp.read(4) == b"\xC2\x33\x9F\x3D":
             return "gamecube"
 
+        fp.seek(0)
+        if fp.read(64) == b"\x30\x30\x00\x45\x30\x31\x00\x00\x00\x00\x00\x00\x00" \
+                          b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" \
+                          b"\x00\x00\x00\x00\x00\x00\x4E\x44\x44\x45\x4D\x4F\x00" \
+                          b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" \
+                          b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00":
+            return "gamecube"
+
         fp.seek(0x8001)
         if fp.peek(5) == b'CD-I ':
             return "cdi"

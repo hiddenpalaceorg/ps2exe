@@ -27,7 +27,7 @@ class GamecubePathReader(IsoPathReader):
     def get_file_path(self, file):
         if hasattr(file, "path"):
             return file.path
-        return file.file_name
+        return file.name
 
     def get_file_date(self, file):
         return None

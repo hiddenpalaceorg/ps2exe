@@ -265,6 +265,17 @@ class BinWrapper(BaseFile):
             self.sector_offset = 0
             return
 
+        # early Gamecube demo disc
+        self.mmap.seek(0)
+        ident = self.mmap.read(64)
+        if ident == b"\x30\x30\x00\x45\x30\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" \
+                    b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x4E\x44\x44\x45\x4D\x4F" \
+                    b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" \
+                    b"\x00\x00\x00\x00\x00\x00\x00":
+            self.sector_size = 2048
+            self.sector_offset = 0
+            return
+
         # ISO9660 or CD-I discs
         self.mmap.seek(0x8001)
         ident = self.mmap.read(5)
