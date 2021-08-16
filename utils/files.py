@@ -274,6 +274,14 @@ class BinWrapper(BaseFile):
             self.sector_offset = 0
             return
 
+        # Wii disc
+        self.mmap.seek(0x18)
+        ident = self.mmap.read(4)
+        if ident == b"\x5D\x1C\x9E\xA3":
+            self.sector_size = 2048
+            self.sector_offset = 0
+            return
+
         # ISO9660 or CD-I discs
         self.mmap.seek(0x8001)
         ident = self.mmap.read(5)

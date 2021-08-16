@@ -55,6 +55,10 @@ class BaseIsoProcessor:
                           b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
             return "gamecube"
 
+        fp.seek(0x18)
+        if fp.read(4) == b"\x5D\x1C\x9E\xA3":
+            return "wii"
+
         fp.seek(0x8001)
         if fp.peek(5) == b'CD-I ':
             return "cdi"

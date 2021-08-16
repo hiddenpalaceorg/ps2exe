@@ -8,6 +8,8 @@ from common.processor import BaseIsoProcessor
 LOGGER = logging.getLogger(__name__)
 
 class GamecubeIsoProcessor(BaseIsoProcessor):
+    SDK_STRING = b"Dolphin SDK"
+
     def get_disc_type(self):
         return {"disc_type": "nr"}
 
@@ -29,7 +31,7 @@ class GamecubeIsoProcessor(BaseIsoProcessor):
             dol_dates = []
             for section in self.iso_path_reader.iso.dol.sections:
                 dol_data = section.data.read()
-                if b"<< Dolphin SDK" in dol_data:
+                if b"<< " + self.SDK_STRING in dol_data:
                     sections_with_dates.append(dol_data)
                 if b"Kernel built" in dol_data:
                     sections_with_dates.append(dol_data)
@@ -40,7 +42,7 @@ class GamecubeIsoProcessor(BaseIsoProcessor):
                     dol_dates.extend([
                         datetime.datetime.strptime(date.decode(), '%b %d %Y %H:%M:%S')
                         for date in
-                        re.findall(br"<< Dolphin SDK - .+? build: (.{20}).*>>", dol_data)
+                        re.findall(br"<< " + self.SDK_STRING + br" - .+? build: (.{20}).*>>", dol_data)
                     ])
                     dol_dates.extend([
                         datetime.datetime.strptime(date.decode(), '%b %d %Y\x00%H:%M:%S')

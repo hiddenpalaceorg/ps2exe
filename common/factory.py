@@ -29,6 +29,10 @@ from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from p3do.operafs import OperaFs
 from utils.files import BinWrapper
+from wii.path_reader import WiiPathReader
+from wii.processor import WiiIsoProcessor
+from wii.utils.wii_iso import WiiISO
+from wii.utils.disc import Disc as WiiDisc
 from xbox.path_reader import XboxPathReader
 from xbox.processor import XboxIsoProcessor, Xbox360IsoProcessor
 from xbox.xdvdfs.xdvdfs import XDvdFs
@@ -84,6 +88,12 @@ class IsoProcessorFactory:
             iso_path = Path(fp.name).resolve()
             iso = GamecubeISO.from_iso(iso_path)
             return GamecubePathReader(iso, fp)
+
+        wrapper.seek(0x18)
+        if wrapper.read(4) == b"\x5D\x1C\x9E\xA3":
+            disc = WiiDisc(wrapper)
+            iso = WiiISO.from_disc(fp.name, disc)
+            return WiiPathReader(iso, fp)
 
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":
@@ -159,6 +169,8 @@ class IsoProcessorFactory:
             return DreamcastIsoProcessor
         elif system_type == "gamecube":
             return GamecubeIsoProcessor
+        elif system_type == "wii":
+            return WiiIsoProcessor
 
         return GenericIsoProcessor
 
