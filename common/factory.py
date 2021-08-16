@@ -79,11 +79,8 @@ class IsoProcessorFactory:
             return GamecubePathReader(iso, fp)
 
         wrapper.seek(0)
-        if wrapper.read(64) == b"\x30\x30\x00\x45\x30\x31\x00\x00\x00\x00\x00\x00\x00" \
-                               b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" \
-                               b"\x00\x00\x00\x00\x00\x00\x4E\x44\x44\x45\x4D\x4F\x00" \
-                               b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" \
-                               b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00":
+        if wrapper.read(64) == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
+                               b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
             iso_path = Path(fp.name).resolve()
             iso = GamecubeISO.from_iso(iso_path)
             return GamecubePathReader(iso, fp)
