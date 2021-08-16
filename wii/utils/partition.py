@@ -49,7 +49,7 @@ CLUSTER_SIZE = 0x8000
 CLUSTER_DATA_SIZE = 0x7C00
 
 # Number of decrypted clusters stored in the LRU cache
-CLUSTER_CACHE_SIZE = 128
+CLUSTER_CACHE_SIZE = 2000
 
 
 class Partition(object):

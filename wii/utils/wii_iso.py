@@ -39,14 +39,14 @@ class WiiISO(GamecubeISO):
 
         part.seek(0)
         self.bootheader = Boot(part)
-        fst_size = self.bootheader.fstSize << 2
-        fst_offset = self.bootheader.fstOffset << 2
-        dol_offset = self.bootheader.dolOffset << 2
+        self.bootheader.fstSize <<= 2
+        self.bootheader.fstOffset <<= 2
+        self.bootheader.dolOffset <<= 2
         self.bootinfo = BI2(part)
         self.apploader = Apploader(part)
-        self.dol = DolFile(part, startpos=dol_offset)
-        part.seek(fst_offset)
-        self._rawFST = BytesIO(part.read(fst_size))
+        self.dol = DolFile(part, startpos=self.bootheader.dolOffset)
+        part.seek(self.bootheader.fstOffset)
+        self._rawFST = BytesIO(part.read(self.bootheader.fstSize))
 
         self.load_file_systemv(self._rawFST)
 
@@ -56,3 +56,9 @@ class WiiISO(GamecubeISO):
             if alignment != 4:
                 self._alignmentTable[node.path] = alignment
             prev = node
+
+    def _read_nodes(self, fst, node: FSTNode, strTabOfs: int) -> FSTNode:
+        node = super()._read_nodes(fst, node, strTabOfs)
+        if node._fileoffset:
+            node._fileoffset <<= 2
+        return node
