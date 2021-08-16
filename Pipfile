@@ -15,7 +15,6 @@ pefile = "*"
 pycryptodome = "*"
 progressbar2 = "*"
 pyisotools = "*"
-wiiodfs = "*"
 
 [requires]
 python_version = "3.8"
