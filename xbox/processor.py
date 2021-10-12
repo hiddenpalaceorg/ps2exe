@@ -28,13 +28,14 @@ class XboxIsoProcessor(BaseIsoProcessor):
 
     def __init__(self, iso_path_reader, filename, system_type):
         super().__init__(iso_path_reader, filename, system_type)
+        self.get_exe_filename = functools.lru_cache(maxsize=None)(self.get_exe_filename)
+        self._parse_exe = functools.lru_cache(maxsize=None)(self._parse_exe)
 
     def get_disc_type(self):
         if isinstance(self.iso_path_reader, CompressedPathReader):
             return {"disc_type": "hdd"}
         return {"disc_type": "dvdr"}
 
-    @functools.lru_cache(None)
     def get_exe_filename(self):
         found_exes = {}
         for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir(), recursive=True):
@@ -62,7 +63,6 @@ class XboxIsoProcessor(BaseIsoProcessor):
             return super().get_most_recent_file_info(exe_date)
         return {}
 
-    @functools.lru_cache(None)
     def _parse_exe(self, exe_filename):
         LOGGER.info("Parsing xbe file headers. xbe name: %s", exe_filename)
         try:
