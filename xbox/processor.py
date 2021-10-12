@@ -533,7 +533,6 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
             return io.BytesIO(xex_pe)
 
-    @functools.lru_cache(None)
     def _parse_exe(self, exe_filename):
         LOGGER.info("Parsing xex file headers. xex name: %s", exe_filename)
         result = {}
