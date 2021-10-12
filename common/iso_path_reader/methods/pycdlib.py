@@ -40,6 +40,8 @@ class PyCdLibPathReader(IsoPathReader):
             try:
                 return self.iso.get_record(iso_path=path + ";1")
             except PyCdlibInvalidInput:
+                if path.upper() != path:
+                    return self.get_file(path.upper())
                 raise FileNotFoundError(e)
 
 

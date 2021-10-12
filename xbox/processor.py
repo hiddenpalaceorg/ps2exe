@@ -1,5 +1,6 @@
 import ctypes
 import datetime
+import functools
 import hashlib
 import io
 import logging
@@ -15,48 +16,67 @@ from Crypto.Cipher import AES
 
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.processor import BaseIsoProcessor
+from xbox.path_reader import XboxPathReader
 
 LOGGER = logging.getLogger(__name__)
 
 class XboxIsoProcessor(BaseIsoProcessor):
-    ignored_paths = [re.compile(".*dashupdate.xbe$", re.IGNORECASE)]
+    ignored_paths = [
+        re.compile(".*\.xbe$", re.IGNORECASE)
+    ]
+    exe_info = {}
+
+    def __init__(self, iso_path_reader, filename, system_type):
+        super().__init__(iso_path_reader, filename, system_type)
+
     def get_disc_type(self):
         if isinstance(self.iso_path_reader, CompressedPathReader):
             return {"disc_type": "hdd"}
         return {"disc_type": "dvdr"}
 
+    @functools.lru_cache(None)
     def get_exe_filename(self):
-        for exe in ["/default.xex", "/default.xbe"]:
-            try:
-                default_xbe = self.iso_path_reader.get_file(exe)
-                with self.iso_path_reader.open_file(default_xbe):
-                    return exe
-            except FileNotFoundError:
-                pass
-
-        # could not find default.xbe in root, use first xbe we can find
+        found_exes = {}
         for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir(), recursive=True):
             file_path = self.iso_path_reader.get_file_path(file)
             file_path_lower = file_path.lower()
             if (file_path_lower.endswith(".xbe") or file_path_lower.endswith(".xex")) and \
-                    "dashupdate.xbe" not in file_path_lower:
-                return file_path
+                    not file_path_lower.endswith("dashupdate.xbe"):
+                exe_info = self._parse_exe(file_path)
+                if exe_info.get("header_title") in ["CDX", "Installer"]:
+                    LOGGER.info("Found installer or CDX xbe, ignoring and finding another XBE")
+                    continue
+                LOGGER.info("exe date: %s", exe_info["exe_date"])
+                found_exes[file_path] = exe_info
+
+        if not found_exes:
+            return
+
+        exe = max(found_exes.items(), key=lambda x: x[1]["exe_date"])[0]
+        LOGGER.info("Found latest exe: %s", exe)
+        return exe
+
 
     def get_most_recent_file_info(self, exe_date):
+        if not isinstance(self.iso_path_reader, XboxPathReader):
+            return super().get_most_recent_file_info(exe_date)
         return {}
 
-    def get_extra_fields(self):
-        LOGGER.info("Parsing xbe file headers")
+    @functools.lru_cache(None)
+    def _parse_exe(self, exe_filename):
+        LOGGER.info("Parsing xbe file headers. xbe name: %s", exe_filename)
         try:
             result = {}
-            with self.iso_path_reader.open_file(self.iso_path_reader.get_file(self.get_exe_filename())) as f:
+            with self.iso_path_reader.open_file(self.iso_path_reader.get_file(exe_filename)) as f:
                 f.seek(0x104)
                 base_addr, exe_time, cert_addr = struct.unpack("<I12xII", f.read(24))
-                result["exe_date"] = datetime.datetime.utcfromtimestamp(exe_time)
+                result["exe_date"] = datetime.datetime.fromtimestamp(exe_time, tz=datetime.timezone.utc)
                 if (cert_addr > base_addr):
                     f.seek(cert_addr - base_addr)
                     cert_timestamp, cert_game_id, b, a, cert_title = struct.unpack("<4xIHss40s", f.read(52))
-                    result["header_release_date"] = datetime.datetime.utcfromtimestamp(cert_timestamp)
+                    result["header_release_date"] = datetime.datetime.fromtimestamp(
+                        cert_timestamp,
+                        tz=datetime.timezone.utc)
                     maker_id = ""
                     for char in [a, b]:
                         try:
@@ -70,9 +90,22 @@ class XboxIsoProcessor(BaseIsoProcessor):
                     result["header_title"] = cert_title.decode("UTF-16le").strip().replace("\x00", "")
                     result["header_maker_id"] = maker_id
                     result["header_product_number"] = "%03d" % cert_game_id
+
+                    f.seek(108, os.SEEK_CUR)
+                    cert_regions, = struct.unpack("<I", f.read(4))
+                    result["exe_signing_type"] = "debug" if cert_regions & 0x80000000 else "retail"
+
+                    xbe_hash = hashlib.md5()
+                    f.seek(base_addr)
+                    xbe_hash.update(f.read())
+                    result["alt_md5"] = xbe_hash.hexdigest()
+
             return result
         except FileNotFoundError:
-            return {}
+            return False
+
+    def get_extra_fields(self):
+        return self._parse_exe(self.get_exe_filename())
 
 
 char_t = ctypes.c_char
@@ -273,6 +306,13 @@ class XEX2ResourceInfo(ctypes.BigEndianStructure):
 
 
 class Xbox360IsoProcessor(XboxIsoProcessor):
+    ignored_paths = [
+        re.compile(".*$SystemUpdate$", re.IGNORECASE),
+        re.compile(".*nxeart$", re.IGNORECASE),
+        re.compile(".*AvatarAssetPack$", re.IGNORECASE),
+        re.compile(".*\.xex$", re.IGNORECASE),
+    ]
+
     XEX2_HEADER_RESOURCE_INFO = 0x2FF
     XEX_FILE_DATA_DESCRIPTOR_HEADER = 0x3FF
     XEX_HEADER_EXECUTION_ID = 0x40006
@@ -493,10 +533,11 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
             return io.BytesIO(xex_pe)
 
-    def get_extra_fields(self):
+    @functools.lru_cache(None)
+    def _parse_exe(self, exe_filename):
+        LOGGER.info("Parsing xex file headers. xex name: %s", exe_filename)
         result = {}
-        LOGGER.info("Parsing xex file headers")
-        with self.iso_path_reader.open_file(self.iso_path_reader.get_file(self.get_exe_filename())) as f:
+        with self.iso_path_reader.open_file(self.iso_path_reader.get_file(exe_filename)) as f:
             f.seek(0)
             self.parse_xex_header(f)
 
@@ -504,39 +545,15 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                 return result
             data_descriptor = self.optional_headers[self.XEX_FILE_DATA_DESCRIPTOR_HEADER]
 
-            if self.XEX_HEADER_EXECUTION_ID not in self.optional_headers:
-                return result
-            execution_id = self.optional_headers[self.XEX_HEADER_EXECUTION_ID]
-
-            if self.XEX2_HEADER_RESOURCE_INFO not in self.optional_headers:
-                return result
-            resource_info = self.optional_headers[self.XEX2_HEADER_RESOURCE_INFO]
-
             if self.XEX_HEADER_VITAL_STATS in self.optional_headers:
-                result["exe_date"] = datetime.datetime.utcfromtimestamp(
-                    self.optional_headers[self.XEX_HEADER_VITAL_STATS].Timestamp
+                result["exe_date"] = datetime.datetime.fromtimestamp(
+                    self.optional_headers[self.XEX_HEADER_VITAL_STATS].Timestamp,
+                    tz=datetime.timezone.utc
                 )
 
             if self.XEX_ORIGINAL_PE_NAME in self.optional_headers:
                 exe_name = self.optional_headers[self.XEX_ORIGINAL_PE_NAME].strip(b"\x00")
                 result["alt_exe_filename"] = exe_name.decode("cp1252", errors="ignore")
-
-            title_id = f"{execution_id.TitleId:8X}"
-            header_resource_id = resource_info.ResourceId.decode()
-            if title_id != header_resource_id:
-                return result
-
-            title_bytes = execution_id.TitleId.to_bytes(4, byteorder='big')
-            result["header_maker_id"] = ""
-            for char in range(2):
-                try:
-                    if title_bytes[char] > 0x20:
-                        result["header_maker_id"] += title_bytes[char:char + 1].decode()
-                    else:
-                        result["header_maker_id"] += "\\x" + ('%02X' % title_bytes[char])
-                except UnicodeDecodeError:
-                    result["header_maker_id"] += "\\x" + ('%02X' % title_bytes[char])
-            result["header_product_number"] = "%03d" % int.from_bytes(title_bytes[2:], byteorder="big")
 
             if self.xex_security_info:
                 if self.xex_magic != self._MAGIC_XEX2D:
@@ -559,6 +576,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                 if pe := self.get_pe(f, session_key):
                     if enc_flag:
                         LOGGER.info("Decrypted using key %s", self.xex_key_names[i])
+                        result["exe_signing_type"] = self.xex_key_names[i]
                     break
             if not pe:
                 return result
@@ -566,13 +584,38 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             LOGGER.info("Parsing PE file")
             pe.seek(0)
             pe_headers = pefile.PE(name=None, data=pe.read(), fast_load=True)
-            result["alt_exe_date"] = datetime.datetime.utcfromtimestamp(
-                pe_headers.FILE_HEADER.TimeDateStamp
+            result["alt_exe_date"] = datetime.datetime.fromtimestamp(
+                pe_headers.FILE_HEADER.TimeDateStamp,
+                tz=datetime.timezone.utc
             )
 
             pe.seek(0)
             md5 = hashlib.md5(pe.read())
             result["alt_md5"] = md5.hexdigest()
+
+            if self.XEX_HEADER_EXECUTION_ID not in self.optional_headers or \
+                    self.XEX2_HEADER_RESOURCE_INFO not in self.optional_headers:
+                return result
+
+            execution_id = self.optional_headers[self.XEX_HEADER_EXECUTION_ID]
+            resource_info = self.optional_headers[self.XEX2_HEADER_RESOURCE_INFO]
+
+            title_id = f"{execution_id.TitleId:8X}"
+            header_resource_id = resource_info.ResourceId.decode()
+            if title_id != header_resource_id:
+                return result
+
+            title_bytes = execution_id.TitleId.to_bytes(4, byteorder='big')
+            result["header_maker_id"] = ""
+            for char in range(2):
+                try:
+                    if title_bytes[char] > 0x20:
+                        result["header_maker_id"] += title_bytes[char:char + 1].decode()
+                    else:
+                        result["header_maker_id"] += "\\x" + ('%02X' % title_bytes[char])
+                except UnicodeDecodeError:
+                    result["header_maker_id"] += "\\x" + ('%02X' % title_bytes[char])
+            result["header_product_number"] = "%03d" % int.from_bytes(title_bytes[2:], byteorder="big")
 
             LOGGER.info("Parsing XDBF resources")
             xdbf_addr = resource_info.ValueAddress - base_address
@@ -589,3 +632,6 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                     result["header_title"] = None
 
         return result
+
+    def get_extra_fields(self):
+        return self._parse_exe(self.get_exe_filename())

@@ -134,12 +134,14 @@ csv_headers = (
     "alt_exe_filename",
     "alt_exe_date",
     "alt_md5",
+    "alt_all_files_hash",
     "sfo_category",
     "sfo_disc_id",
     "sfo_disc_version",
     "sfo_parental_level",
     "sfo_psp_system_version",
     "sfo_title",
+    "exe_signing_type",
 )
 
 if __name__ == '__main__':

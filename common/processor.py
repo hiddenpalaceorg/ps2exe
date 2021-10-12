@@ -175,15 +175,11 @@ class BaseIsoProcessor:
         }
 
     def get_file_hashes(self):
-        ignored_paths = [re.compile(path) for path in self.ignored_paths]
         file_hashes = {}
         root = self.iso_path_reader.get_root_dir()
         file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
         for file in progressbar.progressbar(file_list):
             file_path = self.iso_path_reader.get_file_path(file)
-
-            if any(regex.match(file_path) for regex in ignored_paths):
-                continue
 
             if file_hash := self.iso_path_reader.get_file_hash(file, xxhash.xxh64):
                 file_hashes[file_path] = file_hash.digest()
@@ -194,11 +190,15 @@ class BaseIsoProcessor:
         file_hashes = self.get_file_hashes()
 
         all_hashes = hashlib.md5()
+        hashes_excluding_ignored = hashlib.md5()
         for file, file_hash in sorted(file_hashes.items()):
             all_hashes.update(file_hash)
+            if self.ignored_paths and any(regex.match(file) for regex in self.ignored_paths):
+                hashes_excluding_ignored.update(file_hash)
 
         return {
             "all_files_hash": all_hashes.hexdigest(),
+            "alt_all_files_hash": hashes_excluding_ignored.hexdigest() if self.ignored_paths else None
         }
 
     def get_most_recent_file(self):
