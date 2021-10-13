@@ -329,11 +329,13 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
     _MAGIC_XEX2D = b"XEX-"  # >=1640
     _MAGIC_XEX3F = b"XEX?"  # >=1529
 
-    xex_header = None
-    xex_magic = None
-    optional_headers = {}
-    optional_header_locations = {}
-    xex_security_info = None
+    def __init__(self, iso_path_reader, filename, system_type):
+        super().__init__(iso_path_reader, filename, system_type)
+        self.xex_header = None
+        self.xex_magic = None
+        self.optional_headers = {}
+        self.optional_header_locations = {}
+        self.xex_security_info = None
 
     def read_struct(self, f, struct):
         s = struct()
@@ -350,6 +352,12 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
         return struct.unpack('>I', s)[0]
 
     def parse_xex_header(self, f):
+        self.xex_header = None
+        self.xex_magic = None
+        self.optional_headers = {}
+        self.optional_header_locations = {}
+        self.xex_security_info = None
+
         # Read XEX header & directory entry headers
         f.seek(0)
         xex_magic = f.read(4)
