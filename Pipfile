@@ -15,6 +15,7 @@ pefile = "*"
 pycryptodome = "*"
 progressbar2 = "*"
 pyisotools = "*"
+methodtools = "*"
 
 [requires]
 python_version = "3.8"

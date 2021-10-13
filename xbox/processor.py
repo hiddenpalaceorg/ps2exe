@@ -1,6 +1,5 @@
 import ctypes
 import datetime
-import functools
 import hashlib
 import io
 import logging
@@ -11,6 +10,7 @@ import subprocess
 import sys
 from hashlib import sha1
 
+import methodtools
 import pefile
 from Crypto.Cipher import AES
 
@@ -26,16 +26,12 @@ class XboxIsoProcessor(BaseIsoProcessor):
     ]
     exe_info = {}
 
-    def __init__(self, iso_path_reader, filename, system_type):
-        super().__init__(iso_path_reader, filename, system_type)
-        self.get_exe_filename = functools.lru_cache(maxsize=None)(self.get_exe_filename)
-        self._parse_exe = functools.lru_cache(maxsize=None)(self._parse_exe)
-
     def get_disc_type(self):
         if isinstance(self.iso_path_reader, CompressedPathReader):
             return {"disc_type": "hdd"}
         return {"disc_type": "dvdr"}
 
+    @methodtools.lru_cache(maxsize=None)
     def get_exe_filename(self):
         found_exes = {}
         for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir(), recursive=True):
@@ -63,6 +59,7 @@ class XboxIsoProcessor(BaseIsoProcessor):
             return super().get_most_recent_file_info(exe_date)
         return {}
 
+    @methodtools.lru_cache(maxsize=None)
     def _parse_exe(self, exe_filename):
         LOGGER.info("Parsing xbe file headers. xbe name: %s", exe_filename)
         try:
@@ -533,6 +530,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
             return io.BytesIO(xex_pe)
 
+    @methodtools.lru_cache(None)
     def _parse_exe(self, exe_filename):
         LOGGER.info("Parsing xex file headers. xex name: %s", exe_filename)
         result = {}
