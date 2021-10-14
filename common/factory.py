@@ -34,8 +34,9 @@ from wii.path_reader import WiiPathReader
 from wii.processor import WiiIsoProcessor
 from wii.utils.wii_iso import WiiISO
 from wii.utils.disc import Disc as WiiDisc
-from xbox.path_reader import XboxPathReader
-from xbox.processor import XboxIsoProcessor, Xbox360IsoProcessor
+from xbox.path_reader import XboxPathReader, XboxStfsPathReader
+from xbox.processor import XboxIsoProcessor, Xbox360IsoProcessor, XboxLiveProcessor
+from xbox.stfs.stfs import STFS
 from xbox.xdvdfs.xdvdfs import XDvdFs
 
 try:
@@ -65,6 +66,11 @@ class IsoProcessorFactory:
         if file_ext in [b".7z", b".rar", b".zip"]:
             with libarchive.file_reader(fp.name) as archive:
                 return CompressedPathReader(archive, fp)
+
+        fp.seek(0)
+        if fp.read(4) == b"LIVE":
+            return XboxStfsPathReader(STFS(filename=None, fd=fp), fp)
+
 
         if isinstance(fp, io.IOBase):
             wrapper = BinWrapper(fp)
@@ -177,6 +183,8 @@ class IsoProcessorFactory:
             return GamecubeIsoProcessor
         elif system_type == "wii":
             return WiiIsoProcessor
+        elif system_type == "xbla":
+            return XboxLiveProcessor
 
         return GenericIsoProcessor
 

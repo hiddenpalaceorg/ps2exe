@@ -10,7 +10,7 @@ from cdi.path_reader import CdiPathReader
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
-from xbox.path_reader import XboxPathReader
+from xbox.path_reader import XboxPathReader, XboxStfsPathReader
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +28,9 @@ class BaseIsoProcessor:
     def get_system_type(iso_path_reader):
         if isinstance(iso_path_reader, CdiPathReader):
             return "cdi"
+
+        if isinstance(iso_path_reader, XboxStfsPathReader):
+            return "xbla"
 
         fp = iso_path_reader.fp
         fp.seek(0)
@@ -88,7 +91,7 @@ class BaseIsoProcessor:
                     return "xbox360"
 
         pvd = iso_path_reader.get_pvd()
-        if pvd.system_identifier.strip() == b'PSP GAME':
+        if pvd and pvd.system_identifier.strip() == b'PSP GAME':
             return "psp"
 
         try:
@@ -133,6 +136,16 @@ class BaseIsoProcessor:
                 return "xbox"
         except FileNotFoundError:
             pass
+
+        # Look for an XBLA package
+        hex_pattern = re.compile(r'.*/?(?:([0-9a-fA-F]{16})|([0-9a-fA-F]{6}~1$))')
+        for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
+            file_path = iso_path_reader.get_file_path(file)
+            if hex_pattern.match(file_path):
+                with iso_path_reader.open_file(file) as f:
+                    if f.read(4) == b"LIVE":
+                        return "xbla"
+
 
     def __init__(self, iso_path_reader, filename, system_type):
         self.iso_path_reader = iso_path_reader

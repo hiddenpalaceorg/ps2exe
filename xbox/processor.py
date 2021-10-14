@@ -15,7 +15,8 @@ from Crypto.Cipher import AES
 
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.processor import BaseIsoProcessor
-from xbox.path_reader import XboxPathReader
+from xbox.path_reader import XboxPathReader, XboxStfsPathReader
+from xbox.stfs.stfs import STFS
 
 LOGGER = logging.getLogger(__name__)
 
@@ -638,3 +639,25 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
         return result
 
+class XboxLiveProcessor(Xbox360IsoProcessor):
+    def __init__(self, iso_path_reader, filename, system_type):
+        if isinstance(iso_path_reader, XboxStfsPathReader):
+            super().__init__(iso_path_reader, filename, system_type)
+            return
+        hex_pattern = re.compile(r'.*/?(?:([0-9a-fA-F]{16})|([0-9a-fA-F]{6}~1$))')
+        for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
+            file_path = iso_path_reader.get_file_path(file)
+            if hex_pattern.match(file_path):
+                f = iso_path_reader.open_file(file)
+                f.__enter__()
+                if f.read(4) == b"LIVE":
+                    f.seek(0)
+                    iso_path_reader = XboxStfsPathReader(STFS(filename=None, fd=f), iso_path_reader.fp)
+                    break
+        super().__init__(iso_path_reader, filename, system_type)
+
+    def get_disc_type(self):
+        return {"disc_type": "xbla"}
+
+    def get_extra_fields(self):
+        return {**super().get_extra_fields(), **{"system": "xbox360"}}

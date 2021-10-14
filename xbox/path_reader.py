@@ -64,3 +64,40 @@ class XboxPathReader(IsoPathReader):
 
     def get_pvd_info(self):
         return {}
+
+class XboxStfsPathReader(XboxPathReader):
+    def get_root_dir(self):
+        return self.iso.allfiles
+
+    def iso_iterator(self, base_dir, recursive=False):
+        # always recursive
+        for path, file in self.iso.allfiles.items():
+            yield file
+
+    def get_file(self, path):
+        try:
+            return self.iso.allfiles[path.encode()]
+        except KeyError:
+            raise FileNotFoundError
+
+    def get_file_date(self, file):
+        return None
+
+    def get_file_path(self, file):
+        return file.path.decode()
+
+    def get_file_hash(self, file, algo):
+        hash = algo()
+        f = self.open_file(file)
+        while chunk := f.read(65535):
+            hash.update(chunk)
+        return hash
+
+    def open_file(self, file):
+        return self.iso.read_file(file)
+
+    def get_file_date(self, file):
+        return None
+
+    def get_pvd_info(self):
+        return {}
