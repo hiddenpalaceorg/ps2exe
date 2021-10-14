@@ -286,7 +286,7 @@ class BinWrapper(BaseFile):
         self.mmap.seek(0x8001)
         ident = self.mmap.read(5)
         LOGGER.debug(ident)
-        if ident == b"CD001" or ident == b"CD-I ":
+        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
             self.sector_size = 2048
             self.sector_offset = 0
             return
@@ -294,7 +294,7 @@ class BinWrapper(BaseFile):
         self.mmap.seek(0x9311)
         ident = self.mmap.read(5)
         LOGGER.debug(ident)
-        if ident == b"CD001" or ident == b"CD-I ":
+        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
             self.sector_size = 2352
             self.sector_offset = 16
             return
@@ -302,7 +302,7 @@ class BinWrapper(BaseFile):
         self.mmap.seek(0x9319)
         ident = self.mmap.read(5)
         LOGGER.debug(ident)
-        if ident == b"CD001" or ident == b"CD-I ":
+        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
             self.sector_size = 2352
             self.sector_offset = 24
             return

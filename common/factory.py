@@ -12,6 +12,7 @@ from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
 from common.processor import GenericIsoProcessor
+from common.udf.pycdlib_udf import PyCdlibUdf
 from dreamcast.processor import DreamcastIsoProcessor
 from gamecube.path_reader import GamecubePathReader
 from gamecube.processor import GamecubeIsoProcessor
@@ -134,13 +135,18 @@ class IsoProcessorFactory:
             # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
             if not hasattr(iso, "pvd") and not hasattr(iso, "pvds"):
                 return
-            if not iso.pvds:
+            if not iso.pvds and not iso._has_udf:
                 return
             if not hasattr(iso, "pvd") and hasattr(iso, "pvds") and iso.pvds:
                 iso.pvd = iso.pvds[0]
 
-        iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
-        return PathlabPathReader(iso_accessor, wrapper, pvd=iso.pvd)
+        if iso._has_udf:
+            iso = PyCdlibUdf()
+            iso.open_fp(wrapper)
+            return PyCdLibPathReader(iso, wrapper, udf=True)
+        else:
+            iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
+            return PathlabPathReader(iso_accessor, wrapper, pvd=iso.pvd)
 
 
     @staticmethod
