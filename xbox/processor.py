@@ -643,6 +643,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
         return result
 
+
 class XboxLiveProcessor(Xbox360IsoProcessor):
     def __init__(self, iso_path_reader, filename, system_type):
         if isinstance(iso_path_reader, XboxStfsPathReader):
@@ -656,7 +657,10 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
                 f.__enter__()
                 if f.read(4) == b"LIVE":
                     f.seek(0)
-                    iso_path_reader = XboxStfsPathReader(STFS(filename=None, fd=f), iso_path_reader.fp)
+                    stfs = STFS(filename=None, fd=f)
+                    if stfs.content_type != 0xD0000:
+                        continue
+                    iso_path_reader = XboxStfsPathReader(stfs, iso_path_reader.fp)
                     break
         super().__init__(iso_path_reader, filename, system_type)
 
