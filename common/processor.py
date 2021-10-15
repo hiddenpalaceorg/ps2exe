@@ -89,6 +89,11 @@ class BaseIsoProcessor:
                     return "xbox"
                 elif file_path.lower().endswith(".xex"):
                     return "xbox360"
+                # Also look for EXE files if they have an xex header
+                elif file_path.lower().endswith(".exe"):
+                    with iso_path_reader.open_file(file) as f:
+                        if f.read(4) == b'XEX2':
+                            return "xbox360"
 
         pvd = iso_path_reader.get_pvd()
         if pvd and pvd.system_identifier.strip() == b'PSP GAME':

@@ -39,9 +39,13 @@ class XboxIsoProcessor(BaseIsoProcessor):
         for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir(), recursive=True):
             file_path = self.iso_path_reader.get_file_path(file)
             file_path_lower = file_path.lower()
-            if (file_path_lower.endswith(".xbe") or file_path_lower.endswith(".xex")) and \
-                    not file_path_lower.endswith("dashupdate.xbe"):
-                exe_info = self._parse_exe(file_path)
+            if (file_path_lower.endswith(".xbe") or
+                file_path_lower.endswith(".xex") or
+                file_path_lower.endswith(".exe")
+            ) and not file_path_lower.endswith("dashupdate.xbe"):
+                if not (exe_info := self._parse_exe(file_path)):
+                    return
+                self.ignored_paths.append(re.compile(rf"^{re.escape(file_path_lower)}$", re.IGNORECASE))
                 if exe_info.get("header_title") in ["CDX", "Installer"]:
                     LOGGER.info("Found installer or CDX xbe, ignoring and finding another XBE")
                     continue
