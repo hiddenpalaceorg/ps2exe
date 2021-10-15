@@ -141,6 +141,9 @@ class IsoProcessorFactory:
             # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
             if not hasattr(iso, "pvd") and not hasattr(iso, "pvds"):
                 return
+            if iso.pvd.root_dir_record.children:
+                iso._initialized = True
+                return PyCdLibPathReader(iso, wrapper)
             if not iso.pvds and not iso._has_udf:
                 return
             if not hasattr(iso, "pvd") and hasattr(iso, "pvds") and iso.pvds:
