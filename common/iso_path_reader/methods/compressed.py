@@ -66,3 +66,6 @@ class CompressedPathReader(IsoPathReader):
 
     def get_pvd_info(self):
         return {}
+
+    def get_pvd(self):
+        return {}
