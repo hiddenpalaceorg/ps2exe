@@ -62,8 +62,8 @@ LOGGER = logging.getLogger(__name__)
 class IsoProcessorFactory:
     @staticmethod
     def get_iso_path_reader(fp, file_name):
-        file_ext = os.path.splitext(file_name)[1]
-        if file_ext in [b".7z", b".rar", b".zip"]:
+        file_ext = os.path.splitext(file_name)[1].decode()
+        if file_ext.lower() in [".7z", ".rar", ".zip"]:
             with libarchive.file_reader(fp.name) as archive:
                 return CompressedPathReader(archive, fp)
 

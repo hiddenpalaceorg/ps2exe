@@ -1,3 +1,4 @@
+import datetime
 import io
 from collections import namedtuple
 
@@ -53,11 +54,15 @@ class CompressedPathReader(IsoPathReader):
         return hash
 
     def open_file(self, file):
-        self.files[file.path].seek(0)
+        with self.files[file.path] as f:
+            f.seek(0)
+            f.close = lambda: None
+
         return self.files[file.path]
 
+    # noinspection PyRedeclaration
     def get_file_date(self, file):
-        return None
+        return datetime.datetime.fromtimestamp(self.entries[file.path].mtime, tz=datetime.timezone.utc)
 
     def get_pvd_info(self):
         return {}
