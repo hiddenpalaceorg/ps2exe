@@ -19,8 +19,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 def get_iso_info(iso_filename, disable_contents_checksum):
+    iso_path = iso_filename.encode("cp1252", errors="replace")
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
-    LOGGER.info("Reading %s", basename.decode("cp1252"))
+    LOGGER.info("Reading %s", iso_path.decode("cp1252"))
 
     fp = open(iso_filename, "rb")
     info = {"name": basename.decode("cp1252"), "path": iso_filename}

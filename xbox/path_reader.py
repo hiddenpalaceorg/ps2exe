@@ -84,7 +84,7 @@ class XboxStfsPathReader(XboxPathReader):
         return None
 
     def get_file_path(self, file):
-        return file.path.decode()
+        return file.path.decode(errors="replace")
 
     def get_file_hash(self, file, algo):
         hash = algo()
