@@ -632,6 +632,9 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             xdbf_addr = resource_info.ValueAddress - base_address
             pe.seek(xdbf_addr)
             xdbf_data = io.BytesIO(pe.read(resource_info.ResourceSize))
+            if len(xdbf_data.read(1)) != 1:
+                return result
+            xdbf_data.seek(0)
             from .utils.xdbf import XDBF
             xdbf = XDBF(xdbf_data)
             try:
