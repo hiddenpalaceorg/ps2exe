@@ -44,7 +44,7 @@ class XboxIsoProcessor(BaseIsoProcessor):
                 file_path_lower.endswith(".exe")
             ) and not file_path_lower.endswith("dashupdate.xbe"):
                 if not (exe_info := self._parse_exe(file_path)):
-                    return
+                    continue
                 self.ignored_paths.append(re.compile(rf"^{re.escape(file_path_lower)}$", re.IGNORECASE))
                 if exe_info.get("header_title") in ["CDX", "Installer"]:
                     LOGGER.info("Found installer or CDX xbe, ignoring and finding another XBE")
