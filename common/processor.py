@@ -92,7 +92,7 @@ class BaseIsoProcessor:
                 # Also look for EXE files if they have an xex header
                 elif file_path.lower().endswith(".exe"):
                     with iso_path_reader.open_file(file) as f:
-                        if f.read(4) == b'XEX2':
+                        if f.read(4) in [b"XEX2", b"XEX1", b"XEX%", b"XEX-", b"XEX?"]:
                             return "xbox360"
 
         pvd = iso_path_reader.get_pvd()
