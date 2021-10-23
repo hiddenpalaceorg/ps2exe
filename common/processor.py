@@ -211,7 +211,7 @@ class BaseIsoProcessor:
         hashes_excluding_ignored = hashlib.md5()
         for file, file_hash in sorted(file_hashes.items()):
             all_hashes.update(file_hash)
-            if self.ignored_paths and any(regex.match(file) for regex in self.ignored_paths):
+            if self.ignored_paths and not any(regex.match(file) for regex in self.ignored_paths):
                 hashes_excluding_ignored.update(file_hash)
 
         return {
