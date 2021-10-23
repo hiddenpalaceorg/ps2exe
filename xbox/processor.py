@@ -310,7 +310,7 @@ class XEX2ResourceInfo(ctypes.BigEndianStructure):
 
 class Xbox360IsoProcessor(XboxIsoProcessor):
     ignored_paths = [
-        re.compile(".*\$SystemUpdate$", re.IGNORECASE),
+        re.compile(".*\$SystemUpdate\/.*", re.IGNORECASE),
         re.compile(".*nxeart$", re.IGNORECASE),
         re.compile(".*AvatarAssetPack$", re.IGNORECASE),
         re.compile(".*\.xex$", re.IGNORECASE),
