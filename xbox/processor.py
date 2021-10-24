@@ -315,6 +315,8 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
         re.compile(".*AvatarAssetPack$", re.IGNORECASE),
         re.compile(".*\.xex$", re.IGNORECASE),
         re.compile(".*readme.html$", re.IGNORECASE),
+        re.compile(".*AvatarAssetPack$", re.IGNORECASE),
+        re.compile(".*AvatarAwards$", re.IGNORECASE),
     ]
 
     XEX2_HEADER_RESOURCE_INFO = 0x2FF
