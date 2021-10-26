@@ -42,7 +42,7 @@ class XboxIsoProcessor(BaseIsoProcessor):
             if (file_path_lower.endswith(".xbe") or
                 file_path_lower.endswith(".xex") or
                 file_path_lower.endswith(".exe")
-            ) and not file_path_lower.endswith("dashupdate.xbe"):
+            ) and not file_path_lower.endswith("dashupdate.xbe") and not '$systemupdate/' in file_path_lower:
                 if not (exe_info := self._parse_exe(file_path)):
                     continue
                 self.ignored_paths.append(re.compile(rf"^{re.escape(file_path_lower)}$", re.IGNORECASE))
