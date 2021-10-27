@@ -10,3 +10,6 @@ class DirectoryEntry:
         self.right_subtree_offset *= 4
         self.offset = volume.volume_base_offset + (self.start_sector * volume.sector_size)
         self.file_name = fp.read(file_name_size).decode()
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__

@@ -43,11 +43,16 @@ class Directory:
                         dir = Directory(self.fp, self.volume, root.start_sector, root.file_name, root.size, self.path)
                     except ValueError:
                         continue
-                    self.directories.append(dir)
+                    if dir not in self.directories:
+                        self.directories.append(dir)
             else:
                 root.path = "/" + "/".join(filter(None, [self.path, root.file_name]))
-                self.entries.append(root)
+                if root not in self.entries:
+                    self.entries.append(root)
 
             if root.right_subtree_offset and root.right_subtree_offset + 0xD < self.size:
                 root = DirectoryEntry(self.fp, self.volume, self.offset + root.right_subtree_offset)
                 s.append(root)
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
