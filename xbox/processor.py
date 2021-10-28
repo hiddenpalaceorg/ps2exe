@@ -67,6 +67,8 @@ class XboxIsoProcessor(BaseIsoProcessor):
         return {}
 
     def _parse_exe(self, exe_filename):
+        if exe_filename.endswith("xex"):
+            return Xbox360IsoProcessor(self.iso_path_reader, self.filename, self.system_type)._parse_exe(exe_filename)
         LOGGER.info("Parsing xbe file headers. xbe name: %s", exe_filename)
         try:
             result = {}
@@ -539,6 +541,8 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                     lxzd_path = os.path.join(lxzd_path, "win64", "lzxd.exe")
             elif sys.platform == "linux":
                 lxzd_path = os.path.join(lxzd_path, "linux", "lzxd")
+            elif sys.platform.startswith("freebsd"):
+                lxzd_path = os.path.join(lxzd_path, "freebsd", "lzxd")
 
             LOGGER.debug("Decompressing xex using lzxd")
             p = subprocess.Popen([lxzd_path, str(decompressed_size), "-", "-"], stdin=subprocess.PIPE,
@@ -548,6 +552,8 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             return io.BytesIO(xex_pe)
 
     def _parse_exe(self, exe_filename):
+        if exe_filename.endswith("xbe"):
+            return super()._parse_exe(exe_filename)
         LOGGER.info("Parsing xex file headers. xex name: %s", exe_filename)
         result = {}
         with self.iso_path_reader.open_file(self.iso_path_reader.get_file(exe_filename)) as f:

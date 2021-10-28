@@ -82,10 +82,17 @@ def process_path(path, disable_contents_checksum, allowed_extensions):
         "gdi",
         "raw",
         "cdi",
+        "exe",
+        "nfo",
+        "sfv",
+        "r\d\d",
     }
     disallowed_extensions = "|".join(disallowed_extensions - set(allowed_extensions))
     ignored_filenames = {
-        "ip.bin"
+        "ip.bin",
+        "ss.bin",
+        "pfi.bin",
+        "dmi.bin",
     }
     ignored_filenames = "|".join(ignored_filenames)
     if re.search(
@@ -236,7 +243,8 @@ if __name__ == '__main__':
         max_n = 2000000
 
         for root, dirnames, filenames in os.walk(args.input_dir):
-            for filename in filenames:
+            dirnames.sort()
+            for filename in sorted(filenames):
                 path = os.path.join(root, filename)
                 if path in existing_files:
                     continue
