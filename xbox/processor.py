@@ -670,7 +670,7 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
                 if f.read(4) == b"LIVE":
                     f.seek(0)
                     stfs = STFS(filename=None, fd=f)
-                    if stfs.content_type != 0xD0000:
+                    if stfs.content_type not in [0xD0000, 0x80000]:
                         continue
                     iso_path_reader = XboxStfsPathReader(stfs, iso_path_reader.fp)
                     break
