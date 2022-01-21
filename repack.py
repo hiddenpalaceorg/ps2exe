@@ -49,6 +49,7 @@ allowed_extensions = [
     ".raw",
     ".txt",
     ".log",
+    ".bca",
     ".zip",
 ]
 
