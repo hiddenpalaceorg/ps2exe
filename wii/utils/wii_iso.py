@@ -19,6 +19,7 @@ class WiiISO(GamecubeISO):
     def __init__(self):
         super().__init__()
         self.partition = None
+        self.disc = None
 
     @classmethod
     def from_disc(cls, iso: Path, disc: Disc):
@@ -36,6 +37,7 @@ class WiiISO(GamecubeISO):
     def init_from_partition(self, iso: Path, part: Partition):
         self.isoPath = iso
         self.partition = part
+        self.disc = part.disc
 
         part.seek(0)
         self.bootheader = Boot(part)

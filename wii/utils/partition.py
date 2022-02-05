@@ -32,6 +32,7 @@ LOGGER = logging.getLogger(__name__)
 # Some magic locations :)
 TITLE_KEY_OFFSET = 0x1BF
 TITLE_ID_OFFSET = 0x1DC
+H3_TABLE_OFFSET = 0x2B4
 DATA_START_OFFSET = 0x2B8
 DATA_SIZE_OFFSET = 0x2BC
 
@@ -128,6 +129,16 @@ class Partition(object):
 
         encrypted_title_key = header[TITLE_KEY_OFFSET:TITLE_KEY_OFFSET + 0x10]
         title_id = header[TITLE_ID_OFFSET:TITLE_ID_OFFSET + 0x8]
+
+        if not self.disc.disable_encryption:
+            self.h3_table_start =  header[H3_TABLE_OFFSET:H3_TABLE_OFFSET + 4]
+            self.h3_table_start = struct.unpack(">L", self.h3_table_start)[0]
+            self.h3_table_start *= 4
+
+            self.h3_table = self.read_raw(self.h3_table_start, 0x18000)
+            self.h3_table = self.h3_table.rstrip(b'\x00')
+
+            self.h3_hashes = [self.h3_table[i:i + 20] for i in range(0, len(self.h3_table), 20)]
 
         self.data_start = header[DATA_START_OFFSET:DATA_START_OFFSET + 4]
         self.data_start = struct.unpack(">L", self.data_start)[0]

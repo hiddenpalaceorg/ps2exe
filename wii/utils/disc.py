@@ -41,6 +41,11 @@ class Disc(object):
         Initializes a disc object from an open file descriptor.
         """
         self.fp = fp
+        (self.game_id, self.disc_num, self.disc_version,
+         self.audio_streaming, self.streaming_buffer_size,
+         self.wii_magic, self.title, self.disable_hash_verification,
+         self.disable_encryption) = struct.unpack("6sbb?b14xI4x64s??", self.read(0, 0x62))
+        self.title = self.title.rstrip(b'\x00')
         self._read_vg_table()
 
     def read(self, offset, size):

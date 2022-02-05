@@ -28,7 +28,11 @@ class WiiPathReader(GamecubePathReader):
 
         while size_left > 0:
             chunk_size = min(65535, size_left)
-            chunk = self.iso.partition.read(chunk_size)
+            try:
+                chunk = self.iso.partition.read(chunk_size)
+            except ValueError:
+                LOGGER.warning("File %s cannot fully be read, possibly corrupt iso", file.path)
+                return
             hash.update(chunk)
             size_left -= chunk_size
         return hash
