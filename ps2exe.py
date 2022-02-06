@@ -98,7 +98,7 @@ def process_path(path, disable_contents_checksum, allowed_extensions):
     }
     ignored_filenames = "|".join(ignored_filenames)
     if re.search(
-            rf"[Tt]rack ?(?:\d?[2-9]|[1-9]\d+)\)?\.(?:bin|iso)|({ignored_filenames})|\.({disallowed_extensions})",
+            rf"[Tt]rack ?(?:\d?[2-9]|[1-9]\d+)\)?\.(?:bin|iso)$|({ignored_filenames})$|\.({disallowed_extensions})$",
             path,
             re.IGNORECASE):
         return
