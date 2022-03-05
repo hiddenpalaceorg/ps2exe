@@ -15,8 +15,13 @@ class WiiIsoProcessor(GamecubeIsoProcessor):
 
     def get_extra_fields(self):
         fields = super().get_extra_fields()
+
+        try:
+            h3_hashes_sorted = sorted(self.iso_path_reader.iso.partition.h3_hashes)
+        except AttributeError:
+            return fields
+
         h3_hash_together = hashlib.md5()
-        h3_hashes_sorted = sorted(self.iso_path_reader.iso.partition.h3_hashes)
         h3_hash_together.update(b''.join(h3_hashes_sorted))
         fields["alt_all_files_hash"] = h3_hash_together.hexdigest()
 
