@@ -353,9 +353,10 @@ class ScrambledFile(MmappedFile):
         if data == b"\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00":
             return (True, 128)
 
-        # Other CDI rips (including some redump discs) are partially scrambled, but do not have any data offset
+        # Check for discs that are scrambled but not offset.
         fp.seek(0x9319)
-        if bytes(bytearray(v ^ [0x02, 0xFE, 0x81, 0x80, 0x60][k] for k, v in enumerate(fp.read(5)))) == b"CD-I ":
+        ident = bytes(bytearray(v ^ [0x02, 0xFE, 0x81, 0x80, 0x60][k] for k, v in enumerate(fp.read(5))))
+        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
             return (True, 0)
 
         return False, None

@@ -72,7 +72,6 @@ def process_path(path, disable_contents_checksum, allowed_extensions):
         "dat",
         "json",
         "c2",
-        "scm",
         "7z",
         "rar",
         "zip",
