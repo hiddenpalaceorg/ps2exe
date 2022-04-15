@@ -71,9 +71,9 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--log", dest="logLevel", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                         help="Set the logging level", default="INFO")
 
-    group = parser.add_mutually_exclusive_group(required=True)
+    group = parser.add_mutually_exclusive_group(required=False)
 
-    group.add_argument("input_dir", nargs="?")
+    group.add_argument("input_dir", nargs="?", default=os.getcwd())
 
     group.add_argument('-f',
                        '--file',
