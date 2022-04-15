@@ -10,6 +10,7 @@ class Directory:
 
     def __init__(self, fp, volume, loc, name, size, parent_name=''):
         # First try to seek to the offset, if this fails, bubble up
+        self.start_sector = loc
         self.offset = volume.volume_base_offset + (loc * volume.sector_size)
         fp.seek(self.offset)
 

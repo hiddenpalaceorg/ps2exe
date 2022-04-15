@@ -9,13 +9,19 @@ class GamecubePathReader(IsoPathReader):
     def get_root_dir(self):
         return self.iso.rootnode
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         for entry in base_dir.files:
             yield entry
 
         if not recursive:
+            if include_dirs:
+                for dir in base_dir.dirs:
+                    yield dir
             return
+
         for dir in base_dir.dirs:
+            if include_dirs:
+                yield dir
             yield from self.iso_iterator(dir, recursive)
 
     def get_file(self, path):
@@ -58,6 +64,14 @@ class GamecubePathReader(IsoPathReader):
             hash.update(chunk)
             size_left -= chunk_size
         return hash
+
+    def get_file_sector(self, file):
+        if file._fileoffset:
+            return file._fileoffset // 2048
+        return 0
+
+    def is_directory(self, file):
+        return file.is_dir()
 
     def get_pvd(self):
         return {}

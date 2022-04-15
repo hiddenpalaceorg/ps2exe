@@ -192,14 +192,14 @@ class BaseIsoProcessor:
             "md5": md5,
         }
 
-    def get_file_hashes(self):
+    def get_file_hashes(self, hash_type=xxhash.xxh64):
         file_hashes = {}
         root = self.iso_path_reader.get_root_dir()
         file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
         for file in progressbar.progressbar(file_list):
             file_path = self.iso_path_reader.get_file_path(file)
 
-            if file_hash := self.iso_path_reader.get_file_hash(file, xxhash.xxh64):
+            if file_hash := self.iso_path_reader.get_file_hash(file, hash_type):
                 file_hashes[file_path] = file_hash.digest()
         return file_hashes
 

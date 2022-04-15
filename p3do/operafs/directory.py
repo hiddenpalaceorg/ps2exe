@@ -28,6 +28,7 @@ class Directory:
                 if entry.flags & DirectoryEntry.FLAG_DIRECTORY == DirectoryEntry.FLAG_DIRECTORY:
                     directory = Directory(fp, entry.copy_offset * 2048, entry.file_name, self.path)
                     self.directories.append(directory)
+                    self.entries.append(entry)
                 elif entry.flags & DirectoryEntry.FLAG_FILE == DirectoryEntry.FLAG_FILE:
                     entry.path = "/" + "/".join(filter(None, [self.path, entry.file_name]))
                     self.entries.append(entry)

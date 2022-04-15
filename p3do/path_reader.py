@@ -7,8 +7,10 @@ class P3doPathReader(IsoPathReader):
     def get_root_dir(self):
         return self.iso.superblock.root.root_copies[0]
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         for entry in base_dir.entries:
+            if self.is_directory(entry) and not include_dirs:
+                continue
             yield entry
 
         if not recursive:
@@ -40,6 +42,12 @@ class P3doPathReader(IsoPathReader):
             hash.update(chunk)
             size_left -= chunk_size
         return hash
+
+    def get_file_sector(self, file):
+        return file.copy_offset
+
+    def is_directory(self, file):
+        return file.flags == file.FLAG_DIRECTORY
 
     def get_pvd(self):
         return self.iso.superblock.volume

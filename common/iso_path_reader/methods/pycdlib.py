@@ -17,7 +17,7 @@ class PyCdLibPathReader(IsoPathReader):
         else:
             return self.iso.get_record(iso_path="/")
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         for file in _yield_children(base_dir) if not self.udf else base_dir.fi_descs:
             if self.udf:
                 file = file.file_entry
@@ -27,6 +27,8 @@ class PyCdLibPathReader(IsoPathReader):
 
             if file.is_dir():
                 if recursive:
+                    if include_dirs:
+                        yield file
                     yield from self.iso_iterator(file, recursive)
                 continue
 
@@ -40,6 +42,15 @@ class PyCdLibPathReader(IsoPathReader):
 
     def get_file_date(self, file):
         return datetime_from_iso_date(file.date if not self.udf else file.mod_time)
+
+    def get_file_size(self, file):
+        return file.data_length
+
+    def get_file_sector(self, file):
+        return file.orig_extent_loc
+
+    def is_directory(self, file):
+        return file.is_dir()
 
     def get_file(self, path):
         if path[0] != "/":

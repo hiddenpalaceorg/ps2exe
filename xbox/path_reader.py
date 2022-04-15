@@ -9,13 +9,15 @@ class XboxPathReader(IsoPathReader):
     def get_root_dir(self):
         return self.iso.root
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         for entry in base_dir.entries:
             yield entry
 
         if not recursive:
             return
         for dir in base_dir.directories:
+            if include_dirs:
+                yield dir
             yield from self.iso_iterator(dir, recursive)
 
     def get_file(self, path):
@@ -58,6 +60,12 @@ class XboxPathReader(IsoPathReader):
             hash.update(chunk)
             size_left -= chunk_size
         return hash
+
+    def get_file_sector(self, file):
+        return file.start_sector
+
+    def is_directory(self, file):
+        return file.__class__.__name__ == 'Directory'
 
     def get_pvd(self):
         return {}

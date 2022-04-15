@@ -9,7 +9,7 @@ class IsoPathReader:
     def get_root_dir(self):
         raise NotImplementedError
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         raise NotImplementedError
 
     def get_file(self, path):
@@ -29,6 +29,15 @@ class IsoPathReader:
 
     def get_pvd(self):
         raise NotImplementedError
+
+    def get_file_sector(self, file):
+        raise NotImplementedError
+
+    def is_directory(self, file):
+        raise NotImplementedError
+
+    def get_file_size(self, file):
+        return file.size
 
     def get_pvd_info(self):
         pvd = self.get_pvd()

@@ -10,14 +10,14 @@ class PathlabPathReader(IsoPathReader):
     def get_root_dir(self):
         return self.iso.IsoPath("/")
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         if recursive:
             method = base_dir.rglob
         else:
             method = base_dir.glob
 
         for file in method("*"):
-            if file.is_dir():
+            if file.is_dir() and not include_dirs:
                 continue
 
             yield file
@@ -43,6 +43,15 @@ class PathlabPathReader(IsoPathReader):
             while chunk := f.read(65535):
                 hash.update(chunk)
         return hash
+
+    def get_file_size(self, file):
+        return file.stat().size
+
+    def get_file_sector(self, file):
+        return self.iso._load_record(file)['sector']
+
+    def is_directory(self, file):
+        return file.is_dir()
 
     def get_pvd(self):
         return self.pvd

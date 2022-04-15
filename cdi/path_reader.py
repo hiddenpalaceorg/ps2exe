@@ -7,10 +7,13 @@ class CdiPathReader(IsoPathReader):
     def get_root_dir(self):
         return self.iso.path_tbl
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         for directory in base_dir:
             for file in directory.contents:
-                if file.name == b"\x00" or file.name == b"\x01" or file.attributes.directory:
+                if file.name == b"\x00" or file.name == b"\x01":
+                    continue
+
+                if file.attributes.directory and not include_dirs:
                     continue
 
                 dir_name = b"/" + directory.name
@@ -54,6 +57,12 @@ class CdiPathReader(IsoPathReader):
             lbn += 1
             size_left -= block.data_size
         return hash
+
+    def get_file_sector(self, file):
+        return file.first_lbn
+
+    def is_directory(self, file):
+        return file.flags & file.FLAG_DIRECTORY
 
     def get_pvd(self):
         return self.iso.disclabels[0]

@@ -3,12 +3,12 @@ import csv
 import io
 import logging
 import os
-import re
 import sys
 
 from common.factory import IsoProcessorFactory
 from common.processor import BaseIsoProcessor
 from patches import apply_patches
+from utils.common import is_path_allowed
 
 try:
     import pycdlib
@@ -54,64 +54,6 @@ def get_iso_info(iso_filename, disable_contents_checksum):
     fp.close()
 
     return info
-
-
-def process_path(path, disable_contents_checksum, allowed_extensions):
-    disallowed_extensions ={
-        "html",
-        "htm",
-        "jpeg",
-        "jpg",
-        "png",
-        "bmp",
-        "gif",
-        "txt",
-        "cue",
-        "ccd",
-        "sub",
-        "dat",
-        "json",
-        "c2",
-        "7z",
-        "rar",
-        "zip",
-        "part",
-        "wav",
-        "mp3",
-        "gdi",
-        "raw",
-        "cdi",
-        "exe",
-        "nfo",
-        "sfv",
-        "sha1",
-        "md5",
-        "r\d\d",
-    }
-    disallowed_extensions = "|".join(disallowed_extensions - set(allowed_extensions))
-    ignored_filenames = {
-        "ip.bin",
-        "ss.bin",
-        "pfi.bin",
-        "dmi.bin",
-    }
-    ignored_filenames = "|".join(ignored_filenames)
-    if re.search(
-            rf"[Tt]rack ?(?:\d?[2-9]|[1-9]\d+)\)?\.(?:bin|iso)$|({ignored_filenames})$|\.({disallowed_extensions})$",
-            path,
-            re.IGNORECASE):
-        return
-
-    size = os.path.getsize(path)
-
-    # Allow bin/iso files to be any size (to detect Dreamcast games via track 1 which can be very small)
-    if not re.search(r"\.(iso|bin)", path, re.IGNORECASE) and size < 1024 * 1024 * 2:
-        return
-
-    try:
-        return get_iso_info(path, disable_contents_checksum)
-    except Exception:
-        LOGGER.exception("Error reading %s", path)
 
 
 csv_headers = (
@@ -235,10 +177,13 @@ if __name__ == '__main__':
                 csv_file.seek(0, os.SEEK_END)
 
     if args.file:
-        if args.file not in existing_files:
-            result = process_path(args.file, args.no_contents_checksum, args.allow_extensions)
-            if result:
-                writer.writerow(result)
+        if args.file not in existing_files and is_path_allowed(args.file):
+            try:
+                result = get_iso_info(args.file, args.no_contents_checksum)
+                if result:
+                    writer.writerow(result)
+            except Exception:
+                LOGGER.exception("Error reading %s", args.file)
     elif args.input_dir:
         i = 0
         max_n = 2000000
@@ -249,10 +194,16 @@ if __name__ == '__main__':
                 path = os.path.join(root, filename)
                 if path in existing_files:
                     continue
-                result = process_path(path, args.no_contents_checksum, args.allow_extensions)
-                if result:
-                    writer.writerow(result)
-                    csv_file.flush()
+                if not is_path_allowed(path):
+                    continue
+                try:
+                    result = get_iso_info(path, args.no_contents_checksum)
+                    if result:
+                        writer.writerow(result)
+                        csv_file.flush()
+                except Exception:
+                    LOGGER.exception("Error reading %s", args.file)
+
                 i += 1
 
                 if i > max_n:
