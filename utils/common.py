@@ -2,7 +2,7 @@ import os
 import re
 
 
-def is_path_allowed(path, allowed_extensions=None):
+def is_path_allowed(path, allowed_extensions=None, archive_entry=None):
     if allowed_extensions is None:
         allowed_extensions = []
 
@@ -35,7 +35,12 @@ def is_path_allowed(path, allowed_extensions=None):
         "sfv",
         "sha1",
         "md5",
+        "par2",
+        "pdf",
+        "tif",
+        "avi",
         "r\d\d",
+        "dctmp",
     }
     disallowed_extensions = "|".join(disallowed_extensions - set(allowed_extensions))
     ignored_filenames = {
@@ -51,10 +56,13 @@ def is_path_allowed(path, allowed_extensions=None):
             re.IGNORECASE):
         return False
 
-    size = os.path.getsize(path)
+    if archive_entry:
+        size = archive_entry.file_size
+    else:
+        size = os.path.getsize(path)
 
     # Allow bin/iso files to be any size (to detect Dreamcast games via track 1 which can be very small)
-    if not re.search(r"\.(iso|bin)", path, re.IGNORECASE) and size < 1024 * 1024 * 2:
+    if not re.search(r"\.(iso|bin)$", path, re.IGNORECASE) and size < 1024 * 1024 * 2:
         return False
 
     return True

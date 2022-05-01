@@ -17,6 +17,7 @@ enlighten = "*"
 pyisotools = "*"
 methodtools = "*"
 machfs = "*"
+rarfile = "*"
 
 [requires]
 python_version = "3.8"

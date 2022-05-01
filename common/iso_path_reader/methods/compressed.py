@@ -1,6 +1,5 @@
 import datetime
 import io
-from collections import namedtuple
 
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
@@ -11,20 +10,13 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
         super().__init__(iso, fp)
         self.files = {}
         self.entries = {}
-        from libarchive import ArchiveEntry
-        ArchiveEntryCopy = namedtuple(
-            "ArchiveEntryCopy",
-            [field for field in dir(ArchiveEntry) if not field.startswith("_")]
-        )
         for entry in iso:
-            if entry.isdir:
+            if entry.is_dir:
                 continue
-            self.entries[entry.path] = ArchiveEntryCopy(
-                *[getattr(entry, field) for field in dir(entry) if not field.startswith("_")]
-            )
-            self.files[entry.path] = io.BytesIO()
-            for block in entry.get_blocks():
-                self.files[entry.path].write(block)
+
+            self.entries[entry.path] = entry
+            with entry.open() as f:
+                self.files[entry.path] = io.BytesIO(f.read())
             self.files[entry.path].seek(0)
 
     def get_root_dir(self):
@@ -51,15 +43,21 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
         return file.file_size
 
     def open_file(self, file):
-        with self.files[file.path] as f:
+        path = self.get_file_path(file)
+        with self.files[path] as f:
             f.seek(0)
             f.close = lambda: None
+        return self.files[path]
 
-        return self.files[file.path]
 
     # noinspection PyRedeclaration
     def get_file_date(self, file):
-        return datetime.datetime.fromtimestamp(self.entries[file.path].mtime, tz=datetime.timezone.utc)
+        path = self.get_file_path(file)
+        if getattr(self.entries[path], "date_time", None):
+            return datetime.datetime(*file.date_time, tzinfo=datetime.timezone.utc)
+        if isinstance(self.entries[path].mtime, datetime.datetime):
+            return self.entries[path].mtime
+        return datetime.datetime.fromtimestamp(self.entries[path].mtime, tz=datetime.timezone.utc)
 
     def get_pvd_info(self):
         return {}
