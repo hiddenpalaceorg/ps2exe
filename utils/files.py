@@ -1,12 +1,16 @@
 import logging
 import mmap
 import os
+from io import UnsupportedOperation
 
 from utils.unscambler import unscramble_data, lookup_table
 
 LOGGER = logging.getLogger(__name__)
 
 class BaseFile:
+    def seekable(self):
+        return True
+
     def seek(self, pos, whence=os.SEEK_SET):
         LOGGER.debug(f"seek {pos} {whence}")
         if whence == os.SEEK_SET:
@@ -23,9 +27,13 @@ class BaseFile:
         return len(self)
 
     def peek(self, n):
+        if n is None or n < 0:
+            n = self.length() - self.pos
         return self._get_data(n)
 
-    def read(self, n):
+    def read(self, n=None):
+        if n is None or n < 0:
+            n = self.length() - self.pos
         ret = self._get_data(n)
         self.pos += n
         return ret
@@ -136,13 +144,14 @@ class BinWrapper(BaseFile):
     def __init__(self, fp, sector_size = None, sector_offset = None):
         self.file = fp.name
 
-        self.is_scrambled, data_offset = ScrambledFile.test_scrambled(fp)
-        if self.is_scrambled:
-            self.mmap = ScrambledFile(fp, data_offset)
-        elif not isinstance(fp, MmappedFile):
+        if not isinstance(fp, MmappedFile):
             self.mmap = MmappedFile(fp)
         else:
             self.mmap = fp
+
+        self.is_scrambled, data_offset = ScrambledFile.test_scrambled(self.mmap)
+        if self.is_scrambled:
+            self.mmap = ScrambledFile(self.mmap, data_offset)
 
         if not LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug = lambda x: x
@@ -367,23 +376,24 @@ class BinWrapper(BaseFile):
         raise BinWrapperException("Cannot detect sector size, is this a disc image?")
 
 
-class ScrambledFile(MmappedFile):
-    def __init__(self, fp, offset):
+class ScrambledFile(BaseFile):
+    def __init__(self, mmap, offset):
         self.offset = offset
-        super().__init__(fp)
+        self.mmap = mmap
 
     def seek(self, pos, whence=os.SEEK_SET):
-        return super().seek(pos+self.offset, whence)
+        return self.mmap.seek(pos+self.offset, whence)
 
     def tell(self):
-        return super().tell() - self.offset
+        return self.mmap.tell() - self.offset
 
     def peek(self, n=-1):
-        actual_pos = super().tell()
-        return unscramble_data(super().peek(n), actual_pos)
+        actual_pos = self.mmap.tell()
+        return unscramble_data(self.mmap.peek(n), actual_pos)
 
     def read(self, n=-1):
-        return super().read(n)
+        actual_pos = self.mmap.tell()
+        return unscramble_data(self.mmap.read(n), actual_pos)
 
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -392,7 +402,10 @@ class ScrambledFile(MmappedFile):
         else:
             actual_pos = item
             item += self.offset
-        return unscramble_data(super().__getitem__(item), actual_pos)
+        return unscramble_data(self.mmap.__getitem__(item), actual_pos)
+
+    def close(self):
+        self.mmap.close()
 
     @staticmethod
     def test_scrambled(fp):

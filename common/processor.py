@@ -291,6 +291,9 @@ class BaseIsoProcessor:
     def get_pvd_info(self):
         return self.iso_path_reader.get_pvd_info()
 
+    def close(self):
+        self.iso_path_reader.close()
+
 class GenericIsoProcessor(BaseIsoProcessor):
     def hash_exe(self):
         return {}

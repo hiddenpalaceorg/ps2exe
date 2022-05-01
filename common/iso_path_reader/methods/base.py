@@ -59,3 +59,6 @@ class IsoPathReader:
             info[field] = datetime_from_iso_date(getattr(pvd, field))
 
         return info
+
+    def close(self):
+        self.fp.close()

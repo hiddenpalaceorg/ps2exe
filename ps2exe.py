@@ -3,6 +3,7 @@ import csv
 import io
 import logging
 import os
+import re
 import sys
 
 import enlighten
@@ -11,6 +12,7 @@ from common.factory import IsoProcessorFactory
 from common.processor import BaseIsoProcessor
 from patches import apply_patches
 from utils.common import is_path_allowed
+from utils.archives import ArchiveWarapper
 
 try:
     import pycdlib
@@ -21,13 +23,19 @@ LOGGER = logging.getLogger(__name__)
 PROGRESS_MANAGER = enlighten.get_manager()
 
 
-def get_iso_info(iso_filename, disable_contents_checksum):
+def get_iso_info(iso_filename, disable_contents_checksum, archive_entry=None):
     iso_path = iso_filename.encode("cp1252", errors="replace")
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
     LOGGER.info("Reading %s", iso_path.decode("cp1252"))
 
-    fp = open(iso_filename, "rb")
     info = {"name": basename.decode("cp1252"), "path": iso_filename}
+
+    if not archive_entry:
+        fp = open(iso_filename, "rb")
+    else:
+        fp = archive_entry.open()
+        fp.size = archive_entry.file_size
+        info["path"] = os.path.join(archive_entry.archive.path, info["path"])
 
     if not (iso_path_reader := IsoProcessorFactory.get_iso_path_reader(fp, basename)):
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
@@ -54,6 +62,7 @@ def get_iso_info(iso_filename, disable_contents_checksum):
 
     info.update(iso_processor.get_extra_fields())
 
+    iso_processor.close()
     fp.close()
 
     return info
@@ -143,6 +152,11 @@ if __name__ == '__main__':
                        nargs='+',
                        default=[])
 
+    parser.add_argument('--archives-as-folder',
+                       help="Tread compressed archives as if they were folders, processing each file individually",
+                       action='store_true',
+                       default=False)
+
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.logLevel))
@@ -194,10 +208,21 @@ if __name__ == '__main__':
     file_count = 0
     files = []
     if args.file:
-        if args.file not in existing_files and is_path_allowed(args.file):
-            file_count += 1
-            files.append(args.file)
-            status_bar.update()
+        if args.file not in existing_files:
+            if args.archives_as_folder and re.search(r"\.(zip|7z|rar)$", args.file, re.IGNORECASE):
+                with ArchiveWarapper(args.file) as archive:
+                    for entry in archive:
+                        if os.path.join(args.file, entry.path) in existing_files:
+                            continue
+                        if not is_path_allowed(entry.path, args.allow_extensions, entry):
+                            continue
+                        file_count += 1
+                    files.append(args.file)
+                    status_bar.update()
+            elif is_path_allowed(args.file, args.allow_extensions):
+                file_count += 1
+                files.append(args.file)
+                status_bar.update()
     elif args.input_dir:
         max_n = 2000000
 
@@ -206,10 +231,21 @@ if __name__ == '__main__':
             dirnames.sort()
             for filename in sorted(filenames):
                 path = os.path.join(root, filename)
+                if args.archives_as_folder and re.search(r"\.(zip|7z|rar)$", path, re.IGNORECASE):
+                    with ArchiveWarapper(path) as archive:
+                        for entry in archive:
+                            if os.path.join(path, entry.path) in existing_files:
+                                continue
+                            if not is_path_allowed(entry.path, args.allow_extensions, entry):
+                                continue
+                            status_bar.update()
+                            file_count += 1
+                        files.append(path)
                 if path in existing_files:
                     continue
-                if not is_path_allowed(path):
+                if not is_path_allowed(path, args.allow_extensions):
                     continue
+
                 file_count += 1
                 files.append(path)
                 status_bar.update()
@@ -219,6 +255,7 @@ if __name__ == '__main__':
 
             if file_count > max_n:
                 break
+
     status_bar.counter_format = PROGRESS_MANAGER.term.bold_underline_bright_white_on_lightslategray(
         "PS2EXE {version} {fill}Current Game: {game_name} ({count}/{games}){fill}{elapsed}"
     )
@@ -234,6 +271,28 @@ if __name__ == '__main__':
             oldest_bar[0].leave = False
             oldest_bar[0].close()
 
+        if args.archives_as_folder and re.search(r"\.(zip|7z|rar)$", path, re.IGNORECASE):
+            LOGGER.info("Reading %s", path)
+            with ArchiveWarapper(path, pbar=PROGRESS_MANAGER) as archive:
+                for entry in archive:
+                    if os.path.join(path, entry.path) in existing_files:
+                        continue
+                    if not is_path_allowed(entry.path, args.allow_extensions, entry):
+                        continue
+                    status_bar.update(game_name=os.path.basename(entry.path))
+                    try:
+                        result = get_iso_info(entry.path, args.no_contents_checksum, entry)
+                        if result:
+                            writer.writerow(result)
+                            csv_file.flush()
+
+                            bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+                            bar.desc = os.path.basename(entry.path)
+                            bar.refresh()
+                    except Exception:
+                        LOGGER.exception("Error reading %s", args.file)
+                        entry.close()
+                    continue
         if path in existing_files:
             continue
         if not is_path_allowed(path, args.allow_extensions):
@@ -250,4 +309,3 @@ if __name__ == '__main__':
 
         except Exception:
             LOGGER.exception("Error reading %s", args.file)
-

@@ -1,7 +1,6 @@
 import io
 import logging
 import os
-import sys
 from pathlib import Path
 
 import pycdlib
@@ -33,7 +32,8 @@ from ps3.processor import Ps3IsoProcessor
 from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from p3do.operafs import OperaFs
-from utils.files import BinWrapper
+from utils.archives import ArchiveWarapper
+from utils.files import BinWrapper, MmappedFile
 from wii.path_reader import WiiPathReader
 from wii.processor import WiiIsoProcessor
 from wii.utils.wii_iso import WiiISO
@@ -43,27 +43,6 @@ from xbox.processor import XboxIsoProcessor, Xbox360IsoProcessor, XboxLiveProces
 from xbox.stfs.stfs import STFS
 from xbox.xdvdfs.xdvdfs import XDvdFs
 
-try:
-    import libarchive
-except OSError:
-    if os.name == "nt":
-        os.environ["LIBARCHIVE"] = "./libarchive.dll"
-    import libarchive
-except TypeError:
-    libarchive_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "libarchive")
-    if os.name == "nt":
-        if sys.maxsize > 2**32:
-            libarchive_path = os.path.join(libarchive_path, "win64", "libarchive.dll")
-        else:
-            libarchive_path = os.path.join(libarchive_path, "win32", "libarchive.dll")
-    elif sys.platform == "linux":
-        libarchive_path = os.path.join(libarchive_path, "linux", "libarchive.so")
-    elif sys.platform == "darwin":
-        libarchive_path = os.path.join(libarchive_path, "macosx", "libarchive.dylib")
-
-    os.environ["LIBARCHIVE"] = libarchive_path
-    import libarchive
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -72,7 +51,7 @@ class IsoProcessorFactory:
     def get_iso_path_reader(fp, file_name):
         file_ext = os.path.splitext(file_name)[1].decode()
         if file_ext.lower() in [".7z", ".rar", ".zip"]:
-            with libarchive.file_reader(fp.name) as archive:
+            with ArchiveWarapper(fp.name) as archive:
                 return CompressedPathReader(archive, fp)
 
         fp.seek(0)
