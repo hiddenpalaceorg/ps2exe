@@ -47,7 +47,7 @@ class P3doPathReader(IsoPathReader):
         return file.copy_offset
 
     def is_directory(self, file):
-        return file.flags == file.FLAG_DIRECTORY
+        return file.flags & file.FLAG_DIRECTORY == file.FLAG_DIRECTORY
 
     def get_pvd(self):
         return self.iso.superblock.volume
