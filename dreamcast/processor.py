@@ -40,7 +40,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if tracks[0]["file_name"] != basename(iso_filename):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, i.name)
+            gdi_name = i.name.encode("cp1252", errors="replace")
+            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name)
 
         super().__init__(iso_path_reader, iso_filename, *args)
 
