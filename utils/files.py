@@ -2,6 +2,7 @@ import logging
 import mmap
 import os
 
+from utils.mmap import FakeMemoryMap
 from utils.unscambler import unscramble_data, lookup_table
 
 LOGGER = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class BaseFile:
 class MmappedFile(BaseFile):
     def __init__(self, fp):
         self.post_read_func = None
-        if isinstance(fp, mmap.mmap):
+        if isinstance(fp, (mmap.mmap, FakeMemoryMap)):
             self.mmap = fp
             self.name = None
         else:
