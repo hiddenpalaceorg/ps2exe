@@ -1,5 +1,6 @@
 import logging
 import mmap
+import re
 from os.path import basename
 
 from post_psx.processor import PostPsxIsoProcessor
@@ -9,7 +10,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PspIsoProcessor(PostPsxIsoProcessor):
-    update_folder = "/PSP_GAME/SYSDIR/UPDATE/"
+
+    update_folder = re.compile(".*/PSP_GAME/SYSDIR/UPDATE/$", re.IGNORECASE)
     sfo_path = "/PSP_GAME/PARAM.SFO"
 
     def __init__(self, iso_path_reader, *args):
@@ -59,8 +61,8 @@ class PspIsoProcessor(PostPsxIsoProcessor):
             "sfo_parental_level": params.get("PARENTAL_LEVEL"),
             "sfo_psp_system_version": params.get("PSP_SYSTEM_VER"),
             "sfo_title": params.get("TITLE"),
-            "alt_exe_filename": alt_exe_hash["exe_filename"],
-            "alt_exe_date": alt_exe_hash["exe_date"],
-            "alt_md5": alt_exe_hash["md5"],
+            "alt_exe_filename": alt_exe_hash.get("exe_filename"),
+            "alt_exe_date": alt_exe_hash.get("exe_date"),
+            "alt_md5": alt_exe_hash.get("md5"),
         }
 
