@@ -149,7 +149,7 @@ class BaseIsoProcessor:
             file_path = iso_path_reader.get_file_path(file)
             if hex_pattern.match(file_path):
                 with iso_path_reader.open_file(file) as f:
-                    if f.read(4) == b"LIVE":
+                    if f.read(4) in [b"LIVE", b"PIRS"]:
                         return "xbla"
 
 

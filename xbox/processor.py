@@ -671,7 +671,7 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
             if hex_pattern.match(file_path):
                 f = iso_path_reader.open_file(file)
                 f.__enter__()
-                if f.read(4) == b"LIVE":
+                if f.read(4) in [b"LIVE", b"PIRS"]:
                     f.seek(0)
                     stfs = STFS(filename=None, fd=f)
                     if stfs.content_type not in [0xD0000, 0x80000]:
