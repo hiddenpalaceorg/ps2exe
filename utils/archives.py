@@ -44,9 +44,10 @@ except rarfile.RarCannotExec:
 
 
 class ArchiveWarapper:
-    def __init__(self, path):
+    def __init__(self, path, pbar=None):
         self.path = path
         self.reader = None
+        self.pbar = pbar
         file_ext = os.path.splitext(path)[1]
         if file_ext.lower() == ".rar":
             self.ctx = rarfile.RarFile(path)
@@ -65,14 +66,14 @@ class ArchiveWarapper:
         self.ctx.__exit__(exc_type, exc_val, exc_tb)
 
     def __iter__(self):
-        return (ArchiveEntryWrapper(self, entry) for entry in self.reader)
+        return (ArchiveEntryWrapper(self, entry, pbar=self.pbar) for entry in self.reader)
 
     def __getattr__(self, item):
         return getattr(self.reader, item)
 
 
 class ArchiveEntryReader(MmappedFile, io.IOBase):
-    def __init__(self, entry, archive):
+    def __init__(self, entry, archive, pbar=None):
         self.entry = entry
         self.archive = archive
         self.pos = 0
@@ -85,6 +86,10 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
             self.mmap = FakeMemoryMap(self.fp)
             self.mmap._size = entry.file_size
         self.read_bytes = 0
+        bar_fmt = '{desc}{desc_pad}{percentage:3.0f}%|{bar}| ' \
+                  '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
+                  '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
+        self.pbar = pbar.counter(total=float(self.length()), desc="Decompressing", unit='B', leave=False, bar_format=bar_fmt)
         super().__init__(self.mmap)
 
     def length(self):
@@ -94,6 +99,7 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.pbar.close(True)
         self.mmap.close()
 
     def seek(self, pos, whence=os.SEEK_SET):
@@ -122,8 +128,11 @@ class BlockReader(ArchiveEntryReader):
                 self.fp.write(data)
                 left -= read
                 self.read_bytes += read
+                self.pbar.update(read)
                 if left <= 0:
                     break
+        if self.read_bytes == self.size and self.pbar in self.pbar.manager.counters:
+            self.pbar.close()
 
         if not discard:
             data = self.mmap[self.pos:self.pos+n]
@@ -160,8 +169,11 @@ class RarFileReader(ArchiveEntryReader):
                 self.fp.write(data)
                 size_left -= read
                 self.read_bytes += read
+                self.pbar.update(read)
                 if size_left <= 0:
                     break
+        if self.read_bytes == self.size and self.pbar in self.pbar.manager.counters:
+            self.pbar.close()
 
         if not discard:
           return super()._get_data(n)
@@ -171,6 +183,7 @@ class ArchiveEntryWrapper:
     def __init__(self, archive, entry, pbar=None):
         self.archive = archive
         self.entry = entry
+        self.pbar = pbar
         if isinstance(entry, rarfile.RarInfo):
             self.path = entry.filename
         else:
@@ -183,7 +196,7 @@ class ArchiveEntryWrapper:
 
             return RarFileReader(self.entry, self.archive)
         else:
-            return BlockReader(self, self.archive)
+            return BlockReader(self, self.archive, pbar=self.pbar)
 
     @property
     def file_size(self):
