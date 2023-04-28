@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pycdlib
+from pycdlib.pycdlibexception import PyCdlibInvalidInput
 from pyisotools.iso import GamecubeISO
 
 from cdi.path_reader import CdiPathReader
@@ -143,7 +144,12 @@ class IsoProcessorFactory:
                 return
             if hasattr(iso, "pvd") and iso.pvd.root_dir_record.children:
                 iso._initialized = True
-                return PyCdLibPathReader(iso, wrapper)
+                try:
+                    iso.get_record(iso_path="/test_path_that_does_not_exist")
+                except PyCdlibInvalidInput:
+                    return PyCdLibPathReader(iso, wrapper)
+                except:
+                    pass
             if not iso.pvds and not iso._has_udf:
                 return
             if not hasattr(iso, "pvd") and hasattr(iso, "pvds") and iso.pvds:

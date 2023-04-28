@@ -18,7 +18,7 @@ class PyCdLibPathReader(IsoPathReader):
             return self.iso.get_record(iso_path="/")
 
     def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
-        for file in _yield_children(base_dir) if not self.udf else base_dir.fi_descs:
+        for file in _yield_children(base_dir, rr=False) if not self.udf else base_dir.fi_descs:
             if self.udf:
                 file = file.file_entry
 
