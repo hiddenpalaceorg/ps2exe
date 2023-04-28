@@ -44,7 +44,7 @@ class PyCdLibPathReader(IsoPathReader):
         return datetime_from_iso_date(file.date if not self.udf else file.mod_time)
 
     def get_file_size(self, file):
-        return file.data_length
+        return file.data_length if not self.udf else file.inode.data_length
 
     def get_file_sector(self, file):
         return file.orig_extent_loc
