@@ -25,6 +25,8 @@ class Directory:
         if self.offset >= self.fp.length():
             LOGGER.warning("Directory %s outside of the bounds of this image", self.name)
             return
+        # Try to seek to the offset, if this fails, bubble up
+        self.fp.seek(self.offset)
         self.parseDirectoryRecord(self.offset)
 
     def parseDirectoryRecord(self, offset):
