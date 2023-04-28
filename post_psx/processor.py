@@ -26,7 +26,7 @@ class PostPsxIsoProcessor(BaseIsoProcessor):
         LOGGER.info("Parsing param.sfo")
         param_sfo = self.iso_path_reader.get_file(self.sfo_path)
         with self.iso_path_reader.open_file(param_sfo) as f:
-            header_raw = f.read(20)
+            header_raw = f.read(self.SFO_HEADER_BYTES)
             header = struct.unpack('<4s4BIII', header_raw)
             name_table_start = header[5]
             data_table_start = header[6]
