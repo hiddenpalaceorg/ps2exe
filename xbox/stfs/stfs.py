@@ -139,12 +139,20 @@ class STFS(object):
             readlen = min(0x1000, size)
             buf.write(self.read_block(self.fix_blocknum(block), readlen))
             size -= readlen
-            blockhash = self.get_blockhash(block)  # TODO: Optional concurrent verification of blocks
-            # If there are multiple tables and the block is free or unused, try other table
-            # TODO: There may be times where both tables show allocated blocks yet only one was correct
-            #      It would be better to calculate the best chain of blocks, perhaps precalculate like Partition
-            if self.table_size_shift > 0 and blockhash.info < 0x80:
-                blockhash = self.get_blockhash(block, 1)
+            try:
+                blockhash = self.get_blockhash(block)
+                # If there are multiple tables and the block is free or unused, try other table
+                # TODO: There may be times where both tables show allocated blocks yet only one was correct
+                #      It would be better to calculate the best chain of blocks, perhaps precalculate like Partition
+                if self.table_size_shift > 0 and blockhash.info < 0x80:
+                    blockhash = self.get_blockhash(block, 1)
+
+                if not self.verify_block(blockhash):
+                    block += 1
+                    continue
+            except AssertionError:
+                block += 1
+                continue
             block = blockhash.nextblock
             info = blockhash.info
         buf.seek(0)
