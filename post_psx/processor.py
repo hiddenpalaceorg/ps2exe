@@ -1,5 +1,6 @@
 import binascii
 import logging
+import re
 import struct
 
 from common.processor import BaseIsoProcessor
@@ -8,11 +9,16 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PostPsxIsoProcessor(BaseIsoProcessor):
+    exe_patterns = [
+        re.compile(".*/EBOOT\.BIN$", re.IGNORECASE),
+        re.compile(".*\.self$", re.IGNORECASE),
+        re.compile(".*\.sprx$", re.IGNORECASE)
+    ]
     SFO_HEADER_BYTES = 20
 
     @property
     def ignored_paths(self):
-        return [self.update_folder]
+        return self.exe_patterns + [self.update_folder]
 
     @property
     def update_folder(self):
@@ -21,6 +27,17 @@ class PostPsxIsoProcessor(BaseIsoProcessor):
     @property
     def sfo_path(self):
         raise NotImplementedError
+
+    def get_extra_fields(self):
+        params = self.parse_param_sfo()
+        return {
+            "sfo_category": params.get("CATEGORY"),
+            "sfo_disc_id": params.get("TITLE_ID"),
+            "sfo_disc_version": params.get("DISC_VERSION"),
+            "sfo_parental_level": params.get("PARENTAL_LEVEL"),
+            "sfo_psp_system_version": params.get("PS3_SYSTEM_VER"),
+            "sfo_title": params.get("TITLE"),
+        }
 
     def parse_param_sfo(self):
         LOGGER.info("Parsing param.sfo")

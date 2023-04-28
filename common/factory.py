@@ -24,6 +24,7 @@ from cdi.utils import Disc
 from p3do.path_reader import P3doPathReader
 from p3do.processor import P3doIsoProcessor
 from cd32.processor import CD32IsoProcessor
+from ps3.path_reader import Ps3PathReader
 from psx.processor import PsxIsoProcessor
 from psp.processor import PspIsoProcessor
 from ps3.processor import Ps3IsoProcessor
@@ -72,7 +73,6 @@ class IsoProcessorFactory:
         if fp.read(4) == b"LIVE":
             return XboxStfsPathReader(STFS(filename=None, fd=fp), fp)
 
-
         if isinstance(fp, io.IOBase):
             wrapper = BinWrapper(fp)
         else:
@@ -92,7 +92,7 @@ class IsoProcessorFactory:
 
         wrapper.seek(0)
         if wrapper.read(64) == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
-                               b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
+                b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
             iso_path = Path(fp.name).resolve()
             iso = GamecubeISO.from_iso(iso_path)
             return GamecubePathReader(iso, fp)
@@ -102,6 +102,26 @@ class IsoProcessorFactory:
             disc = WiiDisc(wrapper)
             iso = WiiISO.from_disc(fp.name, disc)
             return WiiPathReader(iso, fp)
+
+        wrapper.seek(0x800)
+        if wrapper.peek(12) == b"PlayStation3":
+            iso = PyCdlibUdf()
+            try:
+                iso.open_fp(wrapper)
+                return Ps3PathReader(iso, wrapper)
+            except:
+                if iso.udf_teas:
+                    raise
+
+        wrapper.seek(0x7068)
+        if wrapper.peek(23) == b"PlayStation Master Disc":
+            iso = PyCdlibUdf()
+            try:
+                iso.open_fp(wrapper)
+                return Ps3PathReader(iso, wrapper)
+            except:
+                if iso.udf_teas:
+                    raise
 
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":

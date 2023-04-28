@@ -96,6 +96,7 @@ csv_headers = (
     "sfo_psp_system_version",
     "sfo_title",
     "exe_signing_type",
+    "exe_num_symbols",
 )
 
 if __name__ == '__main__':
