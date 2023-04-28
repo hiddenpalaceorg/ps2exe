@@ -308,12 +308,38 @@ class BinWrapper(BaseFile):
             return
 
         # Xbox (360) discs
-        self.mmap.seek(0x10000)
-        ident = self.mmap.read(20)
-        if ident == b"MICROSOFT*XBOX*MEDIA":
-            self.sector_size = 2048
-            self.sector_offset = 0
-            return
+        if self.mmap.length() > 65556:
+            self.mmap.seek(0x10000)
+            ident = self.mmap.read(20)
+            if ident == b"MICROSOFT*XBOX*MEDIA":
+                self.sector_size = 2048
+                self.sector_offset = 0
+                return
+
+        if self.mmap.length() > 34144276:
+            self.mmap.seek(0x2090000)
+            ident = self.mmap.read(20)
+            if ident == b"MICROSOFT*XBOX*MEDIA":
+                self.sector_size = 2048
+                self.sector_offset = 0
+                return
+
+        if self.mmap.length() > 265945108:
+            self.mmap.seek(0xFDA0000)
+            ident = self.mmap.read(20)
+            if ident == b"MICROSOFT*XBOX*MEDIA":
+                self.sector_size = 2048
+                self.sector_offset = 0
+                return
+
+        # Redump-style dual layer DVD
+        if self.mmap.length() > 405864468:
+            self.mmap.seek(0x18310000)
+            ident = self.mmap.read(20)
+            if ident == b"MICROSOFT*XBOX*MEDIA":
+                self.sector_size = 2048
+                self.sector_offset = 0
+                return
 
         raise BinWrapperException("Cannot detect sector size, is this a disc image?")
 

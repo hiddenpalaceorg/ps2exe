@@ -129,27 +129,27 @@ class IsoProcessorFactory:
             cdi.read()
             return CdiPathReader(cdi, fp)
 
-        # Redump-style dual layer DVD
-        if wrapper.length() > 405864468:
-            wrapper.seek(0x18310000)
+        # Xbox and 360 ISO
+        if wrapper.length() > 65556:
+            wrapper.seek(0x10000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-                reader = XDvdFs(wrapper, 0x18310000)
-                return XboxPathReader(reader, wrapper)
-        # 360 ISO
-        if wrapper.length() > 265945108:
-            wrapper.seek(0xFDA0000)
-            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-                reader = XDvdFs(wrapper, 0xFDA0000)
+                reader = XDvdFs(wrapper, 0x10000)
                 return XboxPathReader(reader, wrapper)
         if wrapper.length() > 34144276:
             wrapper.seek(0x2090000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0x2090000)
                 return XboxPathReader(reader, wrapper)
-        if len(wrapper) > 65556:
-            wrapper.seek(0x10000)
+        if wrapper.length() > 265945108:
+            wrapper.seek(0xFDA0000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-                reader = XDvdFs(wrapper, 0x10000)
+                reader = XDvdFs(wrapper, 0xFDA0000)
+                return XboxPathReader(reader, wrapper)
+        # Redump-style dual layer DVD
+        if wrapper.length() > 405864468:
+            wrapper.seek(0x18310000)
+            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
+                reader = XDvdFs(wrapper, 0x18310000)
                 return XboxPathReader(reader, wrapper)
 
         wrapper.seek(0)
