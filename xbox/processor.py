@@ -43,8 +43,11 @@ class XboxIsoProcessor(BaseIsoProcessor):
                 file_path_lower.endswith(".xex") or
                 file_path_lower.endswith(".exe")
             ) and not file_path_lower.endswith("dashupdate.xbe") and not '$systemupdate/' in file_path_lower:
-                if not (exe_info := self._parse_exe(file_path)):
-                    continue
+                try:
+                    if not (exe_info := self._parse_exe(file_path)):
+                        continue
+                except (pefile.PEFormatError, AssertionError, struct.error):
+                        continue
                 self.ignored_paths.append(re.compile(rf"^{re.escape(file_path_lower)}$", re.IGNORECASE))
                 if exe_info.get("header_title") in ["CDX", "Installer"]:
                     LOGGER.info("Found installer or CDX xbe, ignoring and finding another XBE")
@@ -379,9 +382,10 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             self.xex_header = self.read_struct(f, ImageXEXHeader)
 
         self.optional_header_locations = {}
-        for i in range(0, self.xex_header.HeaderDirectoryEntryCount):
-            dir_header = self.read_struct(f, ImageXEXDirectoryEntry)
-            self.optional_header_locations[dir_header.Key] = dir_header.Value
+        if self.xex_header.HeaderDirectoryEntryCount != 0xFFFFFFFF:
+            for i in range(0, self.xex_header.HeaderDirectoryEntryCount):
+                dir_header = self.read_struct(f, ImageXEXDirectoryEntry)
+                self.optional_header_locations[dir_header.Key] = dir_header.Value
 
         if xex_magic != self._MAGIC_XEX3F:
             f.seek(self.xex_header.SecurityInfo)
@@ -552,7 +556,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             return io.BytesIO(xex_pe)
 
     def _parse_exe(self, exe_filename):
-        if exe_filename.endswith("xbe"):
+        if exe_filename.lower().endswith("xbe"):
             return super()._parse_exe(exe_filename)
         LOGGER.info("Parsing xex file headers. xex name: %s", exe_filename)
         result = {}
