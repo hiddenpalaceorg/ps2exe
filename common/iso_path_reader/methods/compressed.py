@@ -29,7 +29,7 @@ class CompressedPathReader(IsoPathReader):
     def get_root_dir(self):
         return self.entries
 
-    def iso_iterator(self, base_dir, recursive=True):
+    def iso_iterator(self, base_dir, **kwargs):
         # always recursive
         for path, file in self.entries.items():
             yield file
