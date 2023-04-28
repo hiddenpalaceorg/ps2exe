@@ -1,15 +1,16 @@
 import datetime
 import hashlib
 import logging
+import os
 import re
 
-import progressbar
 import xxhash
 
 from cdi.path_reader import CdiPathReader
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
+from utils.hash_progress_wrapper import HashProgressWrapper
 from xbox.path_reader import XboxPathReader, XboxStfsPathReader
 
 LOGGER = logging.getLogger(__name__)
@@ -152,10 +153,11 @@ class BaseIsoProcessor:
                         return "xbla"
 
 
-    def __init__(self, iso_path_reader, filename, system_type):
+    def __init__(self, iso_path_reader, filename, system_type, progress_manager):
         self.iso_path_reader = iso_path_reader
         self.filename = filename
         self.system_type = system_type
+        self.progress_manager = progress_manager
 
     def get_exe_filename(self):
         raise NotImplementedError
@@ -194,25 +196,37 @@ class BaseIsoProcessor:
 
     def get_file_hashes(self, hash_type=xxhash.xxh64):
         file_hashes = {}
+        file_hashes_excluding_ignored = {}
         root = self.iso_path_reader.get_root_dir()
         file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
-        for file in progressbar.progressbar(file_list):
-            file_path = self.iso_path_reader.get_file_path(file)
+        hash_format = '{desc}{desc_pad}{percentage:3.0f}%|{bar}| ' \
+                      '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
+                      '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
 
-            if file_hash := self.iso_path_reader.get_file_hash(file, hash_type):
-                file_hashes[file_path] = file_hash.digest()
-        return file_hashes
+        with self.progress_manager.counter(total=len(file_list), desc="Getting file hashes", unit='files') as pbar:
+            for file in file_list:
+
+                file_path = self.iso_path_reader.get_file_path(file)
+                with self.progress_manager.counter(total=float(self.iso_path_reader.get_file_size(file)),
+                                                   desc=f"    Hashing {os.path.basename(file_path)}", unit='B',
+                                                   leave=False, bar_format=hash_format) as hash_bar:
+                    hash_wrapper = HashProgressWrapper(hash_bar, hash_type)
+                    if file_hash := self.iso_path_reader.get_file_hash(file, hash_wrapper):
+                        file_hashes[file_path] = file_hash.digest()
+                        if self.ignored_paths and not any(regex.match(file_path) for regex in self.ignored_paths):
+                            file_hashes_excluding_ignored[file_path] = file_hash.digest()
+                pbar.update()
+        return file_hashes, file_hashes_excluding_ignored
 
     def get_all_files_hash(self):
         LOGGER.info("Getting hash of all files")
-        file_hashes = self.get_file_hashes()
+        file_hashes, file_hashes_excluding_ignored = self.get_file_hashes()
 
         all_hashes = hashlib.md5()
         hashes_excluding_ignored = hashlib.md5()
         for file, file_hash in sorted(file_hashes.items()):
             all_hashes.update(file_hash)
-            if self.ignored_paths and not any(regex.match(file) for regex in self.ignored_paths):
-                hashes_excluding_ignored.update(file_hash)
+            hashes_excluding_ignored.update(file_hashes_excluding_ignored.get(file, b''))
 
         return {
             "all_files_hash": all_hashes.hexdigest(),
@@ -226,15 +240,18 @@ class BaseIsoProcessor:
         most_recent_file = None
         root = self.iso_path_reader.get_root_dir()
         file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
-        for file in progressbar.progressbar(file_list):
-            file_path = self.iso_path_reader.get_file_path(file)
-            if any(regex.match(file_path) for regex in ignored_paths):
-                continue
+        with self.progress_manager.counter(total=len(file_list), desc="Finding latest file", unit='files', leave=False) as pbar:
+            for file in file_list:
+                file_path = self.iso_path_reader.get_file_path(file)
+                if any(regex.match(file_path) for regex in ignored_paths):
+                    pbar.update()
+                    continue
 
-            file_date = self.iso_path_reader.get_file_date(file)
-            if file_date > most_recent_file_date:
-                most_recent_file = file
-                most_recent_file_date = file_date
+                file_date = self.iso_path_reader.get_file_date(file)
+                if file_date > most_recent_file_date:
+                    most_recent_file = file
+                    most_recent_file_date = file_date
+                pbar.update()
         return most_recent_file
 
     def get_most_recent_file_info(self, exe_date):

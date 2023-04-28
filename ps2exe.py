@@ -5,6 +5,8 @@ import logging
 import os
 import sys
 
+import enlighten
+
 from common.factory import IsoProcessorFactory
 from common.processor import BaseIsoProcessor
 from patches import apply_patches
@@ -16,6 +18,7 @@ except ImportError:
     pass
 
 LOGGER = logging.getLogger(__name__)
+PROGRESS_MANAGER = enlighten.get_manager()
 
 
 def get_iso_info(iso_filename, disable_contents_checksum):
@@ -37,7 +40,7 @@ def get_iso_info(iso_filename, disable_contents_checksum):
         LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
         return
 
-    iso_processor = iso_processor_class(iso_path_reader, iso_filename, system)
+    iso_processor = iso_processor_class(iso_path_reader, iso_filename, system, PROGRESS_MANAGER)
 
     info.update(iso_processor.get_disc_type())
 
@@ -176,18 +179,26 @@ if __name__ == '__main__':
                 existing_files = [line["path"] for line in reader]
                 csv_file.seek(0, os.SEEK_END)
 
+    format = PROGRESS_MANAGER.term.bold_underline_bright_white_on_lightslategray(
+        "PS2EXE {version} {fill}Gathering Files (found: {count}){fill}{elapsed}"
+    )
+    status_bar = PROGRESS_MANAGER.counter(counter_format=format,
+                                          justify=enlighten.Justify.CENTER,
+                                          autorefresh=True,
+                                          min_delta=0.5,
+                                          version='0.0.1')
+
+    file_count = 0
+    files = []
     if args.file:
         if args.file not in existing_files and is_path_allowed(args.file):
-            try:
-                result = get_iso_info(args.file, args.no_contents_checksum)
-                if result:
-                    writer.writerow(result)
-            except Exception:
-                LOGGER.exception("Error reading %s", args.file)
+            file_count += 1
+            files.append(args.file)
+            status_bar.update()
     elif args.input_dir:
-        i = 0
         max_n = 2000000
 
+        LOGGER.info("Gathering files")
         for root, dirnames, filenames in os.walk(args.input_dir):
             dirnames.sort()
             for filename in sorted(filenames):
@@ -196,19 +207,44 @@ if __name__ == '__main__':
                     continue
                 if not is_path_allowed(path):
                     continue
-                try:
-                    result = get_iso_info(path, args.no_contents_checksum)
-                    if result:
-                        writer.writerow(result)
-                        csv_file.flush()
-                except Exception:
-                    LOGGER.exception("Error reading %s", args.file)
+                file_count += 1
+                files.append(path)
+                status_bar.update()
 
-                i += 1
-
-                if i > max_n:
+                if file_count > max_n:
                     break
 
-            if i > max_n:
+            if file_count > max_n:
                 break
+    status_bar.counter_format = PROGRESS_MANAGER.term.bold_underline_bright_white_on_lightslategray(
+        "PS2EXE {version} {fill}Current Game: {game_name} ({count}/{games}){fill}{elapsed}"
+    )
+    status_bar.count = 0
+    status_bar.update(incr=0, games=file_count, game_name='')
+    status_bar.refresh()
+
+    for path in files:
+        status_bar.update(game_name=os.path.basename(path))
+
+        if len(PROGRESS_MANAGER.counters) > 10:
+            oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
+            oldest_bar[0].leave = False
+            oldest_bar[0].close()
+
+        if path in existing_files:
+            continue
+        if not is_path_allowed(path, args.allow_extensions):
+            continue
+        try:
+            result = get_iso_info(path, args.no_contents_checksum)
+            if result:
+                writer.writerow(result)
+                csv_file.flush()
+
+                bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+                bar.desc = os.path.basename(path)
+                bar.refresh()
+
+        except Exception:
+            LOGGER.exception("Error reading %s", args.file)
 

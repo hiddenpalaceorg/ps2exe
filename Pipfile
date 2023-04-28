@@ -13,7 +13,7 @@ numpy = "*"
 libarchive-c = "*"
 pefile = "*"
 pycryptodome = "*"
-progressbar2 = "*"
+enlighten = "*"
 pyisotools = "*"
 methodtools = "*"
 
