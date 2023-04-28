@@ -151,9 +151,9 @@ if __name__ == '__main__':
         csv_file = sys.stdout
     else:
         if args.append_output:
-            csv_file = open(args.output, "a+", newline='')
+            csv_file = open(args.output, "a+", newline='', encoding='utf-8')
         else:
-            csv_file = open(args.output, "w", newline='')
+            csv_file = open(args.output, "w", newline='', encoding='utf-8')
 
     writer = csv.DictWriter(csv_file, fieldnames=csv_headers)
     if csv_file == sys.stdout or csv_file.tell() == 0:
