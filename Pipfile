@@ -9,7 +9,7 @@ verify_ssl = true
 pycdlib = "*"
 pathlab = "*"
 xxhash = "*"
-numpy = "==1.19.3"
+numpy = "*"
 libarchive-c = "*"
 pefile = "*"
 pycryptodome = "*"
