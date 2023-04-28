@@ -1,7 +1,6 @@
 import logging
 import mmap
 import os
-from io import UnsupportedOperation
 
 from utils.unscambler import unscramble_data, lookup_table
 

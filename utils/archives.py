@@ -2,10 +2,13 @@ import io
 import mmap
 import os
 import sys
+import tempfile
 
+import psutil
 import rarfile
 
 from utils.files import MmappedFile
+from utils.mmap import FakeMemoryMap
 
 try:
     import libarchive
@@ -73,7 +76,14 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
         self.entry = entry
         self.archive = archive
         self.pos = 0
-        self.mmap = mmap.mmap(-1, entry.file_size or 1, access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
+        memory_needed = psutil.virtual_memory().total * .8 # 80% of total physical memory
+        if entry.file_size < memory_needed:
+            self.mmap = mmap.mmap(-1, entry.file_size or 1, access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
+            self.fp = self.mmap
+        else:
+            self.fp = tempfile.TemporaryFile("r+b")
+            self.mmap = FakeMemoryMap(self.fp)
+            self.mmap._size = entry.file_size
         self.read_bytes = 0
         super().__init__(self.mmap)
 
@@ -92,30 +102,32 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
         new_pos = self.pos
         self.pos = old_pos
         if new_pos > self.read_bytes:
-            self.read(new_pos - old_pos)
+            self._get_data(new_pos - old_pos, discard=True)
         self.pos = new_pos
 
 
 class BlockReader(ArchiveEntryReader):
-    def __init__(self, entry, archive):
-        super().__init__(entry, archive)
+    def __init__(self, entry, archive, **kwargs):
+        super().__init__(entry, archive, **kwargs)
         self.name = entry.name
         self.size = entry.file_size
 
-    def _get_data(self, n=None, pos=None):
+    def _get_data(self, n=None, pos=None, discard=False):
         amount_need_read = min(self.size, self.pos + n)
         left = n
+        self.fp.seek(self.read_bytes)
         if amount_need_read > self.read_bytes:
             for data in self.entry.get_blocks(block_size=min(left, 65536)):
                 read = len(data)
-                self.mmap[self.read_bytes:self.read_bytes+read] = data
+                self.fp.write(data)
                 left -= read
                 self.read_bytes += read
                 if left <= 0:
                     break
 
-        data = self.mmap[self.pos:self.pos+n]
-        return data
+        if not discard:
+            data = self.mmap[self.pos:self.pos+n]
+            return data
 
     def __getitem__(self, key):
         if isinstance(key, slice):
@@ -135,26 +147,28 @@ class RarFileReader(ArchiveEntryReader):
         self.fp = self.archive._file_parser.open(self.entry, None)
         self.size = self.entry.file_size
 
-    def _get_data(self, n):
+    def _get_data(self, n, discard=False):
         amount_need_read = min(self.size, self.pos + n)
 
         if amount_need_read > self.read_bytes:
+            self.fp.seek(self.read_bytes)
             size_left = amount_need_read - self.read_bytes
             while size_left > 0:
                 chunk_size = min(65536, size_left)
                 data = self.fp.read(chunk_size)
                 read = len(data)
-                self.mmap[self.read_bytes:self.read_bytes+read] = data
+                self.fp.write(data)
                 size_left -= read
                 self.read_bytes += read
                 if size_left <= 0:
                     break
 
-        return super()._get_data(n)
+        if not discard:
+          return super()._get_data(n)
 
 
 class ArchiveEntryWrapper:
-    def __init__(self, archive, entry):
+    def __init__(self, archive, entry, pbar=None):
         self.archive = archive
         self.entry = entry
         if isinstance(entry, rarfile.RarInfo):
