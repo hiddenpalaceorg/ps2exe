@@ -39,7 +39,7 @@ class XboxPathReader(IsoPathReader):
         size_left = file.size
         self.fp.seek(file.offset)
         while size_left > 0:
-            chunk_size = min(65535, size_left)
+            chunk_size = min(65536, size_left)
             chunk = self.fp.read(chunk_size)
             bio.write(chunk)
             size_left -= chunk_size
@@ -55,7 +55,7 @@ class XboxPathReader(IsoPathReader):
             return
 
         while size_left > 0:
-            chunk_size = min(65535, size_left)
+            chunk_size = min(65536, size_left)
             chunk = self.fp.read(chunk_size)
             hash.update(chunk)
             size_left -= chunk_size
@@ -97,7 +97,7 @@ class XboxStfsPathReader(XboxPathReader):
     def get_file_hash(self, file, algo):
         hash = algo()
         f = self.open_file(file)
-        while chunk := f.read(65535):
+        while chunk := f.read(65536):
             hash.update(chunk)
         return hash
 

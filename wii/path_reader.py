@@ -11,7 +11,7 @@ class WiiPathReader(GamecubePathReader):
         size_left = file.size
         self.iso.partition.seek(file.offset)
         while size_left > 0:
-            chunk_size = min(65535, size_left)
+            chunk_size = min(65536, size_left)
             chunk = self.iso.partition.read(chunk_size)
             bio.write(chunk)
             size_left -= chunk_size
@@ -27,7 +27,7 @@ class WiiPathReader(GamecubePathReader):
             return
 
         while size_left > 0:
-            chunk_size = min(65535, size_left)
+            chunk_size = min(65536, size_left)
             try:
                 chunk = self.iso.partition.read(chunk_size)
             except ValueError:

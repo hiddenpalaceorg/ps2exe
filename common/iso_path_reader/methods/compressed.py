@@ -49,7 +49,7 @@ class CompressedPathReader(IsoPathReader):
     def get_file_hash(self, file, algo):
         hash = algo()
         f = self.open_file(file)
-        while chunk := f.read(65535):
+        while chunk := f.read(65536):
             hash.update(chunk)
         return hash
 

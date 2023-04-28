@@ -40,7 +40,7 @@ class PathlabPathReader(IsoPathReader):
     def get_file_hash(self, file, algo):
         hash = algo()
         with self.open_file(file) as f:
-            while chunk := f.read(65535):
+            while chunk := f.read(65536):
                 hash.update(chunk)
         return hash
 

@@ -78,7 +78,7 @@ class PyCdLibPathReader(IsoPathReader):
     def get_file_hash(self, file, algo):
         hash = algo()
         with self.open_file(file) as f:
-            for chunk in iter(lambda: f.read(65535), b""):
+            for chunk in iter(lambda: f.read(65536), b""):
                 hash.update(chunk)
 
         return hash

@@ -37,7 +37,7 @@ class P3doPathReader(IsoPathReader):
         size_left = file.byte_length
         self.fp.seek(file.copy_offset * file.block_size)
         while size_left > 0:
-            chunk_size = min(65535, size_left)
+            chunk_size = min(65536, size_left)
             chunk = self.fp.read(chunk_size)
             hash.update(chunk)
             size_left -= chunk_size

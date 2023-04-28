@@ -43,7 +43,7 @@ class GamecubePathReader(IsoPathReader):
         size_left = file.size
         self.fp.seek(file.offset)
         while size_left > 0:
-            chunk_size = min(65535, size_left)
+            chunk_size = min(65536, size_left)
             chunk = self.fp.read(chunk_size)
             bio.write(chunk)
             size_left -= chunk_size
@@ -59,7 +59,7 @@ class GamecubePathReader(IsoPathReader):
             return
 
         while size_left > 0:
-            chunk_size = min(65535, size_left)
+            chunk_size = min(65536, size_left)
             chunk = self.fp.read(chunk_size)
             hash.update(chunk)
             size_left -= chunk_size

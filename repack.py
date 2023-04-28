@@ -88,7 +88,7 @@ def file_info(input_dirs, skip_hash, include_dir):
             crc = 0
             sha = hashlib.sha1()
             md5 = hashlib.md5()
-            while chunk := f.read(65535):
+            while chunk := f.read(65536):
                 crc = zlib.crc32(chunk, crc)
                 sha.update(chunk)
                 md5.update(chunk)
@@ -181,7 +181,7 @@ def process(input_dirs, out_path, no_hash):
         crc = 0
         sha = hashlib.sha1()
         md5 = hashlib.md5()
-        while chunk := cf.read(65535):
+        while chunk := cf.read(65536):
             crc = zlib.crc32(chunk, crc)
             sha.update(chunk)
             md5.update(chunk)
