@@ -12,8 +12,6 @@ class Directory:
         # First try to seek to the offset, if this fails, bubble up
         self.start_sector = loc
         self.offset = volume.volume_base_offset + (loc * volume.sector_size)
-        fp.seek(self.offset)
-
         self.name = name
         self.size = size
         self.directories: List[Directory] = []
