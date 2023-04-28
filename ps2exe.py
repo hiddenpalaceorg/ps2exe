@@ -97,6 +97,8 @@ csv_headers = (
     "sfo_title",
     "exe_signing_type",
     "exe_num_symbols",
+    "new_all_files_hash",
+    "new_alt_all_files_hash",
 )
 
 if __name__ == '__main__':

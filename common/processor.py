@@ -228,10 +228,22 @@ class BaseIsoProcessor:
             all_hashes.update(file_hash)
             hashes_excluding_ignored.update(file_hashes_excluding_ignored.get(file, b''))
 
-        return {
+        hashes = {
             "all_files_hash": all_hashes.hexdigest(),
             "alt_all_files_hash": hashes_excluding_ignored.hexdigest() if self.ignored_paths else None
         }
+
+        all_hashes = hashlib.md5()
+        hashes_excluding_ignored = hashlib.md5()
+        for file, file_hash in sorted(file_hashes.items(), key=lambda item: item[1]):
+            all_hashes.update(file_hash)
+        for file, file_hash in sorted(file_hashes_excluding_ignored.items(), key=lambda item: item[1]):
+            hashes_excluding_ignored.update(file_hash)
+
+
+        hashes["new_all_files_hash"] = all_hashes.hexdigest()
+        hashes["new_alt_all_files_hash"] = hashes_excluding_ignored.hexdigest() if self.ignored_paths else None
+        return hashes
 
     def get_most_recent_file(self):
         ignored_paths = [re.compile(path) for path in self.ignored_paths]
