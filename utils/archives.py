@@ -98,9 +98,20 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def close(self):
+        self.pbar.enabled = False
         self.pbar.close(True)
         self.mmap.close()
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            pos = item.start
+            length = item.stop - item.start
+        else:
+            pos = item
+            length = 1
+        self.seek(pos)
+        return self._get_data(length)
 
     def seek(self, pos, whence=os.SEEK_SET):
         old_pos = self.pos
@@ -118,11 +129,11 @@ class BlockReader(ArchiveEntryReader):
         self.name = entry.name
         self.size = entry.file_size
 
-    def _get_data(self, n=None, pos=None, discard=False):
+    def _get_data(self, n=None, discard=False):
         amount_need_read = min(self.size, self.pos + n)
         left = n
-        self.fp.seek(self.read_bytes)
         if amount_need_read > self.read_bytes:
+            self.fp.seek(self.read_bytes)
             for data in self.entry.get_blocks(block_size=min(left, 65536)):
                 read = len(data)
                 self.fp.write(data)
@@ -132,28 +143,19 @@ class BlockReader(ArchiveEntryReader):
                 if left <= 0:
                     break
         if self.read_bytes == self.size and self.pbar in self.pbar.manager.counters:
-            self.pbar.close()
+            self.pbar.enabled = False
+            self.pbar.close(True)
 
         if not discard:
             data = self.mmap[self.pos:self.pos+n]
             return data
 
-    def __getitem__(self, key):
-        if isinstance(key, slice):
-            pos = key.start
-            length = key.stop - key.start
-        else:
-            pos = key
-            length = 1
-        self.seek(pos)
-        return self._get_data(length)
-
 
 class RarFileReader(ArchiveEntryReader):
-    def __init__(self, entry, archive):
-        super().__init__(entry, archive)
+    def __init__(self, entry, archive, **kwargs):
+        super().__init__(entry, archive, **kwargs)
         self.name = self.entry.filename
-        self.fp = self.archive._file_parser.open(self.entry, None)
+        self.rarfile = self.archive._file_parser.open(self.entry, None)
         self.size = self.entry.file_size
 
     def _get_data(self, n, discard=False):
@@ -164,7 +166,7 @@ class RarFileReader(ArchiveEntryReader):
             size_left = amount_need_read - self.read_bytes
             while size_left > 0:
                 chunk_size = min(65536, size_left)
-                data = self.fp.read(chunk_size)
+                data = self.rarfile.read(chunk_size)
                 read = len(data)
                 self.fp.write(data)
                 size_left -= read
@@ -173,10 +175,15 @@ class RarFileReader(ArchiveEntryReader):
                 if size_left <= 0:
                     break
         if self.read_bytes == self.size and self.pbar in self.pbar.manager.counters:
-            self.pbar.close()
+            self.pbar.enabled = False
+            self.pbar.close(True)
 
         if not discard:
-          return super()._get_data(n)
+          return self.mmap[self.pos:self.pos+n]
+
+    def close(self):
+        super().close()
+        self.rarfile.close()
 
 
 class ArchiveEntryWrapper:
@@ -184,6 +191,7 @@ class ArchiveEntryWrapper:
         self.archive = archive
         self.entry = entry
         self.pbar = pbar
+        self.fp = None
         if isinstance(entry, rarfile.RarInfo):
             self.path = entry.filename
         else:
@@ -193,10 +201,13 @@ class ArchiveEntryWrapper:
         if isinstance(self.entry, rarfile.RarInfo):
             if self.entry.file_size > rarfile.HACK_SIZE_LIMIT:
                 self.entry.filename = self.entry.filename.replace("/", "\\")
-
-            return RarFileReader(self.entry, self.archive)
+            self.fp = RarFileReader(self.entry, self.archive, pbar=self.pbar)
         else:
-            return BlockReader(self, self.archive, pbar=self.pbar)
+            self.fp = BlockReader(self, self.archive, pbar=self.pbar)
+        return self.fp
+
+    def close(self):
+        self.fp.close()
 
     @property
     def file_size(self):

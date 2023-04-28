@@ -38,7 +38,7 @@ class BaseFile:
         self.pos += n
         return ret
 
-    def _get_data(self, n):
+    def _get_data(self, n, discard=False):
         pos = self.tell()
         return self[pos:pos + n]
 
@@ -403,6 +403,9 @@ class ScrambledFile(BaseFile):
             actual_pos = item
             item += self.offset
         return unscramble_data(self.mmap.__getitem__(item), actual_pos)
+
+    def length(self):
+        return self.mmap.length()
 
     def close(self):
         self.mmap.close()
