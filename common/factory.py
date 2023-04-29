@@ -114,7 +114,7 @@ class IsoProcessorFactory:
                     raise
 
         wrapper.seek(0x7068)
-        if wrapper.peek(23) == b"PlayStation Master Disc":
+        if wrapper.peek(25) == b"PlayStation Master Disc 3":
             iso = PyCdlibUdf()
             try:
                 iso.open_fp(wrapper)
