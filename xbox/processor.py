@@ -25,8 +25,8 @@ class XboxIsoProcessor(BaseIsoProcessor):
         re.compile(".*\.xbe$", re.IGNORECASE)
     ]
 
-    def __init__(self, iso_path_reader, filename, system_type):
-        super().__init__(iso_path_reader, filename, system_type)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.exe_info = {}
 
     def get_disc_type(self):
@@ -343,8 +343,8 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
     _MAGIC_XEX2D = b"XEX-"  # >=1640
     _MAGIC_XEX3F = b"XEX?"  # >=1529
 
-    def __init__(self, iso_path_reader, filename, system_type):
-        super().__init__(iso_path_reader, filename, system_type)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.xex_header = None
         self.xex_magic = None
         self.optional_headers = {}
@@ -661,9 +661,9 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
 
 class XboxLiveProcessor(Xbox360IsoProcessor):
-    def __init__(self, iso_path_reader, filename, system_type):
+    def __init__(self, iso_path_reader, *args, **kwargs):
         if isinstance(iso_path_reader, XboxStfsPathReader):
-            super().__init__(iso_path_reader, filename, system_type)
+            super().__init__(iso_path_reader, *args, **kwargs)
             return
         hex_pattern = re.compile(r'.*/?(?:([0-9a-fA-F]{16})|([0-9a-fA-F]{6}~1$))')
         for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
@@ -678,7 +678,7 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
                         continue
                     iso_path_reader = XboxStfsPathReader(stfs, iso_path_reader.fp)
                     break
-        super().__init__(iso_path_reader, filename, system_type)
+        super().__init__(iso_path_reader, *args, **kwargs)
 
     def get_disc_type(self):
         return {"disc_type": "xbla"}
