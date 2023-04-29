@@ -2,7 +2,7 @@ import logging
 import mmap
 import os
 
-from utils.unscambler import unscramble_data
+from utils.unscambler import unscramble_data, lookup_table
 
 LOGGER = logging.getLogger(__name__)
 
@@ -307,6 +307,14 @@ class BinWrapper(BaseFile):
             self.sector_offset = 24
             return
 
+        self.mmap.seek(0x9c41)
+        ident = self.mmap.read(5)
+        LOGGER.debug(ident)
+        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
+            self.sector_size = 2352
+            self.sector_offset = 2368
+            return
+
         # Xbox (360) discs
         if self.mmap.length() > 65556:
             self.mmap.seek(0x10000)
@@ -380,9 +388,12 @@ class ScrambledFile(MmappedFile):
             return (True, 128)
 
         # Check for discs that are scrambled but not offset.
-        fp.seek(0x9319)
-        ident = bytes(bytearray(v ^ [0x02, 0xFE, 0x81, 0x80, 0x60][k] for k, v in enumerate(fp.read(5))))
-        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
-            return (True, 0)
+        for offset in [0x9311, 0x9319, 0x9c41]:
+            lookup_table_start = offset % 2352
+            unscramble_seed = lookup_table[lookup_table_start:lookup_table_start+5]
+            fp.seek(offset)
+            ident = bytes(bytearray(v ^ unscramble_seed[k] for k, v in enumerate(fp.read(5))))
+            if ident in [b"CD001", b"CD-I ", b"BEA01"]:
+                return (True, 0)
 
         return False, None
