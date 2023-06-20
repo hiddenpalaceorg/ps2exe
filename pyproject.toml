@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "ps2exe"
+version = "0.0.1"
+description = ""
+authors = ["Hidden Palace <hp@hiddenpalace.org>"]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.12"
+enlighten = "^1.11.2"
+pycdlib = "^1.14.0"
+pyisotools = "^2.4.6"
+methodtools = "^0.4.7"
+pefile = "^2023.2.7"
+pycryptodome = "^3.18.0"
+libarchive-c = "^4.0"
+numpy = "^1.25.0"
+pathlab = "^0.2"
+xxhash = "^3.2.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
