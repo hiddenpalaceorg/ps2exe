@@ -1,3 +1,4 @@
 Pipfile.lock
 results.csv
 keys.db
+__pycache__
