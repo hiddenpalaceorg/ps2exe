@@ -43,6 +43,10 @@ from xbox.xdvdfs.xdvdfs import XDvdFs
 
 try:
     import libarchive
+except OSError:
+    if os.name == "nt":
+        os.environ["LIBARCHIVE"] = "./libarchive.dll"
+    import libarchive
 except TypeError:
     libarchive_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "libarchive")
     if os.name == "nt":
