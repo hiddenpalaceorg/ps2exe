@@ -282,6 +282,21 @@ class BinWrapper(BaseFile):
             self.sector_offset = 0
             return
 
+        # Apple formatted disc
+        self.mmap.seek(0x430)
+        ident = self.mmap.read(9)
+        if ident == b"Apple_HFS":
+            self.sector_size = 2048
+            self.sector_offset = 0
+            return
+
+        self.mmap.seek(0x440)
+        ident = self.mmap.read(9)
+        if ident == b"Apple_HFS":
+            self.sector_size = 2352
+            self.sector_offset = 16
+            return
+
         # ISO9660 or CD-I discs
         self.mmap.seek(0x8001)
         ident = self.mmap.read(5)

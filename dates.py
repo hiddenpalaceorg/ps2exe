@@ -44,3 +44,7 @@ def datetime_from_iso_date(iso_date):
         dt = datetime.datetime.min
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt
+
+
+def datetime_from_hfs_date(seconds):
+    return datetime.datetime(1904,1,1, tzinfo=datetime.timezone.utc) + datetime.timedelta(seconds=seconds)
