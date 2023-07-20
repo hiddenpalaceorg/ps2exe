@@ -16,6 +16,7 @@ pycryptodome = "*"
 enlighten = "*"
 pyisotools = "*"
 methodtools = "*"
+machfs = "*"
 
 [requires]
 python_version = "3.8"
