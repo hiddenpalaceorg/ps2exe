@@ -89,7 +89,17 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
         bar_fmt = '{desc}{desc_pad}{percentage:3.0f}%|{bar}| ' \
                   '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
                   '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
-        self.pbar = pbar.counter(total=float(self.length()), desc="Decompressing", unit='B', leave=False, bar_format=bar_fmt)
+
+        self.pbar = None
+        if pbar:
+            self.pbar = pbar.counter(
+                total=float(self.length()),
+                desc="Decompressing",
+                unit='B',
+                leave=False,
+                bar_format=bar_fmt
+            )
+
         super().__init__(self.mmap)
 
     def length(self):
@@ -99,9 +109,10 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
         return self
 
     def close(self):
-        self.pbar.enabled = False
-        self.pbar.close(True)
-        self.mmap.close()
+        if self.pbar:
+            self.pbar.enabled = False
+            self.pbar.close(True)
+            self.mmap.close()
 
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -139,10 +150,11 @@ class BlockReader(ArchiveEntryReader):
                 self.fp.write(data)
                 left -= read
                 self.read_bytes += read
-                self.pbar.update(read)
+                if self.pbar:
+                    self.pbar.update(read)
                 if left <= 0:
                     break
-        if self.read_bytes == self.size and self.pbar in self.pbar.manager.counters:
+        if self.read_bytes == self.size and self.pbar and self.pbar in self.pbar.manager.counters:
             self.pbar.enabled = False
             self.pbar.close(True)
 
@@ -171,10 +183,11 @@ class RarFileReader(ArchiveEntryReader):
                 self.fp.write(data)
                 size_left -= read
                 self.read_bytes += read
-                self.pbar.update(read)
+                if self.pbar:
+                    self.pbar.update(read)
                 if size_left <= 0:
                     break
-        if self.read_bytes == self.size and self.pbar in self.pbar.manager.counters:
+        if self.read_bytes == self.size and self.pbar and self.pbar in self.pbar.manager.counters:
             self.pbar.enabled = False
             self.pbar.close(True)
 
