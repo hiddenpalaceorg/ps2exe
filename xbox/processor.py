@@ -679,10 +679,6 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
                     break
         super().__init__(iso_path_reader, *args, **kwargs)
 
-    @property
-    def ignored_paths(self):
-        return super().ignored_paths + [re.compile(f'^{re.escape(self.get_exe_filename())}$', re.IGNORECASE)]
-
     def get_exe_filename(self):
         # Check for an XNA game EXE
         try:
@@ -709,6 +705,7 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
                 if xna_exe_path:
                     xna_exe = self.iso_path_reader.get_file(xna_exe_path)
                     with self.iso_path_reader.open_file(xna_exe):
+                        self.ignored_paths += [re.compile(f'^{re.escape(xna_exe_path)}$', re.IGNORECASE)]
                         return xna_exe_path
         except FileNotFoundError:
             return super().get_exe_filename()
