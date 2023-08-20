@@ -42,13 +42,15 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
     def get_file_size(self, file):
         return file.file_size
 
+    def get_file_size(self, file):
+        return file.file_size
+
     def open_file(self, file):
         path = self.get_file_path(file)
         with self.files[path] as f:
             f.seek(0)
             f.close = lambda: None
         return self.files[path]
-
 
     # noinspection PyRedeclaration
     def get_file_date(self, file):
