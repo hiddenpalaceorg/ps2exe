@@ -145,3 +145,12 @@ def apply_patches():
 
         _link_aliases(drCrDate, cnids)
     machfs.main.Volume.read = read
+
+    import rarfile
+    import os
+    orig_open_unrar = rarfile.CommonParser._open_unrar
+    def _open_unrar(self, rarfile, inf, pwd=None, tmpfile=None, force_file=False):
+        if not tmpfile or force_file:
+            inf.filename = inf.filename.replace("\\", os.path.sep)
+        return orig_open_unrar(self, rarfile, inf, pwd=pwd, tmpfile=tmpfile, force_file=force_file)
+    rarfile.CommonParser._open_unrar = _open_unrar
