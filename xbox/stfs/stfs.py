@@ -116,6 +116,8 @@ class STFS(object):
             a = fl
             while a.pathindex != -1 and a.pathindex < len(self.filelistings):
                 try:
+                    if self.filelistings[a.pathindex] == a:
+                        break
                     a = self.filelistings[a.pathindex]
                     path_components.append(a.filename)
                 except IndexError:
