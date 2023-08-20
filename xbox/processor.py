@@ -63,7 +63,6 @@ class XboxIsoProcessor(BaseIsoProcessor):
         self.exe_info = found_exes[exe]
         return exe
 
-
     def get_most_recent_file_info(self, exe_date):
         if not isinstance(self.iso_path_reader, XboxPathReader):
             return super().get_most_recent_file_info(exe_date)
@@ -679,6 +678,38 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
                     iso_path_reader = XboxStfsPathReader(stfs, iso_path_reader.fp)
                     break
         super().__init__(iso_path_reader, *args, **kwargs)
+
+    def get_exe_filename(self):
+        # Check for an XNA game EXE
+        try:
+            gameinfo = self.iso_path_reader.get_file('/GameInfo.bin')
+            with self.iso_path_reader.open_file(gameinfo) as info:
+                header_struct = ">4sI"
+                xna_exe_path = None
+                while header_bytes := info.read(struct.calcsize(header_struct)):
+                    magic, size = struct.unpack(header_struct, header_bytes)
+                    if magic == b'EXEC':
+                        virtual_titleid, module_name, build_description = struct.unpack(">32sx42sx64sx", info.read(size))
+                        module_name = module_name.rstrip(b"\x00").decode()
+                        xna_exe_path = f'/584E07D1/{module_name}'
+                    elif magic == b'COMM':
+                        title_id,  = struct.unpack(">I", info.read(size))
+                        self.exe_info["header_product_number"] = title_id
+                    elif magic == b'TITL':
+                        title, description, unk = struct.unpack(">256s512s512s", info.read(size))
+                        self.exe_info['header_title'] = title.decode("UTF-16be").strip().replace("\x00", "")
+                    else:
+                        self.exe_info = {}
+                        return super().get_exe_filename()
+
+                if xna_exe_path:
+                    xna_exe = self.iso_path_reader.get_file(xna_exe_path)
+                    with self.iso_path_reader.open_file(xna_exe):
+                        return xna_exe_path
+        except FileNotFoundError:
+            return super().get_exe_filename()
+
+        return super().get_exe_filename()
 
     def get_disc_type(self):
         return {"disc_type": "xbla"}
