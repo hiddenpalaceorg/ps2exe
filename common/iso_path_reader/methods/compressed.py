@@ -38,6 +38,9 @@ class CompressedPathReader(IsoPathReader):
     def get_file_path(self, file):
         return file.path
 
+    def get_file_size(self, file):
+        return file.file_size
+
     def get_file_hash(self, file, algo):
         hash = algo()
         f = self.open_file(file)
@@ -51,7 +54,6 @@ class CompressedPathReader(IsoPathReader):
             f.seek(0)
             f.close = lambda: None
         return self.files[path]
-
 
     # noinspection PyRedeclaration
     def get_file_date(self, file):
