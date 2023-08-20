@@ -279,6 +279,8 @@ if __name__ == '__main__':
                         continue
                     if not is_path_allowed(entry.path, args.allow_extensions, entry):
                         continue
+                    if entry.is_dir:
+                        continue
                     status_bar.update(game_name=os.path.basename(entry.path))
                     try:
                         result = get_iso_info(entry.path, args.no_contents_checksum, entry)
