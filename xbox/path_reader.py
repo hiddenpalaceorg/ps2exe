@@ -94,7 +94,7 @@ class XboxStfsPathReader(XboxPathReader):
 
     def get_file_size(self,file):
         return file.size
-    
+
     def is_directory(self, file):
         return file.isdirectory
 
