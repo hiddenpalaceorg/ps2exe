@@ -77,9 +77,11 @@ class XboxStfsPathReader(XboxPathReader):
     def get_root_dir(self):
         return self.iso.allfiles
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         # always recursive
         for path, file in self.iso.allfiles.items():
+            if self.is_directory(file) and not include_dirs:
+                continue
             yield file
 
     def get_file(self, path):
@@ -106,6 +108,9 @@ class XboxStfsPathReader(XboxPathReader):
 
     def get_file_date(self, file):
         return None
+
+    def is_directory(self, file):
+        return file.isdirectory
 
     def get_pvd_info(self):
         return {}
