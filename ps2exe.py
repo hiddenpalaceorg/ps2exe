@@ -282,6 +282,12 @@ if __name__ == '__main__':
                     if entry.is_dir:
                         continue
                     status_bar.update(game_name=os.path.basename(entry.path))
+
+                    if len(PROGRESS_MANAGER.counters) > 10:
+                        oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
+                        oldest_bar[0].leave = False
+                        oldest_bar[0].close()
+
                     try:
                         result = get_iso_info(entry.path, args.no_contents_checksum, entry)
                         if result:
