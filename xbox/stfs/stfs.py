@@ -172,7 +172,7 @@ class STFS(object):
         # Read the table block, get the correct record and pass it to BlockHashRecord
 
         # Fix to point at the first table (these numbers are offset from data block numbers)
-        tablenum += table_offset - (1 << self.table_size_shift)
+        tablenum += max(0, table_offset - (1 << self.table_size_shift))
         hashdata = self.read_block(tablenum)
         return BlockHashRecord(blocknum, hashdata[record * 0x18: record * 0x18 + 0x18], \
                                table=tablenum, record=record)
@@ -189,25 +189,29 @@ class STFS(object):
         """
             Given a blocknumber calculate the block on disk that has the data taking into account hash blocks.
             Every 0xAA blocks there is a hash table and depending on header data it
-            is 1 or 2 blocks long [((self.entry_id+0xFFF) & 0xF000) >> 0xC 0xB == 0, 0xA == 1]
+            is 1 or 2 blocks long [((self.header_size+0xFFF) & 0xF000) >> 0xC 0xB == 0, 0xA == 1]
             After 0x70e4 blocks there is another table of the same size every 0x70e4
             blocks and after 0x4af768 blocks there is one last table. This skews blocknumber to offset calcs.
             This is the part of the Free60 STFS page that needed work
         """
-        block_adjust = 0
+        block_base = 0xAA
+        block = block_num
 
-        if block_num >= 0xAA:
-            block_adjust += ((block_num // 0xAA)) + 1 << self.table_size_shift
-        if block_num >= 0x70E4:
-            block_adjust += ((block_num // 0x70E4) + 1) << self.table_size_shift
-        return block_adjust + block_num
+        for i in range(0, 3):
+            block += (self.table_size_shift + 1) * ((block_num + block_base) // block_base)
+            if (block_num < block_base):
+                break
+
+            block_base *= 0xAA
+
+        return block
 
     def read_block(self, blocknum, length=0x1000):
         """
             Read a block given its block number
             If reading data blocks call fix_blocknum first
         """
-        self.fd.seek(0xc000 + blocknum * 0x1000)
+        self.fd.seek(self.first_hash_table_addr + blocknum * 0x1000)
         return self.fd.read(length)
 
     # This is a huge, messy struct parsing function.
@@ -229,7 +233,7 @@ class STFS(object):
 
         self.license_entries = data[0x22C:0x22C:0x100]
         self.content_id = data[0x32C:0x32C + 0x14]  # Header SHA1 Hash
-        self.entry_id = struct.unpack(">I", data[0x340:0x344])[0]
+        self.header_size = struct.unpack(">I", data[0x340:0x344])[0]
         self.content_type = struct.unpack(">I", data[0x344:0x348])[0]
         self.metadata_version = struct.unpack(">I", data[0x348:0x348 + 0x4])[0]
         self.content_size = struct.unpack(">Q", data[0x34C:0x34C + 0x08])[0]
@@ -288,11 +292,15 @@ class STFS(object):
             self.additional_display_names = data[0x541A:0x541A + 0x300]
             self.additional_display_descriptions = data[0x941A:0x941A + 0x300]
 
-            # Are the hash tables 1 or 2 blocks long?
-        if ((self.entry_id + 0xFFF) & 0xF000) >> 0xC == 0xB:
+        # Are the hash tables 1 or 2 blocks long?
+        if (self.header_size + 0xFFF) & 0xF000 == 0xB000:
+            self.table_size_shift = 0
+        elif self.block_seperation & 1 == 1:
             self.table_size_shift = 0
         else:
             self.table_size_shift = 1
+
+        self.first_hash_table_addr = (self.header_size + 0x0FFF) & 0xFFFFF000
 
 
 def extract_all(argv):
