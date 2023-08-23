@@ -1,4 +1,5 @@
 import logging
+import math
 import mmap
 import os
 
@@ -141,7 +142,7 @@ class BinWrapperException(Exception):
 
 
 class BinWrapper(BaseFile):
-    def __init__(self, fp, sector_size = None, sector_offset = None):
+    def __init__(self, fp, sector_size = None, sector_offset = None, start_offset = 0):
         self.file = fp.name
 
         if not isinstance(fp, MmappedFile):
@@ -161,6 +162,10 @@ class BinWrapper(BaseFile):
         else:
             self.sector_size = sector_size
             self.sector_offset = sector_offset
+
+        self.start_offset = start_offset
+
+        self.virtual_sector_size = self.sector_size - self.sector_offset
 
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
 
@@ -195,10 +200,11 @@ class BinWrapper(BaseFile):
         buffer = bytearray()
 
         while length > 0:
-            sector = pos // 2048
-            pos_in_sector = pos % 2048
-            sector_read_length = min(length, 2048 - pos_in_sector)
-            read_pos = sector * self.sector_size + self.sector_offset + pos % 2048
+            sector = pos // self.virtual_sector_size
+            pos_in_sector = pos % self.virtual_sector_size
+            sector_read_length = min(length, self.virtual_sector_size - pos_in_sector)
+            read_pos = sector * self.sector_size + self.sector_offset + pos % self.virtual_sector_size
+            read_pos += self.start_offset
 
             LOGGER.debug(f"{pos=} {sector=} {pos_in_sector=} {sector_read_length=}")
 
@@ -235,7 +241,7 @@ class BinWrapper(BaseFile):
         return ret
 
     def length(self):
-        return self.mmap.length() // self.sector_size * 2048
+        return math.ceil((self.mmap.length() - self.start_offset) / self.sector_size) * self.virtual_sector_size
 
     def __getitem__(self, item):
         if isinstance(item, slice):
