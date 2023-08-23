@@ -79,7 +79,6 @@ class STFS(object):
         self.fd.seek(0)
         self.data = self.fd.read(0x971A)  # Header data (this is only a member during testing)
         self.parse_header(self.data)
-        self.parse_filetable()
 
     def read_filetable(self, firstblock, numblocks):
         """ Given the length and start of the filetable return all its data
