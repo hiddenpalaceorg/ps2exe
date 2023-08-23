@@ -261,6 +261,12 @@ class STFS(object):
         self.allocated_count = struct.unpack(">I", data[0x37A + 0x1B:0x37A + 0x1B + 0x04])[0]
         self.unallocated_count = struct.unpack(">I", data[0x37A + 0x1F:0x37A + 0x1F + 0x4])[0]
 
+        self.is_god_offset = data[0x391] & 0x40 == 0x40
+        self.god_offset = struct.unpack("<I", data[0x395:0x395 + 0x4])[0]
+        if self.is_god_offset:
+            self.god_offset *= 2
+            self.god_offset -= 2
+
         self.datafile_count = struct.unpack(">I", data[0x39D:0x39D + 0x4])[0]
         self.datafile_size = struct.unpack(">Q", data[0x3A1:0x3A1 + 8])[0]
         self.device_id = data[0x3FD:0x3FD + 0x14]

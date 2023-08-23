@@ -89,7 +89,15 @@ class IsoProcessorFactory:
                     file = BinWrapper(file.open("rb"), sector_size=0xCD000, sector_offset=0x1000, start_offset=0x1000)
                     files.append(file)
                     current_size += file.length()
-                fp = ConcatenatedFile(files, offsets)
+                if len(files) == 1:
+                    fp = files[0]
+                else:
+                    fp = ConcatenatedFile(files, offsets)
+
+                fp.seek(0)
+                if fp.peek(20) == b"MICROSOFT*XBOX*MEDIA":
+                    reader = XDvdFs(fp, 0, -stfs.god_offset)
+                    return XboxPathReader(reader, fp)
             else:
                 stfs.parse_filetable()
                 return XboxStfsPathReader(stfs, fp)
@@ -247,4 +255,3 @@ class IsoProcessorFactory:
             return XboxLiveProcessor
 
         return GenericIsoProcessor
-
