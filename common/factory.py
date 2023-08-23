@@ -33,7 +33,7 @@ from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from p3do.operafs import OperaFs
 from utils.archives import ArchiveWarapper
-from utils.files import BinWrapper, MmappedFile
+from utils.files import BinWrapper, ConcatenatedFile
 from wii.path_reader import WiiPathReader
 from wii.processor import WiiIsoProcessor
 from wii.utils.wii_iso import WiiISO
@@ -56,7 +56,22 @@ class IsoProcessorFactory:
 
         fp.seek(0)
         if fp.read(4) == b"LIVE":
-            return XboxStfsPathReader(STFS(filename=None, fd=fp), fp)
+            stfs = STFS(filename=None, fd=fp)
+            if stfs.content_type == 0x7000:
+                # Not an XBLA archive, actually a GOD game. Process like a concatenated ISO
+                offsets = []
+                files = []
+                current_size = 0
+                data_files = Path(f"{fp.name}.data").rglob("Data*")
+                for file in data_files:
+                    offsets.append(current_size)
+                    file = BinWrapper(file.open("rb"), sector_size=0xCD000, sector_offset=0x1000, start_offset=0x1000)
+                    files.append(file)
+                    current_size += file.length()
+                fp = ConcatenatedFile(files, offsets)
+            else:
+                stfs.parse_filetable()
+                return XboxStfsPathReader(stfs, fp)
 
         if isinstance(fp, io.IOBase):
             wrapper = BinWrapper(fp)

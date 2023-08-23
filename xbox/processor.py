@@ -15,6 +15,7 @@ from Crypto.Cipher import AES
 
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.processor import BaseIsoProcessor
+from utils.files import ConcatenatedFile
 from xbox.path_reader import XboxPathReader, XboxStfsPathReader
 from xbox.stfs.stfs import STFS
 
@@ -350,6 +351,11 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
         self.optional_header_locations = {}
         self.xex_security_info = None
 
+    def get_disc_type(self):
+        if isinstance(self.iso_path_reader.fp, ConcatenatedFile):
+            return {"disc_type": "xbla"}
+        return {"disc_type": "dvdr"}
+
     def read_struct(self, f, struct):
         s = struct()
         slen = ctypes.sizeof(s)
@@ -675,6 +681,7 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
                     stfs = STFS(filename=None, fd=f)
                     if stfs.content_type not in [0xD0000, 0x80000]:
                         continue
+                    stfs.parse_filetable()
                     iso_path_reader = XboxStfsPathReader(stfs, iso_path_reader.fp)
                     break
         super().__init__(iso_path_reader, *args, **kwargs)

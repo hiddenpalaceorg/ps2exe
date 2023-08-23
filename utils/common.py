@@ -48,6 +48,7 @@ def is_path_allowed(path, allowed_extensions=None, archive_entry=None):
         "ss.bin",
         "pfi.bin",
         "dmi.bin",
+        r"Data\d{4}",
     }
     ignored_filenames = "|".join(ignored_filenames)
     if re.search(
