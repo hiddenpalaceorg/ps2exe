@@ -79,7 +79,6 @@ class STFS(object):
         self.fd.seek(0)
         self.data = self.fd.read(0x971A)  # Header data (this is only a member during testing)
         self.parse_header(self.data)
-        self.parse_filetable()
 
     def read_filetable(self, firstblock, numblocks):
         """ Given the length and start of the filetable return all its data
@@ -257,6 +256,12 @@ class STFS(object):
         self.tophashtable_hash = data[0x37A + 7:0x37A + 7 + 0x14]
         self.allocated_count = struct.unpack(">I", data[0x37A + 0x1B:0x37A + 0x1B + 0x04])[0]
         self.unallocated_count = struct.unpack(">I", data[0x37A + 0x1F:0x37A + 0x1F + 0x4])[0]
+
+        self.is_god_offset = data[0x391] & 0x40 == 0x40
+        self.god_offset = struct.unpack("<I", data[0x395:0x395 + 0x4])[0]
+        if self.is_god_offset:
+            self.god_offset *= 2
+            self.god_offset -= 2
 
         self.datafile_count = struct.unpack(">I", data[0x39D:0x39D + 0x4])[0]
         self.datafile_size = struct.unpack(">Q", data[0x3A1:0x3A1 + 8])[0]

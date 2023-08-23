@@ -1,4 +1,5 @@
 import logging
+import math
 import mmap
 import os
 
@@ -133,7 +134,7 @@ class BinWrapperException(Exception):
 
 
 class BinWrapper(BaseFile):
-    def __init__(self, fp, sector_size = None, sector_offset = None):
+    def __init__(self, fp, sector_size = None, sector_offset = None, start_offset = 0):
         self.file = fp.name
 
         self.is_scrambled, data_offset = ScrambledFile.test_scrambled(fp)
@@ -147,11 +148,17 @@ class BinWrapper(BaseFile):
         if not LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug = lambda x: x
 
+        self.virtual_sector_size = None
         if sector_size is None or sector_offset is None:
             self.detect_sector_size()
         else:
             self.sector_size = sector_size
             self.sector_offset = sector_offset
+
+        self.start_offset = start_offset
+
+        if self.virtual_sector_size is None:
+            self.virtual_sector_size = self.sector_size - self.sector_offset
 
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
 
@@ -186,10 +193,11 @@ class BinWrapper(BaseFile):
         buffer = bytearray()
 
         while length > 0:
-            sector = pos // 2048
-            pos_in_sector = pos % 2048
-            sector_read_length = min(length, 2048 - pos_in_sector)
-            read_pos = sector * self.sector_size + self.sector_offset + pos % 2048
+            sector = pos // self.virtual_sector_size
+            pos_in_sector = pos % self.virtual_sector_size
+            sector_read_length = min(length, self.virtual_sector_size - pos_in_sector)
+            read_pos = sector * self.sector_size + self.sector_offset + pos % self.virtual_sector_size
+            read_pos += self.start_offset
 
             LOGGER.debug(f"{pos=} {sector=} {pos_in_sector=} {sector_read_length=}")
 
@@ -226,7 +234,7 @@ class BinWrapper(BaseFile):
         return ret
 
     def length(self):
-        return self.mmap.length() // self.sector_size * 2048
+        return math.ceil((self.mmap.length() - self.start_offset) / self.sector_size) * self.virtual_sector_size
 
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -255,6 +263,7 @@ class BinWrapper(BaseFile):
         if ident == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             self.sector_size = 2352
             self.sector_offset = 16
+            self.virtual_sector_size = 2048
             return
 
         # Gamecube disc
@@ -295,6 +304,7 @@ class BinWrapper(BaseFile):
         if ident == b"Apple_HFS":
             self.sector_size = 2352
             self.sector_offset = 16
+            self.virtual_sector_size = 2048
             return
 
         # ISO9660 or CD-I discs
@@ -313,7 +323,8 @@ class BinWrapper(BaseFile):
             if ident in magics:
                 self.sector_size = 2352
                 self.sector_offset = 16
-                return
+                self.virtual_sector_size = 2048
+            return
 
             self.mmap.seek(0x9319 + magic_offset)
             ident = self.mmap.read(5)
@@ -321,7 +332,8 @@ class BinWrapper(BaseFile):
             if ident in magics:
                 self.sector_size = 2352
                 self.sector_offset = 24
-                return
+                self.virtual_sector_size = 2048
+            return
 
             self.mmap.seek(0x9c41 + magic_offset)
             ident = self.mmap.read(5)
@@ -329,7 +341,8 @@ class BinWrapper(BaseFile):
             if ident in magics:
                 self.sector_size = 2352
                 self.sector_offset = 2368
-                return
+                self.virtual_sector_size = 2048
+            return
 
         # Xbox (360) discs
         if self.mmap.length() > 65556:
