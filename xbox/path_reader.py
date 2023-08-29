@@ -1,5 +1,6 @@
-import io
 import logging
+
+from pycdlib import pycdlib
 
 from common.iso_path_reader.methods.base import IsoPathReader
 
@@ -35,30 +36,22 @@ class XboxPathReader(IsoPathReader):
         return None
 
     def open_file(self, file):
-        bio = io.BytesIO()
-        size_left = file.size
-        self.fp.seek(file.offset)
-        while size_left > 0:
-            chunk_size = min(65536, size_left)
-            chunk = self.fp.read(chunk_size)
-            bio.write(chunk)
-            size_left -= chunk_size
-        return bio
+        inode = pycdlib.inode.Inode()
+        inode.new(file.size, self.fp, False, file.offset)
+        return pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.volume.sector_size)
 
     def get_file_hash(self, file, algo):
-        hash = algo()
-        size_left = file.size
         try:
             self.fp.seek(file.offset)
         except ValueError:
             LOGGER.warning("File %s out of iso range", self.get_file_path(file))
             return
 
-        while size_left > 0:
-            chunk_size = min(65536, size_left)
-            chunk = self.fp.read(chunk_size)
-            hash.update(chunk)
-            size_left -= chunk_size
+        hash = algo()
+        with self.open_file(file) as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                hash.update(chunk)
+
         return hash
 
     def get_file_sector(self, file):
