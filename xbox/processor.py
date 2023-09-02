@@ -18,6 +18,7 @@ from common.processor import BaseIsoProcessor
 from utils.files import ConcatenatedFile
 from xbox.path_reader import XboxPathReader, XboxStfsPathReader
 from xbox.stfs.stfs import STFS
+from xbox.utils.xdbf import XDBF
 
 LOGGER = logging.getLogger(__name__)
 
@@ -652,8 +653,11 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             if len(xdbf_data.read(1)) != 1:
                 return result
             xdbf_data.seek(0)
-            from .utils.xdbf import XDBF
-            xdbf = XDBF(xdbf_data)
+            try:
+                xdbf = XDBF(xdbf_data)
+            except AssertionError:
+                LOGGER.info("XDBF resources not found or invalid")
+                return result
             try:
                 result["header_title"] = xdbf.string_table[1].strings[32768].decode()
             except (IndexError, KeyError):
