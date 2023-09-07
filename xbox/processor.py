@@ -123,6 +123,17 @@ uint16_t = ctypes.c_ushort
 uint32_t = ctypes.c_uint
 
 
+# ImageXEXHeader for "XEX0" format, which only contains very basic information (>=1332)
+class ImageXEXHeader_30(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Magic", uint32_t),
+        ("SizeOfHeaders", uint32_t),
+        ("LoadAddress", uint32_t),
+        ("Unknown14", uint32_t),
+        ("HeaderDirectoryEntryCount", uint32_t),
+    ]
+
+
 # ImageXEXHeader for "XEX?" format, which doesn't contain a SecurityInfo struct (>=1529)
 class ImageXEXHeader_3F(ctypes.BigEndianStructure):
     _fields_ = [
@@ -343,6 +354,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
     _MAGIC_XEX25 = b"XEX%"  # >=1746
     _MAGIC_XEX2D = b"XEX-"  # >=1640
     _MAGIC_XEX3F = b"XEX?"  # >=1529
+    _MAGIC_XEX30 = b"XEX0"  # >=1332
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -384,8 +396,13 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
         f.seek(0)
         if xex_magic == self._MAGIC_XEX3F:
             self.xex_header = self.read_struct(f, ImageXEXHeader_3F)
-        else:
+        elif xex_magic == self._MAGIC_XEX30:
+            self.xex_header = self.read_struct(f, ImageXEXHeader_30)
+        elif xex_magic in [self._MAGIC_XEX2D, self._MAGIC_XEX25, self._MAGIC_XEX31, self._MAGIC_XEX32]:
             self.xex_header = self.read_struct(f, ImageXEXHeader)
+        else:
+            LOGGER.warning("Invalid xex file: bad magic.")
+            raise AssertionError("Invalid xex file: bad magic.")
 
         self.optional_header_locations = {}
         if self.xex_header.HeaderDirectoryEntryCount != 0xFFFFFFFF:
