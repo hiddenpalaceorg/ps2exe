@@ -71,8 +71,6 @@ class XboxIsoProcessor(BaseIsoProcessor):
         return {}
 
     def _parse_exe(self, exe_filename):
-        if exe_filename.endswith("xex"):
-            return Xbox360IsoProcessor(self.iso_path_reader, self.filename, self.system_type)._parse_exe(exe_filename)
         LOGGER.info("Parsing xbe file headers. xbe name: %s", exe_filename)
         try:
             result = {}
@@ -367,7 +365,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
     def get_disc_type(self):
         if isinstance(self.iso_path_reader.fp, ConcatenatedFile):
             return {"disc_type": "xbla"}
-        return {"disc_type": "dvdr"}
+        return super().get_disc_type()
 
     def read_struct(self, f, struct):
         s = struct()
