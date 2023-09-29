@@ -76,12 +76,10 @@ class BaseIsoProcessor:
 
         if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader, PathlabPathReader)):
             for sys_type, exe_type in (("xbox360", ".xex"), ("xbox", ".xbe")):
-                try:
-                    default_xbe = iso_path_reader.get_file(f"/default{exe_type}")
-                    with iso_path_reader.open_file(default_xbe):
+                for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=False):
+                    file_path = iso_path_reader.get_file_path(file)
+                    if file_path.lower() == f"/default{exe_type}":
                         return sys_type
-                except FileNotFoundError:
-                    pass
 
                 # could not find default exe in root, use first exe we can find
                 for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
