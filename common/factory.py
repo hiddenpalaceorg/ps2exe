@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-import pycdlib
+from common import pycdlib
 from pycdlib.pycdlibexception import PyCdlibInvalidInput
 from pyisotools.iso import GamecubeISO
 

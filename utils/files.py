@@ -298,37 +298,38 @@ class BinWrapper(BaseFile):
             return
 
         # ISO9660 or CD-I discs
-        self.mmap.seek(0x8001)
-        ident = self.mmap.read(5)
-        LOGGER.debug(ident)
-        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
-            self.sector_size = 2048
-            self.sector_offset = 0
-            return
+        for magic_offset, magics in [(0, [b"CD001", b"CD-I ", b"BEA01"]), (8, [b'CDROM'])]:
+            self.mmap.seek(0x8001 + magic_offset)
+            ident = self.mmap.read(5)
+            LOGGER.debug(ident)
+            if ident in magics:
+                self.sector_size = 2048
+                self.sector_offset = 0
+                return
 
-        self.mmap.seek(0x9311)
-        ident = self.mmap.read(5)
-        LOGGER.debug(ident)
-        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
-            self.sector_size = 2352
-            self.sector_offset = 16
-            return
+            self.mmap.seek(0x9311 + magic_offset)
+            ident = self.mmap.read(5)
+            LOGGER.debug(ident)
+            if ident in magics:
+                self.sector_size = 2352
+                self.sector_offset = 16
+                return
 
-        self.mmap.seek(0x9319)
-        ident = self.mmap.read(5)
-        LOGGER.debug(ident)
-        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
-            self.sector_size = 2352
-            self.sector_offset = 24
-            return
+            self.mmap.seek(0x9319 + magic_offset)
+            ident = self.mmap.read(5)
+            LOGGER.debug(ident)
+            if ident in magics:
+                self.sector_size = 2352
+                self.sector_offset = 24
+                return
 
-        self.mmap.seek(0x9c41)
-        ident = self.mmap.read(5)
-        LOGGER.debug(ident)
-        if ident in [b"CD001", b"CD-I ", b"BEA01"]:
-            self.sector_size = 2352
-            self.sector_offset = 2368
-            return
+            self.mmap.seek(0x9c41 + magic_offset)
+            ident = self.mmap.read(5)
+            LOGGER.debug(ident)
+            if ident in magics:
+                self.sector_size = 2352
+                self.sector_offset = 2368
+                return
 
         # Xbox (360) discs
         if self.mmap.length() > 65556:
