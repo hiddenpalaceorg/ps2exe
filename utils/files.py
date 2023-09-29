@@ -157,6 +157,7 @@ class BinWrapper(BaseFile):
         if not LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug = lambda x: x
 
+        self.virtual_sector_size = None
         if sector_size is None or sector_offset is None:
             self.detect_sector_size()
         else:
@@ -165,7 +166,8 @@ class BinWrapper(BaseFile):
 
         self.start_offset = start_offset
 
-        self.virtual_sector_size = self.sector_size - self.sector_offset
+        if self.virtual_sector_size is None:
+            self.virtual_sector_size = self.sector_size - self.sector_offset
 
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
 
@@ -270,6 +272,7 @@ class BinWrapper(BaseFile):
         if ident == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             self.sector_size = 2352
             self.sector_offset = 16
+            self.virtual_sector_size = 2048
             return
 
         # Gamecube disc
@@ -310,6 +313,7 @@ class BinWrapper(BaseFile):
         if ident == b"Apple_HFS":
             self.sector_size = 2352
             self.sector_offset = 16
+            self.virtual_sector_size = 2048
             return
 
         # ISO9660 or CD-I discs
@@ -327,6 +331,7 @@ class BinWrapper(BaseFile):
         if ident in [b"CD001", b"CD-I ", b"BEA01"]:
             self.sector_size = 2352
             self.sector_offset = 16
+            self.virtual_sector_size = 2048
             return
 
         self.mmap.seek(0x9319)
@@ -335,6 +340,7 @@ class BinWrapper(BaseFile):
         if ident in [b"CD001", b"CD-I ", b"BEA01"]:
             self.sector_size = 2352
             self.sector_offset = 24
+            self.virtual_sector_size = 2048
             return
 
         self.mmap.seek(0x9c41)
@@ -343,6 +349,7 @@ class BinWrapper(BaseFile):
         if ident in [b"CD001", b"CD-I ", b"BEA01"]:
             self.sector_size = 2352
             self.sector_offset = 2368
+            self.virtual_sector_size = 2048
             return
 
         # Xbox (360) discs
