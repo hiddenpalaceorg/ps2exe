@@ -333,7 +333,7 @@ class BinWrapper(BaseFile):
                 self.sector_size = 2352
                 self.sector_offset = 16
                 self.virtual_sector_size = 2048
-            return
+                return
 
             self.mmap.seek(0x9319 + magic_offset)
             ident = self.mmap.read(5)
@@ -342,7 +342,7 @@ class BinWrapper(BaseFile):
                 self.sector_size = 2352
                 self.sector_offset = 24
                 self.virtual_sector_size = 2048
-            return
+                return
 
             self.mmap.seek(0x9c41 + magic_offset)
             ident = self.mmap.read(5)
@@ -351,7 +351,7 @@ class BinWrapper(BaseFile):
                 self.sector_size = 2352
                 self.sector_offset = 2368
                 self.virtual_sector_size = 2048
-            return
+                return
 
         # Xbox (360) discs
         if self.mmap.length() > 65556:
