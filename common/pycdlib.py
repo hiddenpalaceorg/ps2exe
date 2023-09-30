@@ -329,30 +329,42 @@ class PrimaryOrSupplementaryVD(_PrimaryOrSupplementaryVD):
         Returns:
          Nothing.
         """
-        if ident != b'CDROM':
-            return super().parse(vd, extent_loc)
-
         ################ PVD VERSION ######################
-        (descriptor_type, identifier, self.version, self.flags,
-         self.system_identifier, self.volume_identifier, unused1,
-         space_size_le, space_size_be, self.escape_sequences, set_size_le,
-         set_size_be, seqnum_le, seqnum_be, logical_block_size_le,
-         logical_block_size_be, path_table_size_le, path_table_size_be,
-         self.path_table_location_le, opt_path_table_1_le, opt_path_table_2_le,
-         opt_path_table_3_le, self.path_table_location_be, opt_path_table_1_be,
-         opt_path_table_2_be, opt_path_table_3_msb,
-         root_dir_record, self.volume_set_identifier, pub_ident_str,
-         prepare_ident_str, app_ident_str, self.copyright_file_identifier,
-         self.abstract_file_identifier,vol_create_date_str, vol_mod_date_str,
-         vol_expire_date_str, vol_effective_date_str, self.file_structure_version,
-         unused2, self.application_use, zero_unused) = struct.unpack_from(self.FMT_HS, vd, 0)
+        if ident == b'CD001':
+            (descriptor_type, identifier, self.version, self.flags,
+             self.system_identifier, self.volume_identifier, unused1,
+             space_size_le, space_size_be, self.escape_sequences, set_size_le,
+             set_size_be, seqnum_le, seqnum_be, logical_block_size_le,
+             logical_block_size_be, path_table_size_le, path_table_size_be,
+             self.path_table_location_le, self.optional_path_table_location_le,
+             self.path_table_location_be, self.optional_path_table_location_be,
+             root_dir_record, self.volume_set_identifier, pub_ident_str,
+             prepare_ident_str, app_ident_str, self.copyright_file_identifier,
+             self.abstract_file_identifier, self.bibliographic_file_identifier,
+             vol_create_date_str, vol_mod_date_str, vol_expire_date_str,
+             vol_effective_date_str, self.file_structure_version, unused2,
+             self.application_use, zero_unused) = struct.unpack_from(self.FMT, vd, 0)
+        else:
+            (descriptor_type, identifier, self.version, self.flags,
+             self.system_identifier, self.volume_identifier, unused1,
+             space_size_le, space_size_be, self.escape_sequences, set_size_le,
+             set_size_be, seqnum_le, seqnum_be, logical_block_size_le,
+             logical_block_size_be, path_table_size_le, path_table_size_be,
+             self.path_table_location_le, opt_path_table_1_le, opt_path_table_2_le,
+             opt_path_table_3_le, self.path_table_location_be, opt_path_table_1_be,
+             opt_path_table_2_be, opt_path_table_3_msb,
+             root_dir_record, self.volume_set_identifier, pub_ident_str,
+             prepare_ident_str, app_ident_str, self.copyright_file_identifier,
+             self.abstract_file_identifier,vol_create_date_str, vol_mod_date_str,
+             vol_expire_date_str, vol_effective_date_str, self.file_structure_version,
+             unused2, self.application_use, zero_unused) = struct.unpack_from(self.FMT_HS, vd, 0)
 
         # According to Ecma-119, 8.4.1, the primary volume descriptor type
         # should be 1.
         if descriptor_type != self._vd_type:
             raise pycdlibexception.PyCdlibInvalidISO('Invalid volume descriptor')
         # According to Ecma-119, 8.4.2, the identifier should be 'CD001'.
-        if identifier != b'CDROM':
+        if identifier not in [b'CDROM', b'CD001']:
             raise pycdlibexception.PyCdlibInvalidISO('invalid CD isoIdentification')
         # According to Ecma-119, 8.4.3, the version should be 1 (or 2 for
         # ISO9660:1999)
@@ -364,10 +376,7 @@ class PrimaryOrSupplementaryVD(_PrimaryOrSupplementaryVD):
         # According to Ecma-119, 8.4.4, the first flags field should be 0 for a Primary.
         if self._vd_type == headervd.VOLUME_DESCRIPTOR_TYPE_PRIMARY and self.flags != 0:
             raise pycdlibexception.PyCdlibInvalidISO('PVD flags field is not zero')
-        # According to Ecma-119, 8.4.5, the first unused field (after the
-        # system identifier and volume identifier) should be 0.
-        if unused1 != 0:
-            raise pycdlibexception.PyCdlibInvalidISO('data in 2nd unused field not zero')
+
         # According to Ecma-119, 8.4.9, the escape sequences for a PVD should
         # be 32 zero-bytes.  However, we have seen ISOs in the wild (Fantastic
         # Night Dreams - Cotton Original (Japan).cue from the psx redump
