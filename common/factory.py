@@ -112,14 +112,15 @@ class IsoProcessorFactory:
             return WiiPathReader(iso, fp)
 
         # Apple formatted disc
-        wrapper.seek(0x430)
-        if wrapper.read(9) == b"Apple_HFS":
-            try:
-                volume = Volume()
-                volume.read(wrapper)
-                return HfsPathReader(volume, fp)
-            except ValueError:
-                pass
+        for offset in [0x430, 0x630]:
+            wrapper.seek(offset)
+            if wrapper.read(9) == b"Apple_HFS":
+                try:
+                    volume = Volume()
+                    volume.read(wrapper)
+                    return HfsPathReader(volume, fp)
+                except ValueError:
+                    pass
 
         wrapper.seek(0x800)
         if wrapper.peek(12) == b"PlayStation3":
