@@ -345,6 +345,22 @@ class BinWrapper(AccessBySliceFile):
             self.virtual_sector_size = 2048
             return
 
+        self.mmap.seek(0x630)
+        ident = self.mmap.read(9)
+        if ident == b"Apple_HFS":
+            self.sector_size = 2352
+            self.sector_offset = 16
+            self.virtual_sector_size = 2048
+            return
+
+        self.mmap.seek(0x640)
+        ident = self.mmap.read(9)
+        if ident == b"Apple_HFS":
+            self.sector_size = 2352
+            self.sector_offset = 16
+            self.virtual_sector_size = 2048
+            return
+
         # ISO9660 or CD-I discs
         for magic_offset, magics in [(0, [b"CD001", b"CD-I ", b"BEA01"]), (8, [b'CDROM'])]:
             self.mmap.seek(0x8001 + magic_offset)
