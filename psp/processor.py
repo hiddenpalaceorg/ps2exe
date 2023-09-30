@@ -39,7 +39,7 @@ class PspIsoProcessor(PostPsxIsoProcessor):
             fp = ConcatenatedFile(files, offsets)
 
             from common.factory import IsoProcessorFactory
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, '')
+            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, b'')
 
         super().__init__(iso_path_reader, *args)
 
