@@ -52,6 +52,9 @@ class P3doPathReader(IsoPathReader):
     def get_pvd(self):
         return self.iso.superblock.volume
 
+    def get_file_size(self, file):
+        return file.byte_length
+
     def get_pvd_info(self):
         pvd = self.get_pvd()
 
