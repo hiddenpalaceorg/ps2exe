@@ -14,6 +14,7 @@ LOGGER = logging.getLogger(__name__)
 class DreamcastIsoProcessor(BaseIsoProcessor):
     def __init__(self, iso_path_reader, iso_filename, *args):
         from common.factory import IsoProcessorFactory
+        self.iso_path_reader = iso_path_reader
         file_dir = pathlib.Path(iso_filename).parent.absolute()
         found = False
         # Try to find a gdi file in this directory
@@ -55,21 +56,29 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
 
             tracks = []
             for track_i, line in enumerate(lines):
-                match = re.match(r" *?(?P<index>\d+) +(?P<sector>\d+) +(?P<type>\d+) +(?P<sector_size>\d+)"
+                match = re.match(r" *?(?P<index>\d+) +(?P<sector>(?:\d+|\[fix\])) +(?P<type>\d+) +(?P<sector_size>\d+)"
                                  r" +\"?(?P<file_name>[^\"\n]+)\"? +(\d+)", line)
 
 
                 track = match.groupdict()
 
                 for key in ("index", "sector", "type", "sector_size"):
-                    track[key] = int(track[key])
+                    # Fix for DIC's placeholder track 2
+                    if key == "sector" and track[key] == "[fix]":
+                        track[key] = 0
+                    else:
+                        track[key] = int(track[key])
 
 
                 tracks.append(track)
         return tracks
 
     def get_fp_from_gdi(self, gdi_file, tracks):
-        data_tracks = [tracks[2]]
+        if len(tracks) < 3:
+            data_tracks = [tracks[0]]
+        else:
+            data_tracks = [tracks[2]]
+
         if len(tracks) > 3:
             data_tracks.append(tracks.pop())
 
@@ -79,6 +88,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             MmappedFile(open(gdi_file.parent / data_tracks[0]["file_name"], "rb")),
             sector_size=data_tracks[0]["sector_size"],
             sector_offset=16 if data_tracks[0]["sector_size"] == 2352 else 0,
+            virtual_sector_size=2048
         )]
         for track in data_tracks:
             offsets.append(int(track["sector"]) * 2048)
@@ -87,6 +97,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
                     open(gdi_file.parent / track["file_name"], "rb"),
                     sector_size=track["sector_size"],
                     sector_offset=16 if track["sector_size"] == 2352 else 0,
+                    virtual_sector_size=2048
                 )
             )
 
@@ -121,6 +132,12 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
                         track["type"] = 4
                     track["sector_size"] = 2352
             tracks.append(track)
+
+        # Check if this is a dic-style scm/img file
+        if len(tracks) == 1:
+            if (self.iso_path_reader.get_file_sector(self.iso_path_reader.get_root_dir())) == 45020:
+                tracks[0]["sector"] = 45000
+
         return tracks
 
     def get_disc_type(self):
