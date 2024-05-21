@@ -313,9 +313,6 @@ class PyCdlib(_PyCdlib):
 # Volume descriptor parsers with HS filesystem support
 class PrimaryOrSupplementaryVD(_PrimaryOrSupplementaryVD):
     FMT_HS = '<B5sBB32s32sQLL32sHHHHHHLLLLLLLLLL34s128s128s128s128s37s37s17s17s17s17sBB512s653s'
-    def __init__(self, vd_type):
-        super().__init__(vd_type)
-        self.root_dir_record = HsDirectoryRecord()
 
     def parse(self, vd, ident, extent_loc):
         # type: (bytes, bytes, int) -> None
@@ -358,6 +355,7 @@ class PrimaryOrSupplementaryVD(_PrimaryOrSupplementaryVD):
              self.abstract_file_identifier,vol_create_date_str, vol_mod_date_str,
              vol_expire_date_str, vol_effective_date_str, self.file_structure_version,
              unused2, self.application_use, zero_unused) = struct.unpack_from(self.FMT_HS, vd, 0)
+            self.root_dir_record = HsDirectoryRecord()
 
         # According to Ecma-119, 8.4.1, the primary volume descriptor type
         # should be 1.
