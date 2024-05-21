@@ -142,7 +142,7 @@ class BinWrapperException(Exception):
 
 
 class BinWrapper(BaseFile):
-    def __init__(self, fp, sector_size = None, sector_offset = None, start_offset = 0):
+    def __init__(self, fp, sector_size = None, sector_offset = None, start_offset = 0, virtual_sector_size=None):
         self.file = fp.name
 
         if not isinstance(fp, MmappedFile):
@@ -163,6 +163,7 @@ class BinWrapper(BaseFile):
         else:
             self.sector_size = sector_size
             self.sector_offset = sector_offset
+            self.virtual_sector_size = virtual_sector_size
 
         self.start_offset = start_offset
 
