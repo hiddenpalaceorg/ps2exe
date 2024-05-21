@@ -164,7 +164,7 @@ class BinWrapperException(Exception):
 
 
 class BinWrapper(AccessBySliceFile):
-    def __init__(self, fp, sector_size=None, sector_offset=None):
+    def __init__(self, fp, sector_size=None, sector_offset=None, virtual_sector_size=None):
         super().__init__()
         self.file = fp.name
 
@@ -186,6 +186,7 @@ class BinWrapper(AccessBySliceFile):
         else:
             self.sector_size = sector_size
             self.sector_offset = sector_offset
+            self.virtual_sector_size = virtual_sector_size
 
         if self.virtual_sector_size is None:
             self.virtual_sector_size = self.sector_size - self.sector_offset
