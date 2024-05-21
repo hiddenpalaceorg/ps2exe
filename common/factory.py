@@ -3,9 +3,7 @@ import io
 import logging
 import os
 import re
-import struct
 import sys
-from pathlib import Path
 
 from common import pycdlib
 from pyisotools.iso import GamecubeISO
