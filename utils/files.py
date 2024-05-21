@@ -4,6 +4,7 @@ import mmap
 import os
 
 from utils.mmap import FakeMemoryMap
+from utils.common import MSF
 from utils.unscambler import unscramble_data, lookup_table
 
 LOGGER = logging.getLogger(__name__)
@@ -419,11 +420,11 @@ class ScrambledFile(BaseFile):
         return self.mmap.tell() - self.offset
 
     def peek(self, n=-1):
-        actual_pos = self.mmap.tell()
+        actual_pos = self.tell()
         return unscramble_data(self.mmap.peek(n), actual_pos)
 
     def read(self, n=-1):
-        actual_pos = self.mmap.tell()
+        actual_pos = self.tell()
         return unscramble_data(self.mmap.read(n), actual_pos)
 
     def __getitem__(self, item):
@@ -443,11 +444,28 @@ class ScrambledFile(BaseFile):
 
     @staticmethod
     def test_scrambled(fp):
+        sector_header = b"\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00"
         # Some dumps are offset by 128 bytes and contain scrambled data afterwards
         fp.seek(128)
         data = fp.read(12)
-        if data == b"\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00":
+        if data == sector_header:
             return (True, 128)
+
+        # Check for redumper-style scram files that include
+        # leadin and are not corrected for disc write offset
+        fp.seek(45150 * 2352)
+        data = fp.read(2352)
+        if sector_header in data:
+            header_pos = data.find(sector_header)
+            fp.seek(45150 * 2352 + header_pos)
+            header = fp.read(16)
+            header_unscrambled = bytes(bytearray(v ^ lookup_table[k] for k, v in enumerate(header)))
+            msf_raw = header_unscrambled[12:15]
+            msf = MSF(msf_raw)
+            sector = msf.to_sector()
+            if -10 < msf.to_sector() < 10:
+                offset = (45150 * 2352) - (sector * 2352 - header_pos)
+                return (True, offset)
 
         # Check for discs that are scrambled but not offset.
         for offset in [0x9311, 0x9319, 0x9c41]:

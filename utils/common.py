@@ -2,6 +2,43 @@ import os
 import re
 
 
+class MSF:
+    def __init__(self, data):
+        self.m, self.s, self.f = list(data)
+
+    def __str__(self):
+        return f"{self.m:02x}:{self.s:02x}:{self.f:02x}"
+
+    def __cmp__(self, other):
+        if self.m != other.m:
+            return self.m.__cmp__(other.m)
+
+        if self.s != other.s:
+            return self.s.__cmp__(other.s)
+
+        return self.f.__cmp__(other.f)
+
+    def __eq__(self, other):
+        return (self.m, self.s, self.f) == (other.m, other.s, other.f)
+
+    def to_bcd(self, x):
+        return (x >> 4) * 10 + (x & 0xF)
+
+    def to_sector(self):
+        return (
+            ((self.to_bcd(self.m) * 60) + self.to_bcd(self.s)) * 75
+            + self.to_bcd(self.f)
+        ) - 150
+
+    @classmethod
+    def from_sector(cls, sector_index):
+        s, f = divmod(sector_index + 150, 75)
+        m, s = divmod(s, 60)
+        m = m // 10 * 16 + m % 10
+        ret = cls(bytes.fromhex(f"{m:02x}{s:02}{f:02}"))
+        return ret
+
+
 def is_path_allowed(path, allowed_extensions=None, archive_entry=None):
     if allowed_extensions is None:
         allowed_extensions = []
