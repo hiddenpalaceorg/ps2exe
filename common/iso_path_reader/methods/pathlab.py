@@ -1,8 +1,8 @@
 from common.iso_path_reader.methods.base import IsoPathReader
-from dates import datetime_from_iso_date
+from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 
-class PathlabPathReader(IsoPathReader):
+class PathlabPathReader(ChunkedHashTrait, IsoPathReader):
     def __init__(self, *args, pvd, **kwargs):
         self.pvd = pvd
         super().__init__(*args, **kwargs)
@@ -36,13 +36,6 @@ class PathlabPathReader(IsoPathReader):
 
     def open_file(self, file):
         return file.open(mode='rb')
-
-    def get_file_hash(self, file, algo):
-        hash = algo()
-        with self.open_file(file) as f:
-            while chunk := f.read(65536):
-                hash.update(chunk)
-        return hash
 
     def get_file_size(self, file):
         return file.stat().size

@@ -3,9 +3,10 @@ import io
 from collections import namedtuple
 
 from common.iso_path_reader.methods.base import IsoPathReader
+from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 
-class CompressedPathReader(IsoPathReader):
+class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
     def __init__(self, iso, fp):
         super().__init__(iso, fp)
         self.files = {}
@@ -46,12 +47,8 @@ class CompressedPathReader(IsoPathReader):
     def get_file_path(self, file):
         return file.path
 
-    def get_file_hash(self, file, algo):
-        hash = algo()
-        f = self.open_file(file)
-        while chunk := f.read(65536):
-            hash.update(chunk)
-        return hash
+    def get_file_size(self, file):
+        return file.file_size
 
     def open_file(self, file):
         with self.files[file.path] as f:

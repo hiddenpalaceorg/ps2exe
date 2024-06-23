@@ -102,7 +102,7 @@ class ConcatenatedFile(BaseFile):
             file = 0
 
             for file, file_start, file_stop in reversed(list(self.ranges())):
-                if start >= file_start:
+                if file_stop >= start >= file_start:
                     if file_stop < stop:
                         rest = stop - file_stop
                         stop = file_stop
@@ -111,7 +111,7 @@ class ConcatenatedFile(BaseFile):
                     break
 
             if not found:
-                raise ValueError("No chunk containing range")
+                return b""
 
             start = start - file_start
             stop = stop - file_start
