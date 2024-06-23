@@ -269,6 +269,8 @@ if __name__ == '__main__':
         if len(PROGRESS_MANAGER.counters) > 10:
             oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
             oldest_bar[0].leave = False
+            if oldest_bar[0]._closed:
+                oldest_bar[0]._closed = False
             oldest_bar[0].close()
 
         if args.archives_as_folder and re.search(r"\.(zip|7z|rar)$", path, re.IGNORECASE):
@@ -286,6 +288,8 @@ if __name__ == '__main__':
                     if len(PROGRESS_MANAGER.counters) > 10:
                         oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
                         oldest_bar[0].leave = False
+                        if oldest_bar[0]._closed:
+                            oldest_bar[0]._closed = False
                         oldest_bar[0].close()
 
                     try:
