@@ -33,20 +33,38 @@ def apply_patches():
     def read(self, from_volume):
         offset = 0
         from_volume.seek(0x400)
-        partition_start, = struct.unpack(">8xL", from_volume.read(12))
-        partition_start *= 512
-        if partition_start:
-            if from_volume[partition_start + 1024:partition_start + 1024 + 2] == b'H+':
-                raise ValueError('HFS+ not supported')
-            if from_volume[partition_start+1024:partition_start+1024+2] == b'BD':
-                offset = partition_start
+        while part_data := from_volume.read(512):
+            partition_magic, partition_start = struct.unpack(">2s6xL500x", part_data)
+            if partition_magic != b'PM':
+                break
+            partition_start *= 512
+            if partition_start:
+                if from_volume[partition_start + 1024:partition_start + 1024 + 2] == b'H+':
+                    raise ValueError('HFS+ not supported')
+                if from_volume[partition_start+1024:partition_start+1024+2] == b'BD':
+                    offset = partition_start
+                    break
         if not offset:
             for i in range(0, len(from_volume), 512):
                 if from_volume[i + 1024:i + 1024 + 2] == b'H+':
                     raise ValueError('HFS+ not supported')
                 if from_volume[i+1024:i+1024+2] == b'BD':
                     if i:
+                        # Test offset
                         offset = i
+                        drSigWord, drCrDate, drLsMod, drAtrb, drNmFls, \
+                        drVBMSt, drAllocPtr, drNmAlBlks, drAlBlkSiz, drClpSiz, drAlBlSt, \
+                        drNxtCNID, drFreeBks, drVN, drVolBkUp, drVSeqNum, \
+                        drWrCnt, drXTClpSiz, drCTClpSiz, drNmRtDirs, drFilCnt, drDirCnt, \
+                        drFndrInfo, drVCSize, drVBMCSize, drCtlCSize, \
+                        drXTFlSize, drXTExtRec, \
+                        drCTFlSize, drCTExtRec, \
+                            = struct.unpack('>2sLLHHHHHLLHLH28pLHLLLHLL32sHHHL12sL12s',
+                                            from_volume[1024 + offset:1024 + offset + 162])
+                        try:
+                            drVN.decode("mac_roman")
+                        except UnicodeDecodeError:
+                            continue
                     break
             else:
                 raise ValueError('Magic number not found in image')
