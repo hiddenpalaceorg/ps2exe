@@ -199,23 +199,25 @@ class BaseIsoProcessor:
         file_hashes_excluding_ignored = {}
         root = self.iso_path_reader.get_root_dir()
         file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
-        hash_format = '{desc}{desc_pad}{percentage:3.0f}%|{bar}| ' \
+        hash_format = '    Hashing {file_name}{desc_pad}{percentage:3.0f}%|{bar}| ' \
                       '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
                       '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
 
         with self.progress_manager.counter(total=len(file_list), desc="Getting file hashes", unit='files') as pbar:
-            for file in file_list:
-
-                file_path = self.iso_path_reader.get_file_path(file)
-                with self.progress_manager.counter(total=float(self.iso_path_reader.get_file_size(file)),
-                                                   desc=f"    Hashing {os.path.basename(file_path)}", unit='B',
-                                                   leave=False, bar_format=hash_format) as hash_bar:
+            with self.progress_manager.counter(total=0.0,
+                                               file_name="", unit='B',
+                                               leave=False, bar_format=hash_format) as hash_bar:
+                for file in file_list:
+                    file_path = self.iso_path_reader.get_file_path(file)
+                    hash_bar.update(incr=0, file_name=file_path)
+                    hash_bar.total = float(self.iso_path_reader.get_file_size(file))
+                    hash_bar.count = 0.0
                     hash_wrapper = HashProgressWrapper(hash_bar, hash_type)
                     if file_hash := self.iso_path_reader.get_file_hash(file, hash_wrapper):
                         file_hashes[file_path] = file_hash.digest()
                         if self.ignored_paths and not any(regex.match(file_path) for regex in self.ignored_paths):
                             file_hashes_excluding_ignored[file_path] = file_hash.digest()
-                pbar.update()
+                    pbar.update()
         return file_hashes, file_hashes_excluding_ignored
 
     def get_all_files_hash(self):
