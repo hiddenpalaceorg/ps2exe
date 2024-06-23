@@ -1,3 +1,5 @@
+import logging
+
 import pycdlib.pycdlibio
 from pycdlib.pycdlib import _yield_children
 from pycdlib.pycdlibexception import PyCdlibInvalidInput
@@ -5,6 +7,8 @@ from pycdlib.pycdlibexception import PyCdlibInvalidInput
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 from dates import datetime_from_iso_date
+
+LOGGER = logging.getLogger(__name__)
 
 
 class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
@@ -74,6 +78,14 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
 
 
     def open_file(self, file):
+        # Hack: If multiple files reference the same LBA but with different
+        # sizes, update the inode's data size to be correct for this file
+        if len(file.inode.linked_records) > 1 and file.inode.data_length != file.data_length:
+            LOGGER.warning("File %s marked at LBA %d, which was already marked for file %s",
+                           self.get_file_path(file), file.orig_extent_loc, self.get_file_path(file.inode.linked_records[0][0]))
+            for dr, _ in file.inode.linked_records:
+                if file == dr:
+                    file.inode.data_length = dr.data_length
         return pycdlib.pycdlibio.PyCdlibIO(file.inode, self.iso.logical_block_size)
 
     def get_pvd(self):
