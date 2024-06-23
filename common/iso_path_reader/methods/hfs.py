@@ -3,10 +3,11 @@ import io
 from machfs import Folder
 
 from common.iso_path_reader.methods.base import IsoPathReader
+from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 from dates import datetime_from_hfs_date
 
 
-class HfsPathReader(IsoPathReader):
+class HfsPathReader(ChunkedHashTrait, IsoPathReader):
     def get_root_dir(self):
         return self.iso
 
@@ -41,13 +42,6 @@ class HfsPathReader(IsoPathReader):
 
     def open_file(self, file):
         return io.BytesIO(file.data)
-
-    def get_file_hash(self, file, algo):
-        hash = algo()
-        with self.open_file(file) as f:
-            while chunk := f.read(65536):
-                hash.update(chunk)
-        return hash
 
     def get_file_size(self, file):
         return file.size

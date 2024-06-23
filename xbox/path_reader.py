@@ -3,10 +3,11 @@ import logging
 from pycdlib import pycdlib
 
 from common.iso_path_reader.methods.base import IsoPathReader
+from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 LOGGER = logging.getLogger(__name__)
 
-class XboxPathReader(IsoPathReader):
+class XboxPathReader(ChunkedHashTrait, IsoPathReader):
     def get_root_dir(self):
         return self.iso.root
 
@@ -39,20 +40,6 @@ class XboxPathReader(IsoPathReader):
         inode = pycdlib.inode.Inode()
         inode.new(file.size, self.fp, False, file.offset)
         return pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.volume.sector_size)
-
-    def get_file_hash(self, file, algo):
-        try:
-            self.fp.seek(file.offset)
-        except ValueError:
-            LOGGER.warning("File %s out of iso range", self.get_file_path(file))
-            return
-
-        hash = algo()
-        with self.open_file(file) as f:
-            for chunk in iter(lambda: f.read(65536), b""):
-                hash.update(chunk)
-
-        return hash
 
     def get_file_sector(self, file):
         return file.start_sector
