@@ -44,6 +44,9 @@ class XboxPathReader(ChunkedHashTrait, IsoPathReader):
     def get_file_sector(self, file):
         return file.start_sector
 
+    def get_file_size(self, file):
+        return file.size
+
     def is_directory(self, file):
         return file.__class__.__name__ == 'Directory'
 
