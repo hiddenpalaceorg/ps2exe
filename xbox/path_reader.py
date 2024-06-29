@@ -1,11 +1,13 @@
-import io
 import logging
 
+from pycdlib import pycdlib
+
 from common.iso_path_reader.methods.base import IsoPathReader
+from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 LOGGER = logging.getLogger(__name__)
 
-class XboxPathReader(IsoPathReader):
+class XboxPathReader(ChunkedHashTrait, IsoPathReader):
     def get_root_dir(self):
         return self.iso.root
 
@@ -35,31 +37,9 @@ class XboxPathReader(IsoPathReader):
         return None
 
     def open_file(self, file):
-        bio = io.BytesIO()
-        size_left = file.size
-        self.fp.seek(file.offset)
-        while size_left > 0:
-            chunk_size = min(65536, size_left)
-            chunk = self.fp.read(chunk_size)
-            bio.write(chunk)
-            size_left -= chunk_size
-        return bio
-
-    def get_file_hash(self, file, algo):
-        hash = algo()
-        size_left = file.size
-        try:
-            self.fp.seek(file.offset)
-        except ValueError:
-            LOGGER.warning("File %s out of iso range", self.get_file_path(file))
-            return
-
-        while size_left > 0:
-            chunk_size = min(65536, size_left)
-            chunk = self.fp.read(chunk_size)
-            hash.update(chunk)
-            size_left -= chunk_size
-        return hash
+        inode = pycdlib.inode.Inode()
+        inode.new(file.size, self.fp, False, file.offset)
+        return pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.volume.sector_size)
 
     def get_file_sector(self, file):
         return file.start_sector
@@ -77,9 +57,11 @@ class XboxStfsPathReader(XboxPathReader):
     def get_root_dir(self):
         return self.iso.allfiles
 
-    def iso_iterator(self, base_dir, recursive=False):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         # always recursive
         for path, file in self.iso.allfiles.items():
+            if self.is_directory(file) and not include_dirs:
+                continue
             yield file
 
     def get_file(self, path):
@@ -106,6 +88,12 @@ class XboxStfsPathReader(XboxPathReader):
 
     def get_file_date(self, file):
         return None
+
+    def get_file_size(self,file):
+        return file.size
+
+    def is_directory(self, file):
+        return file.isdirectory
 
     def get_pvd_info(self):
         return {}
