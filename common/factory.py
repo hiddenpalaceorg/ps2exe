@@ -26,6 +26,7 @@ from cdi.utils import Disc
 from p3do.path_reader import P3doPathReader
 from p3do.processor import P3doIsoProcessor
 from cd32.processor import CD32IsoProcessor
+from pc.processor import PcIsoProcessor
 from ps3.path_reader import Ps3PathReader
 from psx.processor import PsxIsoProcessor
 from psp.processor import PspIsoProcessor
@@ -230,6 +231,8 @@ class IsoProcessorFactory:
             return WiiIsoProcessor
         elif system_type == "xbla":
             return XboxLiveProcessor
+        elif system_type == "pc":
+            return PcIsoProcessor
 
         return GenericIsoProcessor
 

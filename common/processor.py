@@ -152,6 +152,14 @@ class BaseIsoProcessor:
                     if f.read(4) in [b"LIVE", b"PIRS"]:
                         return "xbla"
 
+        # Look for a windows EXE
+        for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
+            file_path = iso_path_reader.get_file_path(file)
+            if file_path.lower().endswith(".exe"):
+                with iso_path_reader.open_file(file) as f:
+                    if f.read(2) == b"MZ":
+                        return "pc"
+
 
     def __init__(self, iso_path_reader, filename, system_type, progress_manager):
         self.iso_path_reader = iso_path_reader
