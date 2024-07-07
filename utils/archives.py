@@ -7,7 +7,8 @@ import tempfile
 import psutil
 import rarfile
 
-from utils.files import MmappedFile
+from utils.common import format_bar_desc
+from utils.files import MmappedFile, OffsetFile, get_file_size
 from utils.mmap import FakeMemoryMap
 
 try:
@@ -43,20 +44,45 @@ except rarfile.RarCannotExec:
     rarfile.tool_setup(unrar=True, unar=False, bsdtar=False)
 
 
-class ArchiveWarapper:
-    def __init__(self, path, pbar=None):
-        self.path = path
+class ArchiveWrapper:
+    def __init__(self, file, pbar=None):
+        self.path = file.name
         self.reader = None
         self.pbar = pbar
-        file_ext = os.path.splitext(path)[1]
+        self.mmap = None
+        self.fp = None
+        self.tempfile = None
+        self.mmap_used = 0
+        self.tempfile_used = 0
+        self.entries = {}
+        self._entries_pos = dict()
+        file_ext = os.path.splitext(self.path)[1]
         if file_ext.lower() == ".rar":
-            self.ctx = rarfile.RarFile(path)
+            self.ctx = rarfile.RarFile(self.path)
+            total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
         else:
             try:
-                block_size = os.stat(path).st_blksize
+                block_size = os.stat(self.path).st_blksize
             except (OSError, AttributeError):
                 block_size = 65536
-            self.ctx = libarchive.file_reader(path, block_size=block_size)
+            self.ctx = libarchive.file_reader(self.path, block_size=block_size)
+            total_size = float(get_file_size(file))
+
+        # 80% of free physical memory
+        self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().free * .8), access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
+        self.fp = self.mmap
+
+        bar_fmt = '{desc} {file_name} {desc_pad}{percentage:3.0f}%|{bar}| ' \
+                  '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
+                  '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
+
+        self.counter = self.pbar.counter(
+            total=total_size,
+            desc=f"Decompressing",
+            unit='B',
+            leave=False,
+            bar_format=bar_fmt
+        )
 
     def __enter__(self):
         self.reader = self.ctx.__enter__()
@@ -66,41 +92,53 @@ class ArchiveWarapper:
         self.ctx.__exit__(exc_type, exc_val, exc_tb)
 
     def __iter__(self):
-        return (ArchiveEntryWrapper(self, entry, pbar=self.pbar) for entry in self.reader)
+        for _, entry in self.entries.items():
+            yield entry
+        if not self.reader:
+            return
+
+        for entry in self.reader:
+            if isinstance(entry, rarfile.RarInfo):
+                file_path = entry.filename
+                file_size = entry.file_size
+            else:
+                file_path = entry.name
+                file_size = entry.size
+
+            memory_available = len(self.mmap)
+            if self.mmap_used + file_size > memory_available:
+                if not self.tempfile:
+                    self.tempfile = tempfile.TemporaryFile("r+b")
+                    self.tempfile_mmap = FakeMemoryMap(self.tempfile)
+
+                self._entries_pos[file_path] = (self.tempfile_used, self.tempfile_mmap)
+                self.tempfile_used += file_size
+                entry_fp = OffsetFile(self.tempfile_mmap, self._entries_pos[file_path][0], self.tempfile_used)
+            else:
+                self._entries_pos[file_path] = (self.mmap_used, self.mmap)
+                self.mmap_used += file_size
+                entry_fp = OffsetFile(self.mmap, self._entries_pos[file_path][0], self.mmap_used)
+
+            entry_wrapper = ArchiveEntryWrapper(self, entry, entry_fp, self.reader, pbar=self.counter)
+            self.entries[file_path] = entry_wrapper
+            self.counter.update(incr=0, file_name=format_bar_desc(entry_wrapper.file_name, 30))
+            yield entry_wrapper
+            entry_wrapper.close()
+        self.reader = []
+        self.counter.close()
 
     def __getattr__(self, item):
         return getattr(self.reader, item)
 
 
 class ArchiveEntryReader(MmappedFile, io.IOBase):
-    def __init__(self, entry, archive, pbar=None):
+    def __init__(self, entry, archive, entry_fp, pbar=None):
         self.entry = entry
         self.archive = archive
         self.pos = 0
-        memory_needed = psutil.virtual_memory().total * .8 # 80% of total physical memory
-        if entry.file_size < memory_needed:
-            self.mmap = mmap.mmap(-1, entry.file_size or 1, access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
-            self.fp = self.mmap
-        else:
-            self.fp = tempfile.TemporaryFile("r+b")
-            self.mmap = FakeMemoryMap(self.fp)
-            self.mmap._size = entry.file_size
         self.read_bytes = 0
-        bar_fmt = '{desc}{desc_pad}{percentage:3.0f}%|{bar}| ' \
-                  '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
-                  '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
-
-        self.pbar = None
-        if pbar:
-            self.pbar = pbar.counter(
-                total=float(self.length()),
-                desc="Decompressing",
-                unit='B',
-                leave=False,
-                bar_format=bar_fmt
-            )
-
-        super().__init__(self.mmap)
+        self.fp = entry_fp
+        self.pbar = pbar
 
     def length(self):
         return self.entry.file_size
@@ -109,10 +147,7 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
         return self
 
     def close(self):
-        if self.pbar:
-            self.pbar.enabled = False
-            self.pbar.close(True)
-            self.mmap.close()
+        self.seek(0, io.SEEK_END)
 
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -133,12 +168,15 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
             self._get_data(new_pos - old_pos, discard=True)
         self.pos = new_pos
 
+    def __len__(self):
+        return self.entry.file_size
+
 
 class BlockReader(ArchiveEntryReader):
-    def __init__(self, entry, archive, **kwargs):
-        super().__init__(entry, archive, **kwargs)
+    def __init__(self, entry, archive, *args, **kwargs):
         self.name = entry.name
         self.size = entry.file_size
+        super().__init__(entry, archive, *args, **kwargs)
 
     def _get_data(self, n=None, discard=False):
         amount_need_read = min(self.size, self.pos + n)
@@ -151,21 +189,18 @@ class BlockReader(ArchiveEntryReader):
                 left -= read
                 self.read_bytes += read
                 if self.pbar:
-                    self.pbar.update(read)
+                    self.pbar.update(self.entry.archive_reader.bytes_read - self.pbar.count)
                 if left <= 0:
                     break
-        if self.read_bytes == self.size and self.pbar and self.pbar in self.pbar.manager.counters:
-            self.pbar.enabled = False
-            self.pbar.close(True)
 
         if not discard:
-            data = self.mmap[self.pos:self.pos+n]
+            data = self.fp[self.pos:self.pos+n]
             return data
 
 
 class RarFileReader(ArchiveEntryReader):
-    def __init__(self, entry, archive, **kwargs):
-        super().__init__(entry, archive, **kwargs)
+    def __init__(self, entry, archive, *args, **kwargs):
+        super().__init__(entry, archive, *args, **kwargs)
         self.name = self.entry.filename
         self.rarfile = self.archive._file_parser.open(self.entry, None)
         self.size = self.entry.file_size
@@ -187,40 +222,49 @@ class RarFileReader(ArchiveEntryReader):
                     self.pbar.update(read)
                 if size_left <= 0:
                     break
-        if self.read_bytes == self.size and self.pbar and self.pbar in self.pbar.manager.counters:
-            self.pbar.enabled = False
-            self.pbar.close(True)
 
         if not discard:
-          return self.mmap[self.pos:self.pos+n]
-
-    def close(self):
-        super().close()
-        self.rarfile.close()
+          return self.fp[self.pos:self.pos+n]
 
 
 class ArchiveEntryWrapper:
-    def __init__(self, archive, entry, pbar=None):
+    def __init__(self, archive, entry, fp, archive_reader, pbar=None):
+        self.fp = fp
         self.archive = archive
+        self.archive_reader = archive_reader
         self.entry = entry
         self.pbar = pbar
-        self.fp = None
+        self.entry_reader = None
         if isinstance(entry, rarfile.RarInfo):
             self.path = entry.filename
         else:
             self.path = entry.path
 
     def open(self):
+        if self.entry_reader is not None:
+            self.entry_reader.seek(0)
+            self.fp.seek(0)
+            return self.entry_reader
+
         if isinstance(self.entry, rarfile.RarInfo):
             if self.entry.file_size > rarfile.HACK_SIZE_LIMIT:
                 self.entry.filename = self.entry.filename.replace("/", "\\")
-            self.fp = RarFileReader(self.entry, self.archive, pbar=self.pbar)
+            self.entry_reader = RarFileReader(self.entry, self.archive, self.fp, pbar=self.pbar)
         else:
-            self.fp = BlockReader(self, self.archive, pbar=self.pbar)
-        return self.fp
+            self.entry_reader = BlockReader(self, self.archive, self.fp, pbar=self.pbar)
+        return self.entry_reader
 
     def close(self):
-        self.fp.close()
+        if not self.entry_reader:
+            self.open()
+        self.entry_reader.close()
+
+    @property
+    def file_name(self):
+        if isinstance(self.entry, rarfile.RarInfo):
+            return self.entry.filename
+        else:
+            return self.entry.name
 
     @property
     def file_size(self):

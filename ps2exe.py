@@ -3,16 +3,17 @@ import csv
 import io
 import logging
 import os
-import re
+import pathlib
 import sys
 
 import enlighten
 
+import utils.files
 from common.factory import IsoProcessorFactory
 from common.processor import BaseIsoProcessor
+from common.iso_path_reader.methods.directory import DirectoryPathReader
 from patches import apply_patches
 from utils.common import is_path_allowed
-from utils.archives import ArchiveWarapper
 
 try:
     import pycdlib
@@ -23,37 +24,19 @@ LOGGER = logging.getLogger(__name__)
 PROGRESS_MANAGER = enlighten.get_manager()
 
 
-def get_iso_info(iso_filename, disable_contents_checksum, archive_entry=None):
-    iso_path = iso_filename.encode("cp1252", errors="replace")
-    basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
-    LOGGER.info("Reading %s", iso_path.decode("cp1252"))
-
-    info = {"name": basename.decode("cp1252"), "path": iso_filename}
-
-    if not archive_entry:
-        fp = open(iso_filename, "rb")
-    else:
-        fp = archive_entry.open()
-        fp.size = archive_entry.file_size
-        info["path"] = os.path.join(archive_entry.archive.path, info["path"])
-
-    if not (iso_path_reader := IsoProcessorFactory.get_iso_path_reader(fp, basename)):
-        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
-        return
-
-    system = BaseIsoProcessor.get_system_type(iso_path_reader)
+def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
+    info = {"name": basename.decode("cp1252"), "path": iso_path}
+    system = BaseIsoProcessor.get_system_type(path_reader)
     info.update({"system": system})
 
-    if not (iso_processor_class := IsoProcessorFactory.get_iso_processor_class(system)):
-        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
-        return
+    iso_processor_class = IsoProcessorFactory.get_iso_processor_class(system)
+    if not iso_processor_class:
+        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_path)
+        return None
 
-    iso_processor = iso_processor_class(iso_path_reader, iso_filename, system, PROGRESS_MANAGER)
-
+    iso_processor = iso_processor_class(path_reader, basename.decode("cp1252"), system, PROGRESS_MANAGER)
     info.update(iso_processor.get_disc_type())
-
     info.update(iso_processor.get_pvd_info())
-
     info.update(iso_processor.hash_exe())
     info.update(iso_processor.get_most_recent_file_info(info.get("exe_date")))
 
@@ -62,10 +45,80 @@ def get_iso_info(iso_filename, disable_contents_checksum, archive_entry=None):
 
     info.update(iso_processor.get_extra_fields())
 
+    return info, iso_processor
+
+
+def process_nested_containers(initial_path_reader, base_iso_path, disable_contents_checksum, rows):
+    stack = [(initial_path_reader, base_iso_path)]
+
+    LOGGER.info("Checking for nested containers")
+
+    while stack:
+        current_path_reader, current_base_path = stack.pop()
+
+        for file in current_path_reader.iso_iterator(current_path_reader.get_root_dir(), recursive=True):
+            with current_path_reader.open_file(file) as f:
+                file_path = current_path_reader.get_file_path(file)
+                if not is_path_allowed(file_path, args.allow_extensions, current_path_reader.get_file_size(file)):
+                    continue
+
+                basename = os.path.basename(file_path).encode("cp1252", errors="replace")
+                try:
+                    nested_path_reader = IsoProcessorFactory.get_iso_path_reader(
+                        f, basename, current_path_reader, PROGRESS_MANAGER
+                    )
+                    if not nested_path_reader:
+                        continue
+                except utils.files.BinWrapperException:
+                    continue
+
+                LOGGER.info("Found nested container %s", file_path)
+
+                nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
+                                                                 disable_contents_checksum)
+
+                nested_info["name"] = basename.decode("cp1252")
+                nested_info["path"] = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
+                if nested_info:
+                    rows.append(nested_info)
+                    stack.append((nested_path_reader, nested_info["path"]))
+                    nested_iso_processor.close()
+                bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+                bar.desc = os.path.basename(basename.decode("cp1252"))
+                bar.refresh()
+
+    return rows
+
+
+def get_iso_info(iso_filename, disable_contents_checksum):
+    iso_path = iso_filename.encode("cp1252", errors="replace")
+    fp = open(iso_filename, "rb")
+    parent_container = DirectoryPathReader(pathlib.Path(fp.name).parent)
+
+    rows = []
+
+    basename = os.path.basename(iso_filename).encode("cp1252", errors="replace").decode("cp1252")
+    LOGGER.info("Reading %s", iso_path.decode("cp1252"))
+
+    iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, basename, parent_container, PROGRESS_MANAGER)
+    if not iso_path_reader:
+        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
+        return rows
+
+    info, iso_processor = extract_info(iso_path_reader, basename.encode("cp1252", errors="replace"), iso_filename,
+                                       disable_contents_checksum)
+    if info:
+        rows.append(info)
+
+    bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+    bar.desc = os.path.basename(path)
+    bar.refresh()
+
+    process_nested_containers(iso_path_reader, iso_filename, disable_contents_checksum, rows)
+
     iso_processor.close()
     fp.close()
-
-    return info
+    return rows
 
 
 csv_headers = (
@@ -209,17 +262,7 @@ if __name__ == '__main__':
     files = []
     if args.file:
         if args.file not in existing_files:
-            if args.archives_as_folder and re.search(r"\.(zip|7z|rar)$", args.file, re.IGNORECASE):
-                with ArchiveWarapper(args.file) as archive:
-                    for entry in archive:
-                        if os.path.join(args.file, entry.path) in existing_files:
-                            continue
-                        if not is_path_allowed(entry.path, args.allow_extensions, entry):
-                            continue
-                        file_count += 1
-                    files.append(args.file)
-                    status_bar.update()
-            elif is_path_allowed(args.file, args.allow_extensions):
+            if is_path_allowed(args.file, args.allow_extensions):
                 file_count += 1
                 files.append(args.file)
                 status_bar.update()
@@ -231,16 +274,6 @@ if __name__ == '__main__':
             dirnames.sort()
             for filename in sorted(filenames):
                 path = os.path.join(root, filename)
-                if args.archives_as_folder and re.search(r"\.(zip|7z|rar)$", path, re.IGNORECASE):
-                    with ArchiveWarapper(path) as archive:
-                        for entry in archive:
-                            if os.path.join(path, entry.path) in existing_files:
-                                continue
-                            if not is_path_allowed(entry.path, args.allow_extensions, entry):
-                                continue
-                            status_bar.update()
-                            file_count += 1
-                        files.append(path)
                 if path in existing_files:
                     continue
                 if not is_path_allowed(path, args.allow_extensions):
@@ -273,51 +306,15 @@ if __name__ == '__main__':
                 oldest_bar[0]._closed = False
             oldest_bar[0].close()
 
-        if args.archives_as_folder and re.search(r"\.(zip|7z|rar)$", path, re.IGNORECASE):
-            LOGGER.info("Reading %s", path)
-            with ArchiveWarapper(path, pbar=PROGRESS_MANAGER) as archive:
-                for entry in archive:
-                    if os.path.join(path, entry.path) in existing_files:
-                        continue
-                    if not is_path_allowed(entry.path, args.allow_extensions, entry):
-                        continue
-                    if entry.is_dir:
-                        continue
-                    status_bar.update(game_name=os.path.basename(entry.path))
-
-                    if len(PROGRESS_MANAGER.counters) > 10:
-                        oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
-                        oldest_bar[0].leave = False
-                        if getattr(oldest_bar[0], "_closed", False):
-                            oldest_bar[0]._closed = False
-                        oldest_bar[0].close()
-
-                    try:
-                        result = get_iso_info(entry.path, args.no_contents_checksum, entry)
-                        if result:
-                            writer.writerow(result)
-                            csv_file.flush()
-
-                            bar = list(PROGRESS_MANAGER.counters.keys())[-1]
-                            bar.desc = os.path.basename(entry.path)
-                            bar.refresh()
-                    except Exception:
-                        LOGGER.exception("Error reading %s", args.file)
-                        entry.close()
-                    continue
         if path in existing_files:
             continue
         if not is_path_allowed(path, args.allow_extensions):
             continue
         try:
-            result = get_iso_info(path, args.no_contents_checksum)
-            if result:
-                writer.writerow(result)
+            rows = get_iso_info(path, args.no_contents_checksum)
+            if len(rows):
+                writer.writerows(rows)
                 csv_file.flush()
-
-                bar = list(PROGRESS_MANAGER.counters.keys())[-1]
-                bar.desc = os.path.basename(path)
-                bar.refresh()
 
         except Exception:
             LOGGER.exception("Error reading %s", args.file)

@@ -1,11 +1,8 @@
 import datetime
 
-# shorthand parsing methods. They take a sequence of characters (bytes) as input.
-import mmap
-
 from utils.unscambler import unscramble_data
 
-
+# shorthand parsing methods. They take a sequence of characters (bytes) as input.
 def number(seq):
     return int.from_bytes(seq, "big")
 
@@ -239,9 +236,9 @@ class Disc(object):
     HEADER_LEN = 16
     FIRST_DISCLABEL_IDX = 16
 
-    def __init__(self, image_file, headers=False, scrambled=False):
+    def __init__(self, fp, headers=False, scrambled=False):
         "Create a disc image object from an image file. Does not immediately start processing it."
-        self.image_file = mmap.mmap(image_file.fileno(), 0, access=mmap.ACCESS_READ)
+        self.image_file = fp
         self.sectors = []
         self.disclabels = []
         self.block_offset = None
@@ -255,7 +252,7 @@ class Disc(object):
 
     def read_sectors(self):
         offset = Disc.HEADER_LEN if self.headers else 0
-        size = self.image_file.size()
+        size = self.image_file.length()
         while offset < size:
             new_sector = Sector(self, offset)
             offset += (Sector.FULL_SIZE+Disc.HEADER_LEN) if self.headers else Sector.FULL_SIZE

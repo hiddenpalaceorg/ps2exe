@@ -12,8 +12,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
-    def __init__(self, iso, fp, udf=False):
-        super().__init__(iso, fp)
+    def __init__(self, iso, fp, *args, udf=False, **kwargs):
+        super().__init__(iso, fp, *args, **kwargs)
         self.udf = udf
 
     def get_root_dir(self):

@@ -39,7 +39,7 @@ class MSF:
         return ret
 
 
-def is_path_allowed(path, allowed_extensions=None, archive_entry=None):
+def is_path_allowed(path, allowed_extensions=None, file_size=None):
     if allowed_extensions is None:
         allowed_extensions = []
 
@@ -94,8 +94,8 @@ def is_path_allowed(path, allowed_extensions=None, archive_entry=None):
             re.IGNORECASE):
         return False
 
-    if archive_entry:
-        size = archive_entry.file_size
+    if file_size is not None:
+        size = file_size
     else:
         size = os.path.getsize(path)
 
@@ -104,3 +104,10 @@ def is_path_allowed(path, allowed_extensions=None, archive_entry=None):
         return False
 
     return True
+
+
+def format_bar_desc(text, max_len):
+    if len(text) > max_len:
+        return "..." + text[-(max_len - 3):]
+    else:
+        return text.rjust(max_len, " ")

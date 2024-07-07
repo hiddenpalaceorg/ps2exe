@@ -6,32 +6,26 @@ from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 
 class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
-    def __init__(self, iso, fp):
-        super().__init__(iso, fp)
-        self.files = {}
-        self.entries = {}
-        for entry in iso:
-            if entry.is_dir:
-                continue
-
-            self.entries[entry.path] = entry
-            with entry.open() as f:
-                self.files[entry.path] = io.BytesIO(f.read())
-            self.files[entry.path].seek(0)
+    def __init__(self, iso, fp, *args, **kwargs):
+        super().__init__(iso, fp, *args, **kwargs)
+        iso.__enter__()
 
     def get_root_dir(self):
-        return self.entries
+        return self.iso
 
     def iso_iterator(self, base_dir, **kwargs):
         # always recursive
-        for path, file in self.entries.items():
+        for file in self.iso:
             yield file
 
     def get_file(self, path):
-        try:
-            return self.entries[path]
-        except KeyError:
-            raise FileNotFoundError
+        if path in [".", "/", ""]:
+            return self.get_root_dir()
+        paths_to_try = [path, path.replace("\\", "/"), path.replace("/", "\\")]
+        for file in self.iso_iterator(self.get_root_dir(), recursive=True):
+            if file.path in paths_to_try:
+                return file
+        raise FileNotFoundError
 
     def get_file_date(self, file):
         return None
@@ -44,22 +38,21 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
 
     def open_file(self, file):
         path = self.get_file_path(file)
-        with self.files[path] as f:
-            f.seek(0)
-            f.close = lambda: None
-        return self.files[path]
+        return self.iso.entries[path].open()
 
     # noinspection PyRedeclaration
     def get_file_date(self, file):
-        path = self.get_file_path(file)
-        if getattr(self.entries[path], "date_time", None):
+        if getattr(file, "date_time", None):
             return datetime.datetime(*file.date_time, tzinfo=datetime.timezone.utc)
-        if isinstance(self.entries[path].mtime, datetime.datetime):
-            return self.entries[path].mtime
-        return datetime.datetime.fromtimestamp(self.entries[path].mtime, tz=datetime.timezone.utc)
+        if isinstance(file.mtime, datetime.datetime):
+            return file.mtime
+        return datetime.datetime.fromtimestamp(file.mtime, tz=datetime.timezone.utc)
 
     def get_pvd_info(self):
         return {}
 
     def get_pvd(self):
         return {}
+
+    def close(self):
+        self.iso.__exit__(None, None, None)

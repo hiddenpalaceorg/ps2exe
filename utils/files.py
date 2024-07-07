@@ -2,6 +2,7 @@ import logging
 import math
 import mmap
 import os
+from io import UnsupportedOperation
 
 from utils.mmap import FakeMemoryMap
 from utils.common import MSF
@@ -37,7 +38,7 @@ class BaseFile:
         if n is None or n < 0:
             n = self.length() - self.pos
         ret = self._get_data(n)
-        self.pos += n
+        self.pos += len(ret)
         return ret
 
     def _get_data(self, n, discard=False):
@@ -61,8 +62,12 @@ class MmappedFile(BaseFile):
             self.mmap = fp
             self.name = None
         else:
-            self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
-            self.name = fp.name
+            try:
+                self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
+                self.name = fp.name
+            except (AttributeError, UnsupportedOperation):
+                self.mmap = FakeMemoryMap(fp)
+                self.name = ""
 
     def ranges(self):
         yield 0, 0, len(self)
@@ -144,7 +149,7 @@ class BinWrapperException(Exception):
 
 class BinWrapper(BaseFile):
     def __init__(self, fp, sector_size = None, sector_offset = None, start_offset = 0, virtual_sector_size=None):
-        self.file = fp.name
+        self.file = getattr(fp, "name", "")
 
         if not isinstance(fp, MmappedFile):
             self.mmap = MmappedFile(fp)
@@ -362,6 +367,16 @@ class BinWrapper(BaseFile):
                 self.virtual_sector_size = 2048
                 return
 
+            self.mmap.seek(0x9801 + magic_offset)
+            ident = self.mmap.read(5)
+            LOGGER.debug(ident)
+            if ident in magics:
+                self.sector_size = 2048
+                self.sector_offset = 0
+                self.mmap = OffsetFile(self.mmap, 0x9801 - 0x8001, self.mmap.length())
+
+                return
+
             self.mmap.seek(0x9c41 + magic_offset)
             ident = self.mmap.read(5)
             LOGGER.debug(ident)
@@ -477,3 +492,69 @@ class ScrambledFile(BaseFile):
                 return (True, 0)
 
         return False, None
+
+
+class OffsetFile(BaseFile):
+    def __init__(self, mmap, offset, end_pos):
+        self.offset = offset
+        self.end_pos = end_pos
+        self.mmap = mmap
+
+    def seek(self, pos, whence=os.SEEK_SET):
+        if pos >= self.length():
+            pos = self.length()
+        return super().seek(pos+self.offset, whence)
+
+    def tell(self):
+        return super().tell() - self.offset
+
+    def read(self, n=None):
+        if n:
+            ret = self[self.tell():self.tell()+n]
+        else:
+            ret = self[self.tell():]
+
+        self.pos += len(ret)
+        return ret
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            read_pos = item.start
+            read_len = item.stop - item.start
+        else:
+            read_pos = item
+            read_len = 1
+        self.seek(read_pos)
+        file_pos = super().tell()
+        if file_pos + read_len > self.end_pos:
+            read_len = self.end_pos - file_pos
+        if self.tell() == self.length():
+            return b''
+        return self.mmap[file_pos:file_pos+read_len]
+
+    def write(self, data):
+        self.mmap.write(data)
+
+    def length(self):
+        return self.end_pos - self.offset
+
+    def __len__(self):
+        return self.length()
+
+    def close(self):
+        pass
+
+
+def get_file_size(file):
+    try:
+        file.fileno()
+        return os.stat(file.name).st_size
+    except (AttributeError, UnsupportedOperation):
+        from utils.archives import ArchiveEntryReader, ArchiveEntryWrapper
+
+        if isinstance(file, ArchiveEntryReader):
+            return file.entry.file_size
+
+        if isinstance(file, ArchiveEntryWrapper):
+            return file.file_size
+
