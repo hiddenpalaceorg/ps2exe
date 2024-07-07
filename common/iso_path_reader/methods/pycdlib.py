@@ -43,8 +43,12 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         try:
             return self.iso.full_path_from_dirrecord(file).replace(";1", "")
         except UnicodeDecodeError:
-            return file.file_ident.decode(errors="replace").replace(";1", "")
-
+            path = []
+            while not file.is_root:
+                path.append(file.file_ident)
+                file = file.parent
+            path = b"/" + b"/".join(reversed(path))
+            return path.decode(errors="replace").replace(";1", "")
     def get_file_date(self, file):
         return datetime_from_iso_date(file.date if not self.udf else file.mod_time)
 
@@ -74,8 +78,11 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             except PyCdlibInvalidInput:
                 if path.upper() != path:
                     return self.get_file(path.upper())
+                if b'\xef\xbf\xbd' in path.encode():
+                    for file in self.iso_iterator(self.get_root_dir(), recursive=True):
+                        if path == self.get_file_path(file):
+                            return file
                 raise FileNotFoundError(e)
-
 
     def open_file(self, file):
         # Hack: If multiple files reference the same LBA but with different

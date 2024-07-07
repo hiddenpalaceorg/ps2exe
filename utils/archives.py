@@ -50,7 +50,6 @@ class ArchiveWrapper:
         self.reader = None
         self.pbar = pbar
         self.mmap = None
-        self.fp = None
         self.tempfile = None
         self.mmap_used = 0
         self.tempfile_used = 0
@@ -69,8 +68,17 @@ class ArchiveWrapper:
             total_size = float(get_file_size(file))
 
         # 80% of free physical memory
-        self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().free * .8), access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
-        self.fp = self.mmap
+        try:
+            self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().free * .8),
+                                  access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
+        except OSError:
+            # Try 60%
+            try:
+                self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().free * .6),
+                                      access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
+            except OSError:
+                # Give up
+                pass
 
         bar_fmt = '{desc} {file_name} {desc_pad}{percentage:3.0f}%|{bar}| ' \
                   '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
@@ -90,6 +98,10 @@ class ArchiveWrapper:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.ctx.__exit__(exc_type, exc_val, exc_tb)
+        if self.mmap:
+            self.mmap.close()
+        if self.tempfile:
+            self.tempfile.close()
 
     def __iter__(self):
         for _, entry in self.entries.items():
@@ -106,7 +118,7 @@ class ArchiveWrapper:
                 file_size = entry.size
 
             memory_available = len(self.mmap)
-            if self.mmap_used + file_size > memory_available:
+            if not self.mmap or (self.mmap_used + file_size > memory_available):
                 if not self.tempfile:
                     self.tempfile = tempfile.TemporaryFile("r+b")
                     self.tempfile_mmap = FakeMemoryMap(self.tempfile)
