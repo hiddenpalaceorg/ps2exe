@@ -42,6 +42,53 @@ def apply_patches():
         return io.read(length).decode(encoding, errors="ignore")
     pyisotools.iso.read_string = read_string
 
+    def init_from_iso(self, _rawISO):
+        from pyisotools.boot import Boot
+        from pyisotools.bi2 import BI2
+        from pyisotools.apploader import Apploader
+        from dolreader.dol import DolFile
+        from pyisotools.bnrparser import BNR
+        from pyisotools.fst import FSTNode
+        from io import BytesIO
+        from fnmatch import fnmatch
+
+        _rawISO.seek(0)
+        self.bootheader = Boot(_rawISO)
+        self.bootinfo = BI2(_rawISO)
+        self.apploader = Apploader(_rawISO)
+        self.dol = DolFile(_rawISO, startpos=self.bootheader.dolOffset)
+        _rawISO.seek(self.bootheader.fstOffset)
+        self._rawFST = BytesIO(_rawISO.read(self.bootheader.fstSize))
+
+        self.load_file_systemv(self._rawFST)
+
+        if self.bootinfo.countryCode == BI2.Country.JAPAN:
+            region = BNR.Regions.JAPAN
+        else:
+            region = self.bootinfo.countryCode - 1
+
+        bnrNode = None
+        for child in self.children:
+            if child.is_file() and fnmatch(child.path, "*opening.bnr"):
+                bnrNode = child
+                break
+
+        if bnrNode:
+            _rawISO.seek(bnrNode._fileoffset)
+            self.bnr = BNR.from_data(
+                _rawISO, region=region, size=bnrNode.size)
+        else:
+            self.bnr = None
+
+        prev = FSTNode.file("", None, self.bootheader.fstSize,
+                            self.bootheader.fstOffset)
+        for node in self.nodes_by_offset():
+            alignment = self._detect_alignment(node, prev)
+            if alignment != 4:
+                self._alignmentTable[node.path] = alignment
+            prev = node
+    pyisotools.iso.GamecubeISO.init_from_iso = init_from_iso
+
     import machfs.main
     import struct
 
