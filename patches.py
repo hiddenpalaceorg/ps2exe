@@ -11,6 +11,24 @@ def apply_patches():
         return orig_parse(self, datestr)
     pycdlib.dates.VolumeDescriptorDate.parse = parse
 
+    # Hack to bypass any endian tests in pycdlib
+    class mockint(int):
+        def __ne__(self, other):
+            return False
+
+        def __eq__(self, value):
+            return True
+    import pycdlib.utils
+    orig_swab32bit = pycdlib.utils.swab_32bit
+    def swab_32bit(x):
+        return mockint(orig_swab32bit(x))
+
+    orig_swab16bit = pycdlib.utils.swab_16bit
+    def swab_16bit(x):
+        return mockint(orig_swab16bit(x))
+    pycdlib.utils.swab_32bit = swab_32bit
+    pycdlib.utils.swab_16bit = swab_16bit
+
     def read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ascii") -> str:
         """ Reads a null terminated string from the specified address """
 
