@@ -50,6 +50,7 @@ def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
 
 def process_nested_containers(initial_path_reader, base_iso_path, disable_contents_checksum, rows):
     stack = [(initial_path_reader, base_iso_path)]
+    processed_containers = []
 
     LOGGER.info("Checking for nested containers")
 
@@ -82,10 +83,13 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
                 if nested_info:
                     rows.append(nested_info)
                     stack.append((nested_path_reader, nested_info["path"]))
-                    nested_iso_processor.close()
+                    processed_containers.append(nested_iso_processor)
                 bar = list(PROGRESS_MANAGER.counters.keys())[-1]
                 bar.desc = os.path.basename(basename.decode("cp1252"))
                 bar.refresh()
+
+    for container in processed_containers:
+        container.close()
 
     return rows
 
