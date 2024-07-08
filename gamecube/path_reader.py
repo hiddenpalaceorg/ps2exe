@@ -1,11 +1,14 @@
 import io
 import logging
 
+from pycdlib import pycdlib
+
 from common.iso_path_reader.methods.base import IsoPathReader
+from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 LOGGER = logging.getLogger(__name__)
 
-class GamecubePathReader(IsoPathReader):
+class GamecubePathReader(ChunkedHashTrait, IsoPathReader):
     def get_root_dir(self):
         return self.iso.rootnode
 
@@ -35,35 +38,16 @@ class GamecubePathReader(IsoPathReader):
             return file.path
         return file.name
 
+    def get_file_size(self, file):
+        return file.size
+
     def get_file_date(self, file):
         return None
 
     def open_file(self, file):
-        bio = io.BytesIO()
-        size_left = file.size
-        self.fp.seek(file.offset)
-        while size_left > 0:
-            chunk_size = min(65536, size_left)
-            chunk = self.fp.read(chunk_size)
-            bio.write(chunk)
-            size_left -= chunk_size
-        return bio
-
-    def get_file_hash(self, file, algo):
-        hash = algo()
-        size_left = file.size
-        try:
-            self.fp.seek(file._fileoffset)
-        except ValueError:
-            LOGGER.warning("File %s out of iso range", self.get_file_path(file))
-            return
-
-        while size_left > 0:
-            chunk_size = min(65536, size_left)
-            chunk = self.fp.read(chunk_size)
-            hash.update(chunk)
-            size_left -= chunk_size
-        return hash
+        inode = pycdlib.inode.Inode()
+        inode.new(file.size, self.fp, False, file._fileoffset)
+        return pycdlib.pycdlibio.PyCdlibIO(inode, 2048)
 
     def get_file_sector(self, file):
         if file._fileoffset:
