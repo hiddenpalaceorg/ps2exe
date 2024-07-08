@@ -18,10 +18,9 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         file_dir = self.iso_path_reader.parent_container.get_file(str(pathlib.Path(iso_filename).parent))
         found = False
         # Try to find a gdi file in this directory
-        rule = re.compile(fnmatch.translate("*.gdi$"), re.IGNORECASE)
+        rule = re.compile(fnmatch.translate("*.gdi"), re.IGNORECASE)
         for i in [entry for entry in iso_path_reader.parent_container.iso_iterator(file_dir)
                   if rule.match(iso_path_reader.parent_container.get_file_path(entry))]:
-            i = pathlib.Path(self.iso_path_reader.parent_container.get_file_path(i))
             tracks = self.parse_gdi(self.iso_path_reader.parent_container.get_file_path(i))
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
@@ -48,9 +47,10 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         super().__init__(iso_path_reader, iso_filename, *args)
 
 
-    def parse_gdi(self, gdi_file):
+    def parse_gdi(self, gdi_path):
+        gdi_file = self.iso_path_reader.parent_container.get_file(gdi_path)
         with self.iso_path_reader.parent_container.open_file(gdi_file) as f:
-            text = f.read()
+            text = f.read().decode()
             lines = text.splitlines()
 
             _n_tracks = int(lines.pop(0))
