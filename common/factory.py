@@ -128,22 +128,20 @@ class IsoProcessorFactory:
 
         wrapper.seek(0x1C)
         if wrapper.read(4) == b"\xC2\x33\x9F\x3D":
-            iso_path = Path(fp.name).resolve()
-            iso = GamecubeISO.from_iso(iso_path)
+            iso = GamecubeISO.from_iso(wrapper)
             return GamecubePathReader(iso, fp)
 
         wrapper.seek(0)
         if wrapper.read(64) == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
                 b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
-            iso_path = Path(fp.name).resolve()
-            iso = GamecubeISO.from_iso(iso_path)
+            iso = GamecubeISO.from_iso(wrapper)
             return GamecubePathReader(iso, fp)
 
         wrapper.seek(0x18)
         if wrapper.read(4) == b"\x5D\x1C\x9E\xA3":
             try:
                 disc = WiiDisc(wrapper)
-                iso = WiiISO.from_disc(fp.name, disc)
+                iso = WiiISO.from_disc(wrapper.name, disc)
                 return WiiPathReader(iso, fp)
             except ValueError:
                 pass

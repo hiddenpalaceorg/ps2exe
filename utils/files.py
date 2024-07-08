@@ -167,7 +167,7 @@ class BinWrapperException(Exception):
 class BinWrapper(AccessBySliceFile):
     def __init__(self, fp, sector_size=None, sector_offset=None, virtual_sector_size=None):
         super().__init__()
-        self.file = fp.name
+        self.file = self.name = fp.name
 
         if not isinstance(fp, MmapWrapper):
             self.mmap = MmappedFile(fp)

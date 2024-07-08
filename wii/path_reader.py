@@ -9,7 +9,7 @@ class WiiPathReader(GamecubePathReader):
     def open_file(self, file):
         bio = io.BytesIO()
         size_left = file.size
-        self.iso.partition.seek(file.offset)
+        self.iso.partition.seek(file._fileoffset)
         while size_left > 0:
             chunk_size = min(65536, size_left)
             chunk = self.iso.partition.read(chunk_size)
