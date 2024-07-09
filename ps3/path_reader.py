@@ -65,8 +65,8 @@ class DecryptedFileReader(PyCdlibIO):
         return cipher.decrypt(block)
 
 class Ps3PathReader(PyCdLibPathReader):
-    def __init__(self, iso, fp, *args, **kwargs):
-        super().__init__(iso, fp, *args, **kwargs, udf=True)
+    def __init__(self, iso, fp, *args, udf=True, **kwargs):
+        super().__init__(iso, fp, *args, udf=udf, **kwargs)
         self.fp.seek(0)
         self.number_of_unencrypted_regions = struct.unpack('>i4x', self.fp.read(8))
         self.regions = self.get_regions()
@@ -120,6 +120,24 @@ class Ps3PathReader(PyCdLibPathReader):
         if block[:7] in expected_magic:
             LOGGER.info("Found decrypted disc, no key required")
             return
+
+        # Check if there exists a 32 byte hexadecimal or 16 byte file in the same dir. That may be the key
+        file_dir = self.parent_container.get_file(str(pathlib.Path(self.fp.file).parent))
+        for i in self.parent_container.iso_iterator(file_dir):
+            if self.parent_container.get_file_size(i) == 32:
+                try:
+                    key = bytes.fromhex(self.parent_container.open_file(i).read().decode())
+                except ValueError:
+                    continue
+            elif self.parent_container.get_file_size(i) == 16:
+                key = self.parent_container.open_file(i).read()
+            else:
+                continue
+
+            block_dec = f.decrypt_block(block,key)
+            if block_dec[:7] in expected_magic:
+                LOGGER.info("Found key: %s", key.hex())
+                return key
 
         # Check if the disc decrypted with a debug key
         debug_key = '67c0758cf4996fef7e88f90cc6959d66'
