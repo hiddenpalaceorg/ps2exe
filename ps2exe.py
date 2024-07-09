@@ -59,6 +59,10 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
 
         for file in current_path_reader.iso_iterator(current_path_reader.get_root_dir(), recursive=True):
             f = current_path_reader.open_file(file)
+            try:
+                f.__enter__()
+            except AttributeError:
+                pass
             file_path = current_path_reader.get_file_path(file)
             if not is_path_allowed(file_path, args.allow_extensions, current_path_reader.get_file_size(file)):
                 continue
@@ -90,8 +94,10 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
 
     for (container, file) in processed_containers:
         container.close()
-        if hasattr(file, "__exit__"):
+        try:
             file.__exit__()
+        except AttributeError:
+            pass
 
     return rows
 
