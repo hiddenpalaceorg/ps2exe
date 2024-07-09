@@ -49,7 +49,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         return datetime_from_iso_date(file.date if not self.udf else file.mod_time)
 
     def get_file_size(self, file):
-        return file.data_length if not self.udf else file.inode.data_length
+        return file.get_data_length()
 
     def get_file_sector(self, file):
         return file.orig_extent_loc
@@ -86,6 +86,10 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             for dr, _ in file.inode.linked_records:
                 if file == dr:
                     file.inode.data_length = dr.data_length
+        # Hack #2. If the inode reports a negative or truncated value, force it to be the original size
+        if hasattr(file, "data_length") and file.inode.data_length < file.data_length:
+            file.inode.data_length = file.data_length
+
         return pycdlib.pycdlibio.PyCdlibIO(file.inode, self.iso.logical_block_size)
 
     def get_pvd(self):
