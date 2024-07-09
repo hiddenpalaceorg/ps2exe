@@ -69,12 +69,12 @@ class ArchiveWrapper:
 
         # 80% of free physical memory
         try:
-            self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().free * .8),
+            self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().available * .8),
                                   access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
         except OSError:
             # Try 60%
             try:
-                self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().free * .6),
+                self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().available * .6),
                                       access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
             except OSError:
                 # Give up
