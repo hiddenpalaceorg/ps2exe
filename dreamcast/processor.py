@@ -25,7 +25,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
-            gdi_name = i.name.encode("cp1252", errors="replace")
+            gdi_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
             iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name, *args)
             found = True
 
@@ -41,8 +41,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if tracks[0]["file_name"] != basename(iso_filename):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
-            gdi_name = i.name.encode("cp1252", errors="replace")
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name, *args)
+            cue_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
+            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, cue_name, *args)
 
         super().__init__(iso_path_reader, iso_filename, *args)
 
