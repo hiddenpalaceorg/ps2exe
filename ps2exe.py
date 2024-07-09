@@ -58,38 +58,40 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
         current_path_reader, current_base_path = stack.pop()
 
         for file in current_path_reader.iso_iterator(current_path_reader.get_root_dir(), recursive=True):
-            with current_path_reader.open_file(file) as f:
-                file_path = current_path_reader.get_file_path(file)
-                if not is_path_allowed(file_path, args.allow_extensions, current_path_reader.get_file_size(file)):
+            f = current_path_reader.open_file(file)
+            file_path = current_path_reader.get_file_path(file)
+            if not is_path_allowed(file_path, args.allow_extensions, current_path_reader.get_file_size(file)):
+                continue
+
+            basename = os.path.basename(file_path).encode("cp1252", errors="replace")
+            try:
+                nested_path_reader = IsoProcessorFactory.get_iso_path_reader(
+                    f, basename, current_path_reader, PROGRESS_MANAGER
+                )
+                if not nested_path_reader:
                     continue
+            except utils.files.BinWrapperException:
+                continue
 
-                basename = os.path.basename(file_path).encode("cp1252", errors="replace")
-                try:
-                    nested_path_reader = IsoProcessorFactory.get_iso_path_reader(
-                        f, basename, current_path_reader, PROGRESS_MANAGER
-                    )
-                    if not nested_path_reader:
-                        continue
-                except utils.files.BinWrapperException:
-                    continue
+            LOGGER.info("Found nested container %s", file_path)
 
-                LOGGER.info("Found nested container %s", file_path)
+            nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
+                                                             disable_contents_checksum)
 
-                nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
-                                                                 disable_contents_checksum)
+            nested_info["name"] = basename.decode("cp1252")
+            nested_info["path"] = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
+            if nested_info:
+                rows.append(nested_info)
+                stack.append((nested_path_reader, nested_info["path"]))
+                processed_containers.append((nested_iso_processor, f))
+            bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+            bar.desc = os.path.basename(basename.decode("cp1252"))
+            bar.refresh()
 
-                nested_info["name"] = basename.decode("cp1252")
-                nested_info["path"] = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
-                if nested_info:
-                    rows.append(nested_info)
-                    stack.append((nested_path_reader, nested_info["path"]))
-                    processed_containers.append(nested_iso_processor)
-                bar = list(PROGRESS_MANAGER.counters.keys())[-1]
-                bar.desc = os.path.basename(basename.decode("cp1252"))
-                bar.refresh()
-
-    for container in processed_containers:
+    for (container, file) in processed_containers:
         container.close()
+        if hasattr(file, "__exit__"):
+            file.__exit__()
 
     return rows
 
