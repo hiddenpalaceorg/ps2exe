@@ -161,9 +161,15 @@ class IsoProcessorFactory:
             iso = PyCdlibUdf()
             try:
                 iso.open_fp(wrapper)
-                return Ps3PathReader(iso, wrapper)
+                return Ps3PathReader(iso, wrapper, udf=True)
             except:
                 if iso.udf_teas:
+                    raise
+                try:
+                    iso = pycdlib.PyCdlib()
+                    iso.open_fp(wrapper)
+                    return Ps3PathReader(iso, wrapper, udf=False)
+                except:
                     raise
 
         wrapper.seek(0x7068)
@@ -171,10 +177,16 @@ class IsoProcessorFactory:
             iso = PyCdlibUdf()
             try:
                 iso.open_fp(wrapper)
-                return Ps3PathReader(iso, wrapper)
+                return Ps3PathReader(iso, wrapper, udf=True)
             except:
                 if iso.udf_teas:
                     raise
+                try:
+                    iso = pycdlib.PyCdlib()
+                    iso.open_fp(wrapper)
+                    return Ps3PathReader(iso, wrapper, udf=False)
+                except:
+                    pass
 
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":

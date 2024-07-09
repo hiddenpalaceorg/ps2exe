@@ -65,8 +65,8 @@ class DecryptedFileReader(PyCdlibIO):
         return cipher.decrypt(block)
 
 class Ps3PathReader(PyCdLibPathReader):
-    def __init__(self, iso, fp):
-        super().__init__(iso, fp, udf=True)
+    def __init__(self, iso, fp, *args, udf=True, **kwargs):
+        super().__init__(iso, fp, *args, udf=udf, **kwargs)
         self.fp.seek(0)
         self.number_of_unencrypted_regions = struct.unpack('>i4x', self.fp.read(8))
         self.regions = self.get_regions()
