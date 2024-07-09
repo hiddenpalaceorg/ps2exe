@@ -122,6 +122,8 @@ class ArchiveWrapper:
                 if not self.tempfile:
                     self.tempfile = tempfile.TemporaryFile("r+b")
                     self.tempfile_mmap = FakeMemoryMap(self.tempfile)
+                    # mark the temp file to 80% of free space
+                    self.tempfile_mmap._size = psutil.disk_usage(self.tempfile.name).free
 
                 self._entries_pos[file_path] = (self.tempfile_used, self.tempfile_mmap)
                 self.tempfile_used += file_size
