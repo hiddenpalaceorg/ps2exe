@@ -94,7 +94,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 if file == dr:
                     file.inode.data_length = dr.data_length
         # Hack #2. If the inode reports a negative or truncated value, force it to be the original size
-        if file.inode.data_length < file.data_length:
+        if hasattr(file, "data_length") and file.inode.data_length < file.data_length:
             file.inode.data_length = file.data_length
 
         return pycdlib.pycdlibio.PyCdlibIO(file.inode, self.iso.logical_block_size)
