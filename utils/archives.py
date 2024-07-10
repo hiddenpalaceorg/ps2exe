@@ -80,7 +80,7 @@ class ArchiveWrapper:
                 # Give up
                 pass
 
-        bar_fmt = '{desc} {file_name} {desc_pad}{percentage:3.0f}%|{bar}| ' \
+        bar_fmt = '{desc} {file_name}{desc_pad}{percentage:3.0f}%|{bar}| ' \
                   '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
                   '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
 
