@@ -68,13 +68,6 @@ class BaseIsoProcessor:
         if fp.peek(5) == b'CD-I ':
             return "cdi"
 
-        try:
-            user_l0 = iso_path_reader.get_file("/USER_L0.IMG")
-            with iso_path_reader.open_file(user_l0):
-                return "psp"
-        except FileNotFoundError:
-            pass
-
         if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader, PathlabPathReader)):
             for sys_type, exe_type in (("xbox360", ".xex"), ("xbox", ".xbe")):
                 for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=False):
