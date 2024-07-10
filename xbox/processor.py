@@ -512,7 +512,6 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                 # Verify current block
                 hash = sha1(data)
                 if hash.digest() != bytes(block_header.DataDigest):
-                    LOGGER.warning("Could not decrypt xex")
                     return None
 
                 temp_stream = io.BytesIO(data)
@@ -623,6 +622,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                         result["exe_signing_type"] = self.xex_key_names[i]
                     break
             if not pe:
+                LOGGER.warning("Could not decrypt xex")
                 return result
 
             LOGGER.info("Parsing PE file")
