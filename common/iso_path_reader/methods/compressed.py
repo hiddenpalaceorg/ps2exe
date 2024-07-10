@@ -46,7 +46,8 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
             return datetime.datetime(*file.date_time, tzinfo=datetime.timezone.utc)
         if isinstance(file.mtime, datetime.datetime):
             return file.mtime
-        return datetime.datetime.fromtimestamp(file.mtime, tz=datetime.timezone.utc)
+        elif getattr(file, "mtime", None):
+            return datetime.datetime.fromtimestamp(file.mtime, tz=datetime.timezone.utc)
 
     def get_pvd_info(self):
         return {}

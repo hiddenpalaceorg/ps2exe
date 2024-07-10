@@ -254,7 +254,7 @@ class BaseIsoProcessor:
                     continue
 
                 file_date = self.iso_path_reader.get_file_date(file)
-                if file_date > most_recent_file_date:
+                if file_date and file_date > most_recent_file_date:
                     most_recent_file = file
                     most_recent_file_date = file_date
                 pbar.update()
