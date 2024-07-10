@@ -1,9 +1,12 @@
 from os.path import basename
 
+from pycdlib import pycdlib
+
 from common.iso_path_reader.methods.base import IsoPathReader
+from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 
-class P3doPathReader(IsoPathReader):
+class P3doPathReader(ChunkedHashTrait, IsoPathReader):
     def get_root_dir(self):
         return self.iso.superblock.root.root_copies[0]
 
@@ -32,16 +35,10 @@ class P3doPathReader(IsoPathReader):
     def get_file_date(self, file):
         return None
 
-    def get_file_hash(self, file, algo):
-        hash = algo()
-        size_left = file.byte_length
-        self.fp.seek(file.copy_offset * file.block_size)
-        while size_left > 0:
-            chunk_size = min(65536, size_left)
-            chunk = self.fp.read(chunk_size)
-            hash.update(chunk)
-            size_left -= chunk_size
-        return hash
+    def open_file(self, file):
+        inode = pycdlib.inode.Inode()
+        inode.new(file.byte_length, self.fp, False, file.copy_offset * file.block_size)
+        return pycdlib.pycdlibio.PyCdlibIO(inode, file.block_size)
 
     def get_file_sector(self, file):
         return file.copy_offset
