@@ -243,6 +243,9 @@ class RarFileReader(ArchiveEntryReader):
         if not discard:
           return self.fp[self.pos:self.pos+n]
 
+    def close(self):
+        super().close()
+        self.rarfile.close()
 
 class ArchiveEntryWrapper:
     def __init__(self, archive, entry, fp, archive_reader, pbar=None):
