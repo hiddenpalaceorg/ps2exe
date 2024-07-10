@@ -80,15 +80,16 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
     def open_file(self, file):
         # Hack: If multiple files reference the same LBA but with different
         # sizes, update the inode's data size to be correct for this file
-        if len(file.inode.linked_records) > 1 and file.inode.data_length != file.data_length:
-            LOGGER.warning("File %s marked at LBA %d, which was already marked for file %s",
-                           self.get_file_path(file), file.orig_extent_loc, self.get_file_path(file.inode.linked_records[0][0]))
-            for dr, _ in file.inode.linked_records:
-                if file == dr:
-                    file.inode.data_length = dr.data_length
-        # Hack #2. If the inode reports a negative or truncated value, force it to be the original size
-        if hasattr(file, "data_length") and file.inode.data_length < file.data_length:
-            file.inode.data_length = file.data_length
+        if hasattr(file, "data_length"):
+            if len(file.inode.linked_records) > 1 and file.inode.data_length != file.data_length:
+                LOGGER.warning("File %s marked at LBA %d, which was already marked for file %s",
+                               self.get_file_path(file), file.orig_extent_loc, self.get_file_path(file.inode.linked_records[0][0]))
+                for dr, _ in file.inode.linked_records:
+                    if file == dr:
+                        file.inode.data_length = dr.data_length
+            # Hack #2. If the inode reports a negative or truncated value, force it to be the original size
+            if hasattr(file, "data_length") and file.inode.data_length < file.data_length:
+                file.inode.data_length = file.data_length
 
         return pycdlib.pycdlibio.PyCdlibIO(file.inode, self.iso.logical_block_size)
 
