@@ -136,15 +136,6 @@ class BaseIsoProcessor:
         except FileNotFoundError:
             pass
 
-        # Look for an XBLA package
-        hex_pattern = re.compile(r'.*/?(?:([0-9a-fA-F]{16})|([0-9a-fA-F]{6}~1$))')
-        for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
-            file_path = iso_path_reader.get_file_path(file)
-            if hex_pattern.match(file_path):
-                with iso_path_reader.open_file(file) as f:
-                    if f.read(4) in [b"LIVE", b"PIRS"]:
-                        return "xbla"
-
         # Look for a windows EXE
         for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
             file_path = iso_path_reader.get_file_path(file)
