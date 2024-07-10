@@ -117,6 +117,9 @@ class ArchiveWrapper:
                 file_path = entry.name
                 file_size = entry.size
 
+            if isinstance(file_path, bytes):
+                file_path = file_path.decode(errors='replace')
+
             memory_available = len(self.mmap)
             if not self.mmap or (self.mmap_used + file_size > memory_available):
                 if not self.tempfile:
@@ -254,6 +257,9 @@ class ArchiveEntryWrapper:
         else:
             self.path = entry.path
 
+        if isinstance(self.path, bytes):
+            self.path = self.path.decode(errors='replace')
+
     def open(self):
         if self.entry_reader is not None:
             self.entry_reader.seek(0)
@@ -276,8 +282,12 @@ class ArchiveEntryWrapper:
     @property
     def file_name(self):
         if isinstance(self.entry, rarfile.RarInfo):
+            if isinstance(self.entry.filename, bytes):
+                return self.entry.filename.decode(errors='replace')
             return self.entry.filename
         else:
+            if isinstance(self.entry.name, bytes):
+                return self.entry.name.decode(errors='replace')
             return self.entry.name
 
     @property
