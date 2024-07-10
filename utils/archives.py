@@ -1,4 +1,5 @@
 import io
+import logging
 import mmap
 import os
 import sys
@@ -10,6 +11,8 @@ import rarfile
 from utils.common import format_bar_desc
 from utils.files import MmappedFile, OffsetFile, get_file_size
 from utils.mmap import FakeMemoryMap
+
+LOGGER = logging.getLogger(__name__)
 
 try:
     import libarchive
@@ -230,7 +233,16 @@ class RarFileReader(ArchiveEntryReader):
             size_left = amount_need_read - self.read_bytes
             while size_left > 0:
                 chunk_size = min(65536, size_left)
-                data = self.rarfile.read(chunk_size)
+                try:
+                    data = self.rarfile.read(chunk_size)
+                except rarfile.BadRarFile as e:
+                    if self.rarfile._remain == 0:
+                        LOGGER.exception(e)
+                        self.rarfile._fd.seek(-size_left, io.SEEK_CUR)
+                        data = self.rarfile._fd.read(size_left)
+                    else:
+                        self.rarfile.close()
+                        raise
                 read = len(data)
                 self.fp.write(data)
                 size_left -= read
