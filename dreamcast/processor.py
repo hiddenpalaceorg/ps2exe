@@ -21,13 +21,15 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         rule = re.compile(fnmatch.translate("*.gdi"), re.IGNORECASE)
         for i in [entry for entry in iso_path_reader.parent_container.iso_iterator(file_dir)
                   if rule.match(iso_path_reader.parent_container.get_file_path(entry))]:
-            tracks = self.parse_gdi(self.iso_path_reader.parent_container.get_file_path(i))
+            if not (tracks := self.parse_gdi(self.iso_path_reader.parent_container.get_file_path(i))):
+                continue
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
             gdi_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
             iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name, *args)
             found = True
+            break
 
         if found:
             super().__init__(iso_path_reader, iso_filename, *args)
@@ -37,12 +39,14 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         rule = re.compile(fnmatch.translate("*.cue"), re.IGNORECASE)
         for i in [entry for entry in iso_path_reader.parent_container.iso_iterator(file_dir)
                   if rule.match(iso_path_reader.parent_container.get_file_path(entry))]:
-            tracks = self.parse_cue(self.iso_path_reader.parent_container.get_file_path(i))
+            if not (tracks := self.parse_cue(self.iso_path_reader.parent_container.get_file_path(i))):
+                continue
             if tracks[0]["file_name"] != basename(iso_filename):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
             cue_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
             iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, cue_name, *args)
+            break
 
         super().__init__(iso_path_reader, iso_filename, *args)
 
@@ -50,7 +54,10 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
     def parse_gdi(self, gdi_path):
         gdi_file = self.iso_path_reader.parent_container.get_file(gdi_path)
         with self.iso_path_reader.parent_container.open_file(gdi_file) as f:
-            text = f.read().decode()
+            try:
+                text = f.read().decode()
+            except UnicodeDecodeError:
+                return
             lines = text.splitlines()
 
             _n_tracks = int(lines.pop(0))
