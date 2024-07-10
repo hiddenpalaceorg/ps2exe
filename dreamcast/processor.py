@@ -24,13 +24,15 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         rule = re.compile(fnmatch.translate("*.gdi"), re.IGNORECASE)
         for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
             i = pathlib.Path(i)
-            tracks = self.parse_gdi(i)
+            if not (tracks := self.parse_gdi(i)):
+                continue
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
             gdi_name = i.name.encode("cp1252", errors="replace")
             iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name)
             found = True
+            break
 
         if found:
             super().__init__(iso_path_reader, iso_filename, *args)
@@ -40,19 +42,24 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         rule = re.compile(fnmatch.translate("*.cue"), re.IGNORECASE)
         for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
             i = pathlib.Path(i)
-            tracks = self.parse_cue(i)
+            if not (tracks := self.parse_cue(i)):
+                continue
             if not any(track["file_name"] != basename(iso_filename) for track in tracks):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
-            gdi_name = i.name.encode("cp1252", errors="replace")
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name)
+            cue_name = i.name.encode("cp1252", errors="replace")
+            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, cue_name)
+            break
 
         super().__init__(iso_path_reader, iso_filename, *args)
 
 
     def parse_gdi(self, gdi_file):
         with gdi_file.open() as f:
-            text = f.read()
+            try:
+                text = f.read()
+            except UnicodeDecodeError:
+                return
             lines = text.splitlines()
 
             _n_tracks = int(lines.pop(0))
