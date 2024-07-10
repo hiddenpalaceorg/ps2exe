@@ -78,8 +78,11 @@ class IsoProcessorFactory:
                     reader = XDvdFs(fp, 0, -stfs.god_offset)
                     return XboxPathReader(reader, fp, parent_container)
             else:
-                stfs.parse_filetable()
-                return XboxStfsPathReader(stfs, fp, parent_container)
+                try:
+                    stfs.parse_filetable()
+                    return XboxStfsPathReader(stfs, fp, parent_container)
+                except AssertionError:
+                    pass
 
         if isinstance(fp, io.IOBase):
             wrapper = BinWrapper(fp)
