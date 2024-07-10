@@ -48,7 +48,7 @@ class XboxIsoProcessor(BaseIsoProcessor):
                 try:
                     if not (exe_info := self._parse_exe(file_path)):
                         continue
-                except (pefile.PEFormatError, AssertionError, struct.error):
+                except (pefile.PEFormatError, AssertionError, struct.error, UnicodeDecodeError):
                         continue
                 self.ignored_paths.append(re.compile(rf"^{re.escape(file_path_lower)}$", re.IGNORECASE))
                 if exe_info.get("header_title") in ["CDX", "Installer"]:
