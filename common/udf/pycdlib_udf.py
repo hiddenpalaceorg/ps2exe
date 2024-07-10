@@ -1,4 +1,5 @@
 import collections
+import functools
 import os
 
 from pycdlib import PyCdlib, pycdlibexception, headervd, inode
@@ -155,6 +156,19 @@ class PyCdlibUdf(PyCdlib):
             desc_tag = udfmod.UDFTag()
             desc_tag.parse(partition_data[:self.logical_block_size], 0)
 
+        if desc_tag.tag_ident == 266:
+            file_entry = UDFExtendedFileEntry()
+            file_entry.parse(partition_data, current_extent, None, desc_tag)
+            part_start = self.udf_main_descs.partitions[0].part_start_location
+            desc = file_entry.alloc_descs[0]
+            abs_file_ident_extent = part_start + desc.log_block_num
+            self._seek_to_extent(abs_file_ident_extent)
+            self._cdfp.seek(desc.offset, 1)
+            partition_data = self._cdfp.read(self.logical_block_size)
+            current_extent = abs_file_ident_extent
+            desc_tag = udfmod.UDFTag()
+            desc_tag.parse(partition_data[:self.logical_block_size], 0)
+
         if desc_tag.tag_ident != 256:
             raise pycdlibexception.PyCdlibInvalidISO('UDF File Set Tag identifier not 256')
 
@@ -293,3 +307,68 @@ class PyCdlibUdf(PyCdlib):
             self.version_vd = version_vd
 
         self._initialized = True
+
+    def _parse_udf_file_entry(self, abs_file_entry_extent, icb, parent):
+        # type: (int, udfmod.UDFLongAD, Optional[udfmod.UDFFileEntry]) -> Optional[udfmod.UDFFileEntry]
+        """
+        An internal method to parse a single UDF File Entry and return the
+        corresponding object.
+
+        Parameters:
+         abs_file_entry_extent - The extent number the file entry starts at.
+         icb - The ICB object for the data.
+         parent - The parent of the UDF File Entry.
+        Returns:
+         A UDF File Entry object corresponding to the on-disk File Entry.
+        """
+        self._seek_to_extent(abs_file_entry_extent)
+        icbdata = self._cdfp.read(icb.extent_length)
+
+        if all(v == 0 for v in bytearray(icbdata)):
+            # We have seen ISOs in the wild (Windows 2008 Datacenter Enterprise
+            # Standard SP2 x86 DVD) where the UDF File Identifier points to a
+            # UDF File Entry of all zeros.  In those cases, we just keep the
+            # File Identifier, and keep the UDF File Entry blank.
+            return None
+
+        desc_tag = udfmod.UDFTag()
+        desc_tag.parse(icbdata, icb.log_block_num)
+        if desc_tag.tag_ident == 261:
+            file_entry = udfmod.UDFFileEntry()
+            file_entry.parse(icbdata, abs_file_entry_extent, parent, desc_tag)
+        elif desc_tag.tag_ident == 266:
+            file_entry = UDFExtendedFileEntry()
+            file_entry.parse(icbdata, abs_file_entry_extent, parent, desc_tag)
+            # file_entry.parent = parent
+        else:
+            raise pycdlibexception.PyCdlibInvalidISO('UDF File Entry Tag identifier not 261 or 266')
+
+
+
+        return file_entry
+
+
+class UDFExtendedFileEntry(udfmod.UDFExtendedFileEntry):
+
+    def __new__(cls, *args, **kwargs):
+        cls.__slots__ += ('parent', 'fi_descs',)
+        return udfmod.UDFExtendedFileEntry.__new__(cls, *args, **kwargs)
+
+    def __init__(self):
+        super().__init__()
+        self.alloc_descs = []
+        self.fi_descs = []
+        self._initialized = False
+        self.parent = None
+        self.hidden = False
+        self.file_ident = None
+        self.inode = None
+        self.new_extent_loc = -1
+
+    def parse(self, data, extent, parent, desc_tag):
+        super().parse(data, extent, desc_tag)
+        self.parent = parent
+
+    # Hack, wrap UDFExtendedFileEntry calls around UDFFileEntry
+    def __getattr__(self, item):
+        return functools.partial(getattr(udfmod.UDFFileEntry, item), self)
