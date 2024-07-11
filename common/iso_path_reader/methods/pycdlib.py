@@ -15,12 +15,22 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
     def __init__(self, iso, fp, *args, udf=False, **kwargs):
         super().__init__(iso, fp, *args, **kwargs)
         self.udf = udf
+        self.joliet = False
 
     def get_root_dir(self):
         if self.udf:
             return self.iso.get_record(udf_path="/")
+        elif self.joliet:
+            return self.iso.get_record(joliet_path="/")
         else:
-            return self.iso.get_record(iso_path="/")
+            root = self.iso.get_record(iso_path="/")
+            if len(root.children) == 0:
+                joliet_root = self.iso.get_record(joliet_path="/")
+                if len(joliet_root.children) != 0:
+                    LOGGER.warning("Joliet and ISO9660 root dir do not agree. Preferring Joliet")
+                    self.joliet = True
+                    return joliet_root
+            return root
 
     def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         for file in _yield_children(base_dir, rr=False) if not self.udf else base_dir.fi_descs:
@@ -73,14 +83,35 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         try:
             if self.udf:
                 return self.iso.get_record(udf_path=path)
+            elif self.joliet:
+                return self.iso.get_record(joliet_path=path)
             else:
-                return self.iso.get_record(iso_path=path)
+                try:
+                    return self.iso.get_record(iso_path=path)
+                except:
+                    if self.iso.joliet_vd:
+                        joilet_record = self.iso.get_record(joliet_path=path)
+                        LOGGER.warning("File %s not found on ISO9660 but found in Joilet, preferring Joliet from now on")
+                        self.joliet = True
+                        return joilet_record
+                    raise
         except PyCdlibInvalidInput as e:
             try:
                 if self.udf:
                     return self.iso.get_record(udf_path=path + ";1")
+                elif self.joliet:
+                    return self.iso.get_record(joliet_path=path + ";1")
                 else:
-                    return self.iso.get_record(iso_path=path + ";1")
+                    try:
+                        return self.iso.get_record(iso_path=path + ";1")
+                    except:
+                        if self.iso.joliet_vd:
+                            joilet_record = self.iso.get_record(joliet_path=path + ";1")
+                            LOGGER.warning(
+                                "File %s not found on ISO9660 but found in Joilet, preferring Joliet from now on")
+                            self.joliet = True
+                            return joilet_record
+                        raise
             except PyCdlibInvalidInput:
                 if path.upper() != path:
                     return self.get_file(path.upper())
