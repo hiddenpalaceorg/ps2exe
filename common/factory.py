@@ -92,8 +92,11 @@ class IsoProcessorFactory:
 
         wrapper.seek(0x1C)
         if wrapper.read(4) == b"\xC2\x33\x9F\x3D":
-            iso = GamecubeISO.from_iso(wrapper)
-            return GamecubePathReader(iso, fp)
+            try:
+                iso = GamecubeISO.from_iso(wrapper)
+                return GamecubePathReader(iso, fp)
+            except:
+                pass
 
         wrapper.seek(0)
         if wrapper.read(64) == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
