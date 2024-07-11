@@ -2,6 +2,7 @@ import io
 import logging
 import mmap
 import os
+import pathlib
 import sys
 import tempfile
 
@@ -123,13 +124,17 @@ class ArchiveWrapper:
             if isinstance(file_path, bytes):
                 file_path = file_path.decode(errors='replace')
 
-            memory_available = len(self.mmap)
+            memory_available = 0
+            if self.mmap:
+                memory_available = len(self.mmap)
             if not self.mmap or (self.mmap_used + file_size > memory_available):
                 if not self.tempfile:
                     self.tempfile = tempfile.TemporaryFile("r+b")
                     self.tempfile_mmap = FakeMemoryMap(self.tempfile)
                     # mark the temp file to 80% of free space
-                    self.tempfile_mmap._size = psutil.disk_usage(self.tempfile.name).free
+                    self.tempfile_mmap._size = int(
+                        psutil.disk_usage(str(pathlib.Path(self.tempfile.name).parent)).free * .8
+                    )
 
                 self._entries_pos[file_path] = (self.tempfile_used, self.tempfile_mmap)
                 self.tempfile_used += file_size
