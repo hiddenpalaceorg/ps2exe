@@ -48,7 +48,7 @@ class BaseIsoProcessor:
             return "dreamcast"
 
         fp.seek(0)
-        if fp.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
+        if fp.read(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             return "3do"
 
         fp.seek(0x1C)
@@ -65,7 +65,7 @@ class BaseIsoProcessor:
             return "wii"
 
         fp.seek(0x8001)
-        if fp.peek(5) == b'CD-I ':
+        if fp.read(5) == b'CD-I ':
             return "cdi"
 
         if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader, PathlabPathReader)):
