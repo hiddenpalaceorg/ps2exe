@@ -129,7 +129,7 @@ class ArchiveWrapper:
                 memory_available = len(self.mmap)
             if not self.mmap or (self.mmap_used + file_size > memory_available):
                 if not self.tempfile:
-                    self.tempfile = tempfile.TemporaryFile("r+b")
+                    self.tempfile = tempfile.NamedTemporaryFile("r+b")
                     self.tempfile_mmap = FakeMemoryMap(self.tempfile)
                     # mark the temp file to 80% of free space
                     self.tempfile_mmap._size = int(
