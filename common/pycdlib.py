@@ -2,6 +2,7 @@
 Modified versions of PyCdlib classes that support High Sierra format (a predecessor to ISO9660)
 """
 import collections
+import logging
 import os
 import struct
 import pycdlib.udf as udfmod
@@ -12,6 +13,7 @@ from pycdlib.headervd import VolumeDescriptorSetTerminator as _VolumeDescriptorS
 from pycdlib.dr import DirectoryRecord as _DirectoryRecord, XARecord
 from pycdlib.pycdlib import _interchange_level_from_directory, _interchange_level_from_filename
 
+_logger = logging.getLogger(__name__)
 
 class PyCdlib(_PyCdlib):
     is_hs = False
@@ -102,7 +104,7 @@ class PyCdlib(_PyCdlib):
         # Make sure any other PVDs agree with the first one.
         for pvd in self.pvds[1:]:
             if pvd != self.pvd:
-                raise pycdlibexception.PyCdlibInvalidISO('Multiple occurrences of PVD did not agree!')
+                _logger.warning('Multiple occurrences of PVD did not agree!')
 
             pvd.root_dir_record = self.pvd.root_dir_record
 
