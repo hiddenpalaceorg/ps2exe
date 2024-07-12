@@ -1,3 +1,4 @@
+import base64
 import ctypes
 import datetime
 import hashlib
@@ -596,7 +597,14 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
             if self.XEX_ORIGINAL_PE_NAME in self.optional_headers:
                 exe_name = self.optional_headers[self.XEX_ORIGINAL_PE_NAME].strip(b"\x00")
-                result["alt_exe_filename"] = exe_name.decode("cp1252", errors="ignore")
+                try:
+                    result["alt_exe_filename"] = exe_name.decode("cp1252")
+                except UnicodeDecodeError:
+                    result["alt_exe_filename"] = exe_name.decode("cp1252", errors="ignore")
+                    if len(result["alt_exe_filename"]) > 255:
+                        result["alt_exe_filename"] = base64.b64encode(
+                            result["alt_exe_filename"][0:255].encode()
+                        ).decode()
 
             if self.xex_security_info:
                 if self.xex_magic != self._MAGIC_XEX2D:
