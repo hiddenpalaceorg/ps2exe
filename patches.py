@@ -237,3 +237,14 @@ def apply_patches():
             inf.filename = inf.filename.replace("\\", os.path.sep)
         return orig_open_unrar(self, rarfile, inf, pwd=pwd, tmpfile=tmpfile, force_file=force_file)
     rarfile.CommonParser._open_unrar = _open_unrar
+
+    orig_check = rarfile.RarExtFile._check
+    def _check(self):
+        try:
+            orig_check(self)
+        except rarfile.BadRarFile as e:
+            if self._remain != 0:
+                raise
+            from utils.archives import LOGGER
+            LOGGER.exception(e)
+    rarfile.RarExtFile._check = _check

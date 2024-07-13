@@ -244,16 +244,7 @@ class RarFileReader(ArchiveEntryReader):
             size_left = amount_need_read - self.read_bytes
             while size_left > 0:
                 chunk_size = min(65536, size_left)
-                try:
-                    data = self.rarfile.read(chunk_size)
-                except rarfile.BadRarFile as e:
-                    if self.rarfile._remain == 0:
-                        LOGGER.exception(e)
-                        self.rarfile._fd.seek(-size_left, io.SEEK_CUR)
-                        data = self.rarfile._fd.read(size_left)
-                    else:
-                        self.rarfile.close()
-                        raise
+                data = self.rarfile.read(chunk_size)
                 read = len(data)
                 self.fp.write(data)
                 size_left -= read
