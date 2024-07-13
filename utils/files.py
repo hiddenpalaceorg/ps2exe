@@ -1,3 +1,4 @@
+import io
 import logging
 import math
 import mmap
@@ -34,8 +35,24 @@ class BaseFile:
             n = self.length() - self.pos
         return self._get_data(n)
 
+    def readinto(self, b):
+        readsize = self.length() - self.pos
+        if readsize > 0:
+            mv = memoryview(b)
+            m = mv.cast('B')
+            readsize = min(readsize, len(m))
+            data = self.read(readsize)
+            n = len(data)
+            m[:n] = data
+        else:
+            n = 0
+
+        return n
+
     def read(self, n=None):
         if n is None or n < 0:
+            n = self.length() - self.pos
+        if n + self.pos > self.length():
             n = self.length() - self.pos
         ret = self._get_data(n)
         self.pos += len(ret)
@@ -44,6 +61,13 @@ class BaseFile:
     def _get_data(self, n, discard=False):
         pos = self.tell()
         return self[pos:pos + n]
+
+    def __enter__(self):
+        self.pos = 0
+        return self
+
+    def __exit__(self, *args):
+        return
 
     def ranges(self):
         raise NotImplementedError
@@ -89,6 +113,7 @@ class ConcatenatedFile(BaseFile):
         self.offsets = offsets[:]
         self.offsets.sort()
         self.pos = 0
+        self.name = fps[0].name
 
         for fp in fps:
             if not isinstance(fp, BaseFile):
@@ -149,12 +174,14 @@ class BinWrapperException(Exception):
 
 class BinWrapper(BaseFile):
     def __init__(self, fp, sector_size = None, sector_offset = None, start_offset = 0, virtual_sector_size=None):
-        self.file = getattr(fp, "name", "")
+        self.file = self.name = getattr(fp, "name", "")
 
         if not isinstance(fp, MmappedFile):
             self.mmap = MmappedFile(fp)
         else:
             self.mmap = fp
+
+
 
         self.is_scrambled, data_offset = ScrambledFile.test_scrambled(self.mmap)
         if self.is_scrambled:
@@ -495,10 +522,11 @@ class ScrambledFile(BaseFile):
 
 
 class OffsetFile(BaseFile):
-    def __init__(self, mmap, offset, end_pos):
+    def __init__(self, mmap, offset, end_pos, file_name=None):
         self.offset = offset
         self.end_pos = end_pos
         self.mmap = mmap
+        self.name = file_name or self.mmap.name
 
     def seek(self, pos, whence=os.SEEK_SET):
         if pos >= self.length():
@@ -557,4 +585,10 @@ def get_file_size(file):
 
         if isinstance(file, ArchiveEntryWrapper):
             return file.file_size
+
+        pos = file.tell()
+        file.seek(0, os.SEEK_END)
+        size = file.tell()
+        file.seek(pos)
+        return size
 

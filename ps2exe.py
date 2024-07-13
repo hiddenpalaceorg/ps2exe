@@ -65,16 +65,19 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
                 pass
             file_path = current_path_reader.get_file_path(file)
             if not is_path_allowed(file_path, args.allow_extensions, current_path_reader.get_file_size(file)):
+                f.__exit__()
                 continue
 
             basename = os.path.basename(file_path).encode("cp1252", errors="replace")
             try:
                 nested_path_reader = IsoProcessorFactory.get_iso_path_reader(
-                    f, basename, current_path_reader, PROGRESS_MANAGER
+                    f, basename.decode(), current_path_reader, PROGRESS_MANAGER
                 )
                 if not nested_path_reader:
+                    f.__exit__()
                     continue
             except utils.files.BinWrapperException:
+                f.__exit__()
                 continue
 
             LOGGER.info("Found nested container %s", file_path)
@@ -91,6 +94,11 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
             bar = list(PROGRESS_MANAGER.counters.keys())[-1]
             bar.desc = os.path.basename(basename.decode("cp1252"))
             bar.refresh()
+            cleanup_bars()
+
+        # keep the initial path reader open as it is our only window into the original file on the disk
+        if current_path_reader != initial_path_reader:
+            current_path_reader.close()
 
     for (container, file) in processed_containers:
         container.close()
@@ -131,6 +139,15 @@ def get_iso_info(iso_filename, disable_contents_checksum):
     iso_processor.close()
     fp.close()
     return rows
+
+
+def cleanup_bars():
+    while len(PROGRESS_MANAGER.counters) > 10:
+        oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
+        oldest_bar[0].leave = False
+        if getattr(oldest_bar[0], "_closed", False):
+            oldest_bar[0]._closed = False
+        oldest_bar[0].close()
 
 
 csv_headers = (
@@ -310,13 +327,6 @@ if __name__ == '__main__':
 
     for path in files:
         status_bar.update(game_name=os.path.basename(path))
-
-        while len(PROGRESS_MANAGER.counters) > 10:
-            oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
-            oldest_bar[0].leave = False
-            if getattr(oldest_bar[0], "_closed", False):
-                oldest_bar[0]._closed = False
-            oldest_bar[0].close()
 
         if path in existing_files:
             continue

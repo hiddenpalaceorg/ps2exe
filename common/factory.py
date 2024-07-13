@@ -51,7 +51,7 @@ class IsoProcessorFactory:
     @staticmethod
     def get_iso_path_reader(fp, file_name, parent_container, pbar):
         file_ext = os.path.splitext(file_name)[1]
-        if file_ext.lower() in [".7z", ".rar", ".zip"]:
+        if file_ext.lower() in [".7z", ".rar", ".zip", b".7z", b".rar", b".zip"]:
             return CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)
 
         fp.seek(0)

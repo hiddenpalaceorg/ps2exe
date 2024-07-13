@@ -65,10 +65,13 @@ class ArchiveWrapper:
             total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
         else:
             try:
-                block_size = os.stat(self.path).st_blksize
+                if self.path:
+                    block_size = os.stat(self.path).st_blksize
+                else:
+                    block_size = 65536
             except (OSError, AttributeError):
                 block_size = 65536
-            self.ctx = libarchive.file_reader(self.path, block_size=block_size)
+            self.ctx = libarchive.stream_reader(file, block_size=block_size)
             total_size = float(get_file_size(file))
 
         # 80% of free physical memory
@@ -100,10 +103,13 @@ class ArchiveWrapper:
         self.reader = self.ctx.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.ctx.__exit__(exc_type, exc_val, exc_tb)
-        if self.mmap:
-            self.mmap.close()
+    def __exit__(self, *args):
+        self.ctx.__exit__(*args)
+        try:
+            if self.mmap:
+                self.mmap.close()
+        except ValueError:
+            pass
         if self.tempfile:
             self.tempfile.close()
 
@@ -138,11 +144,11 @@ class ArchiveWrapper:
 
                 self._entries_pos[file_path] = (self.tempfile_used, self.tempfile_mmap)
                 self.tempfile_used += file_size
-                entry_fp = OffsetFile(self.tempfile_mmap, self._entries_pos[file_path][0], self.tempfile_used)
+                entry_fp = OffsetFile(self.tempfile_mmap, self._entries_pos[file_path][0], self.tempfile_used, self.path)
             else:
                 self._entries_pos[file_path] = (self.mmap_used, self.mmap)
                 self.mmap_used += file_size
-                entry_fp = OffsetFile(self.mmap, self._entries_pos[file_path][0], self.mmap_used)
+                entry_fp = OffsetFile(self.mmap, self._entries_pos[file_path][0], self.mmap_used, self.path)
 
             entry_wrapper = ArchiveEntryWrapper(self, entry, entry_fp, self.reader, pbar=self.counter)
             self.entries[file_path] = entry_wrapper
