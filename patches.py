@@ -38,7 +38,8 @@ def apply_patches():
             ret = orig_add_child(self, child, *args, **kwargs)
         except pycdlib.pycdlibexception.PyCdlibInvalidInput:
             # Ignore this duplicate if its exactly the same as what's already in the ISO FS
-            if child in self.children:
+            # Also allow . and .. to be duplicated as they will be ignored anyway
+            if child in self.children or child.is_dot or child.is_dotdot:
                 return
             raise
         try:
