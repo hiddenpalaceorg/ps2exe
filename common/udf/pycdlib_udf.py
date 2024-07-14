@@ -70,6 +70,10 @@ class PyCdlibUdf(PyCdlib):
                     type2map = UDFVirtualPartitionMap()
                     type2map.parse(pmap.part_ident)
                     self.udf_main_descs.logical_volumes[0].partition_maps[part_id] = type2map
+                elif part_type == b"*UDF Metadata Partition":
+                    type2map = UDFMetadataPartitionMap()
+                    type2map.parse(pmap.part_ident)
+                    self.udf_main_descs.logical_volumes[0].partition_maps[part_id] = type2map
 
         # ECMA-167, Part 3, 8.4.2 and 8.4.2.2 says that the anchors *may*
         # identify a reserve volume descriptor sequence.  10.2.3 says that
@@ -126,7 +130,9 @@ class PyCdlibUdf(PyCdlib):
         # Now start looking at the partition.  It can optionally start with a
         # Space Bitmap Descriptor; after that is the File Set Descriptor.  The
         # sequence may optionally be terminated by a UDF Terminating Descriptor.
-        current_extent = self.udf_main_descs.partitions[0].part_start_location
+        part_start = self.udf_main_descs.partitions[0].part_start_location
+        current_extent = part_start + self.udf_main_descs.logical_volumes[0].logical_volume_contents_use.log_block_num
+        self.root_relative_location = part_start
         self._seek_to_extent(current_extent)
 
         partition_data = self._cdfp.read(self.logical_block_size)
@@ -201,12 +207,32 @@ class PyCdlibUdf(PyCdlib):
                     self.vat = UDFVirtualAllocationTable()
                     self.vat.parse(partition_data, file_entry.info_len)
                     fsd_extent = self.vat.vat_entries[0] + part_start
+                    self.root_relative_location = fsd_extent
                     self._seek_to_extent(fsd_extent)
                     partition_data = self._cdfp.read(self.logical_block_size)
                     current_extent = fsd_extent
                     desc_tag = udfmod.UDFTag()
                     desc_tag.parse(partition_data[:self.logical_block_size], 0)
                     break
+
+        if isinstance(self.udf_main_descs.logical_volumes[0].partition_maps[-1], UDFMetadataPartitionMap):
+            # load the metadata file
+            pmap = self.udf_main_descs.logical_volumes[0].partition_maps[-1]
+            part_start = self.udf_main_descs.partitions[pmap.part_num].part_start_location
+            metadata_file_extent = part_start + pmap.metadata_file_location
+            icb = udfmod.UDFInlineAD()
+            icb.parse(2048, pmap.metadata_file_location, 0)
+            metadata_file = self._parse_udf_file_entry(
+                metadata_file_extent, icb, None
+            )
+            fsd_extent = metadata_file.alloc_descs[0].log_block_num + part_start
+            self.root_relative_location = fsd_extent
+            self._seek_to_extent(fsd_extent)
+            partition_data = self._cdfp.read(self.logical_block_size)
+            current_extent = fsd_extent
+            desc_tag = udfmod.UDFTag()
+            desc_tag.parse(partition_data[:self.logical_block_size], 0)
+
 
         for anchor in self.udf_anchors[1:]:
             if self.udf_anchors[0] != anchor:
@@ -241,8 +267,7 @@ class PyCdlibUdf(PyCdlib):
          Nothing.
         """
         part_start = self.udf_main_descs.partitions[0].part_start_location
-        fsd_start = self.udf_file_set.extent_location()
-        self.udf_root = self._parse_udf_file_entry(fsd_start + self.udf_file_set.root_dir_icb.log_block_num,
+        self.udf_root = self._parse_udf_file_entry(self.root_relative_location + self.udf_file_set.root_dir_icb.log_block_num,
                                                    self.udf_file_set.root_dir_icb,
                                                    None)
 
@@ -264,7 +289,7 @@ class PyCdlibUdf(PyCdlib):
                     else:
                         abs_file_ident_extent = desc.log_block_num + part_start
                 else:
-                    abs_file_ident_extent = fsd_start + desc.log_block_num
+                    abs_file_ident_extent = self.root_relative_location + desc.log_block_num
                 self._seek_to_extent(abs_file_ident_extent)
                 self._cdfp.seek(desc.offset, 1)
                 data += self._cdfp.read(desc.extent_length)
@@ -273,7 +298,7 @@ class PyCdlibUdf(PyCdlib):
                 current_extent = (abs_file_ident_extent * self.logical_block_size + offset) // self.logical_block_size
 
                 desc_tag = udfmod.UDFTag()
-                desc_tag.parse(data[offset:], current_extent - fsd_start)
+                desc_tag.parse(data[offset:], current_extent - self.root_relative_location)
                 if desc_tag.tag_ident != 257:
                     raise pycdlibexception.PyCdlibInvalidISO('UDF File Identifier Tag identifier not 257')
                 file_ident = udfmod.UDFFileIdentifierDescriptor()
@@ -292,7 +317,7 @@ class PyCdlibUdf(PyCdlib):
                     part_start = self.udf_main_descs.partitions[0].part_start_location
                     abs_file_entry_extent = self.vat.vat_entries[file_ident.icb.log_block_num] + part_start
                 else:
-                    abs_file_entry_extent = fsd_start + file_ident.icb.log_block_num
+                    abs_file_entry_extent = self.root_relative_location + file_ident.icb.log_block_num
                 next_entry = self._parse_udf_file_entry(abs_file_entry_extent,
                                                         file_ident.icb,
                                                         udf_file_entry)
@@ -437,9 +462,7 @@ class UDFExtendedFileEntry(udfmod.UDFExtendedFileEntry):
 
 class UDFVirtualPartitionMap(udfmod.UDFType1PartitionMap):
     """A class representing a UDF Type 2 Virtual Partition Map (UDF 2.60, 2.2.8)."""
-    __slots__ = ('_initialized', 'num_files', 'num_dirs',
-                 'min_udf_read_revision', 'min_udf_write_revision',
-                 'max_udf_write_revision', 'impl_id', 'impl_use')
+    __slots__ = ('_initialized', 'vol_seqnum', 'part_num')
 
     FMT = '<HB23s8sHH24s'
 
@@ -461,6 +484,38 @@ class UDFVirtualPartitionMap(udfmod.UDFType1PartitionMap):
 
         if part_type_id.rstrip(b'\x00') != b"*UDF Virtual Partition":
             raise pycdlibexception.PyCdlibInvalidISO('UDF Type 2 Virtual Partition Map Ident not "UDF Virtual Partition"')
+
+        self._initialized = True
+
+
+class UDFMetadataPartitionMap(udfmod.UDFType1PartitionMap):
+    """A class representing a UDF Type 2 Metadata Partition Map (UDF 2.60, 2.2.10)."""
+    __slots__ = ('_initialized', 'vol_seqnum', 'part_num',
+                 'metadata_file_location', 'metadata_mirror_file_location',
+                 'metadata_bitmap_file_location', 'alloc_size', 'align_size', 'flags')
+
+    FMT = '<HB23s8sHHIIIIHB5s'
+
+    def parse(self, data):
+        # type: (bytes) -> None
+        """
+        Parse the passed in data into a UDF Type 2 Metadata Partition Map
+
+        Parameters:
+         data - The data to parse.
+        Returns:
+         Nothing.
+        """
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError('UDF Type 2 Virtual Partition Map already initialized')
+
+        (unused1, part_type_flags, part_type_id, part_type_id_suffix,
+         self.vol_seqnum, self.part_num, self.metadata_file_location,
+         self.metadata_mirror_file_location, self.metadata_bitmap_file_location,
+         self.alloc_size, self.align_size, self.flags, unused2) = struct.unpack_from(self.FMT, data, 0)
+
+        if part_type_id.rstrip(b'\x00') != b"*UDF Metadata Partition":
+            raise pycdlibexception.PyCdlibInvalidISO('UDF Type 2 Metadata Partition Map Ident not "UDF Metadata Partition"')
 
         self._initialized = True
 
