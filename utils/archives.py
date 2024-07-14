@@ -50,6 +50,7 @@ except rarfile.RarCannotExec:
 
 class ArchiveWrapper:
     def __init__(self, file, pbar=None):
+        file.seek(0)
         self.path = file.name
         self.reader = None
         self.pbar = pbar
