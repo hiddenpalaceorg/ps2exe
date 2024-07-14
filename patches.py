@@ -29,6 +29,21 @@ def apply_patches():
     pycdlib.utils.swab_32bit = swab_32bit
     pycdlib.utils.swab_16bit = swab_16bit
 
+    # Hack to keep iso entries in the correct order in pycdlib
+    import pycdlib.dr
+    orig_add_child = pycdlib.dr.DirectoryRecord._add_child
+    def _add_child(self, child, *args, **kwargs):
+        ret = orig_add_child(self, child, *args, **kwargs)
+        try:
+            idx = self.children.index(child)
+            if idx != len(self.children) - 1:
+                self.children.pop(idx)
+                self.children.append(child)
+        except ValueError:
+            pass
+        return ret
+    pycdlib.dr.DirectoryRecord._add_child = _add_child
+
     def read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ascii") -> str:
         """ Reads a null terminated string from the specified address """
 
