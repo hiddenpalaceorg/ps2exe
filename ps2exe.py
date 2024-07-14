@@ -76,14 +76,17 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
                 if not nested_path_reader:
                     f.__exit__()
                     continue
+
+                LOGGER.info("Found nested container %s", file_path)
+
+                nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
+                                                                 disable_contents_checksum)
             except utils.files.BinWrapperException:
                 f.__exit__()
                 continue
-
-            LOGGER.info("Found nested container %s", file_path)
-
-            nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
-                                                             disable_contents_checksum)
+            except:
+                LOGGER.exception("Failed processing subcontainer %s", file_path)
+                continue
 
             nested_info["name"] = basename.decode("cp1252")
             nested_info["path"] = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
