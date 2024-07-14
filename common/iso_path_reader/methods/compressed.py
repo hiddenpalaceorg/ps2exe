@@ -13,9 +13,11 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
     def get_root_dir(self):
         return self.iso
 
-    def iso_iterator(self, base_dir, **kwargs):
+    def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
         # always recursive
         for file in self.iso:
+            if self.is_directory(file) and not include_dirs:
+                continue
             yield file
 
     def get_file(self, path):
@@ -54,6 +56,9 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
 
     def get_pvd(self):
         return {}
+
+    def is_directory(self, file):
+        return file.is_dir
 
     def close(self):
         self.iso.__exit__(None, None, None)
