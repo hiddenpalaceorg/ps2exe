@@ -171,7 +171,9 @@ class Ps3PathReader(PyCdLibPathReader):
         for region in self.regions:
             if region.start <= file.inode.fp_offset < region.end:
                 if region.encrypted:
-                    return DecryptedFileReader(file.inode, self.iso.logical_block_size, self.disc_key)
+                    reader = DecryptedFileReader(file.inode, self.iso.logical_block_size, self.disc_key)
+                    reader.name = self.get_file_path(file)
+                    return reader
                 else:
                     return super().open_file(file)
         return super().open_file(file)

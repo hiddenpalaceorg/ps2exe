@@ -47,7 +47,9 @@ class GamecubePathReader(ChunkedHashTrait, IsoPathReader):
     def open_file(self, file):
         inode = pycdlib.inode.Inode()
         inode.new(file.size, self.fp, False, file._fileoffset)
-        return pycdlib.pycdlibio.PyCdlibIO(inode, 2048)
+        reader = pycdlib.pycdlibio.PyCdlibIO(inode, 2048)
+        reader.name = self.get_file_path(file)
+        return reader
 
     def get_file_sector(self, file):
         if file._fileoffset:
