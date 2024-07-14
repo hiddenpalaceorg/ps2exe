@@ -61,7 +61,7 @@ class ArchiveWrapper:
         self._entries_pos = dict()
         file_ext = os.path.splitext(self.path)[1]
         if file_ext.lower() == ".rar":
-            self.ctx = rarfile.RarFile(self.path)
+            self.ctx = rarfile.RarFile(file)
             total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
         else:
             try:
