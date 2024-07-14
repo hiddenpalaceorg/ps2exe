@@ -117,10 +117,9 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             except PyCdlibInvalidInput:
                 if path.upper() != path:
                     return self.get_file(path.upper())
-                if b'\xef\xbf\xbd' in path.encode():
-                    for file in self.iso_iterator(self.get_root_dir(), recursive=True):
-                        if path.lower() == self.get_file_path(file).lower():
-                            return file
+                for file in self.iso_iterator(self.get_root_dir(), recursive=True):
+                    if path.lower() == self.get_file_path(file).lower():
+                        return file
                 raise FileNotFoundError(e)
 
     def open_file(self, file):
