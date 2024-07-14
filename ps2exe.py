@@ -99,8 +99,7 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
             bar.refresh()
             cleanup_bars()
 
-        # keep the initial path reader open as it is our only window into the original file on the disk
-        if current_path_reader != initial_path_reader:
+        if not stack or stack[-1][0].parent_container != current_path_reader:
             current_path_reader.close()
 
     for (container, file) in processed_containers:
