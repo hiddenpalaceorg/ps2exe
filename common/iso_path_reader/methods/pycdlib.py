@@ -117,9 +117,19 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             except PyCdlibInvalidInput:
                 if path.upper() != path:
                     return self.get_file(path.upper())
-                for file in self.iso_iterator(self.get_root_dir(), recursive=True):
-                    if path.lower() == self.get_file_path(file).lower():
-                        return file
+                root_dirs = []
+                if self.udf:
+                    root_dirs.append(self.iso.get_record(udf_path="/"))
+                if self.joliet:
+                    root_dirs.append(self.iso.get_record(joliet_path="/"))
+                try:
+                    root_dirs.append(self.iso.get_record(iso_path="/"))
+                except AttributeError:
+                    pass
+                for root_dir in root_dirs:
+                    for file in self.iso_iterator(root_dir, recursive=True):
+                        if path.lower() == self.get_file_path(file).lower():
+                            return file
                 raise FileNotFoundError(e)
 
     def open_file(self, file):
