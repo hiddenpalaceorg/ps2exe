@@ -44,6 +44,15 @@ def apply_patches():
         return ret
     pycdlib.dr.DirectoryRecord._add_child = _add_child
 
+    # Hack to track file position on pycdlibio objects when calling readinto
+    import pycdlib.pycdlibio
+    orig_readinto = pycdlib.pycdlibio.PyCdlibIO.readinto
+    def readinto(self, b):
+        readsize = orig_readinto(self, b)
+        self._offset += readsize
+        return readsize
+    pycdlib.pycdlibio.PyCdlibIO.readinto = readinto
+
     def read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ascii") -> str:
         """ Reads a null terminated string from the specified address """
 
