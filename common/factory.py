@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import struct
 from pathlib import Path
 
 from common import pycdlib
@@ -138,7 +139,7 @@ class IsoProcessorFactory:
                     volume = Volume()
                     volume.read(wrapper)
                     return HfsPathReader(volume, fp, parent_container)
-                except ValueError:
+                except (ValueError, struct.error):
                     pass
 
         wrapper.seek(0x800)
