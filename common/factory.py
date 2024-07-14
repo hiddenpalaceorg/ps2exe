@@ -50,9 +50,21 @@ LOGGER = logging.getLogger(__name__)
 class IsoProcessorFactory:
     @staticmethod
     def get_iso_path_reader(fp, file_name, parent_container, pbar):
-        file_ext = os.path.splitext(file_name)[1]
-        if file_ext.lower() in [".7z", ".rar", ".zip", b".7z", b".rar", b".zip"]:
-            return CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)
+        fp.seek(0)
+        magic = fp.read(16)
+        compressed_magic_values = [
+            b"PK\x03\x04",
+            b"7z\xBC\xAF\x27\x1C",
+            b"\x1F\x8B",
+            b"ustar",
+            b"BZh",
+            b"\xFD7zXZ\x00",
+            b"Rar\x21\x1A\x07",
+            b"\x2E/PaxHeaders/\x2E"
+        ]
+        for magic_to_try in compressed_magic_values:
+            if magic.startswith(magic_to_try):
+                return CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)
 
         fp.seek(0)
         if fp.read(4) == b"LIVE":
