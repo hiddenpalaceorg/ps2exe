@@ -109,7 +109,10 @@ class PyCdlib(_PyCdlib):
             pvd.root_dir_record = self.pvd.root_dir_record
 
         if not self.vdsts:
-            raise pycdlibexception.PyCdlibInvalidISO('Valid ISO9660 filesystems must have at least one Volume Descriptor Set Terminator')
+            vdsts = VolumeDescriptorSetTerminator()
+            vdsts.new()
+            vdsts.set_extent_location(0)
+            self.vdsts.append(vdsts)
 
     def _parse_path_table(self, ptr_size, extent):
         # type: (int, int) -> Tuple[List[path_table_record.PathTableRecord], Dict[int, path_table_record.PathTableRecord]]
