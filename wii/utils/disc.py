@@ -23,6 +23,7 @@ wiiodfs.  If not, see <http://www.gnu.org/licenses/>.
 import collections
 import struct
 
+from utils.files import get_file_size
 
 VGTABLE_OFFSET = 0x40000
 NUMBER_OF_VG = 4
@@ -52,6 +53,8 @@ class Disc(object):
         """
         Reads data from an offset and a size.
         """
+        if get_file_size(self.fp) < offset:
+            raise ValueError("Out of range")
         self.fp.seek(offset)
         return self.fp.read(size)
 
