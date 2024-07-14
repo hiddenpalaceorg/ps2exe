@@ -105,9 +105,12 @@ class IsoProcessorFactory:
 
         wrapper.seek(0x18)
         if wrapper.read(4) == b"\x5D\x1C\x9E\xA3":
-            disc = WiiDisc(wrapper)
-            iso = WiiISO.from_disc(fp.name, disc)
-            return WiiPathReader(iso, fp)
+            try:
+                disc = WiiDisc(wrapper)
+                iso = WiiISO.from_disc(fp.name, disc)
+                return WiiPathReader(iso, fp)
+            except ValueError:
+                pass
 
         # Apple formatted disc
         wrapper.seek(0x430)

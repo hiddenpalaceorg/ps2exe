@@ -1,6 +1,7 @@
 import logging
 import mmap
 import os
+from io import UnsupportedOperation
 
 from utils.common import MSF
 from utils.unscambler import unscramble_data, lookup_table
@@ -519,3 +520,13 @@ class OffsetFile(MmapWrapper):
         pass
 
 
+def get_file_size(file):
+    try:
+        file.fileno()
+        return os.stat(file.name).st_size
+    except (AttributeError, UnsupportedOperation):
+        pos = file.tell()
+        file.seek(0, os.SEEK_END)
+        size = file.tell()
+        file.seek(pos)
+        return size
