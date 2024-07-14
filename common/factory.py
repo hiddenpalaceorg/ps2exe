@@ -131,7 +131,7 @@ class IsoProcessorFactory:
             iso = PyCdlibUdf()
             try:
                 iso.open_fp(wrapper)
-                return Ps3PathReader(iso, wrapper, parent_container, udf=False)
+                return Ps3PathReader(iso, wrapper, parent_container, udf=True)
             except:
                 if iso.udf_teas:
                     raise
