@@ -23,8 +23,8 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
     def get_file(self, path):
         if path in [".", "/", ""]:
             return self.get_root_dir()
-        paths_to_try = [path, path.replace("\\", "/"), path.replace("/", "\\")]
-        for file in self.iso_iterator(self.get_root_dir(), recursive=True):
+        paths_to_try = [path, path.replace("\\", "/"), path.replace("/", "\\"), path + "/", path + "\\"]
+        for file in self.iso_iterator(self.get_root_dir(), recursive=True, include_dirs=True):
             if file.path in paths_to_try:
                 return file
         raise FileNotFoundError
