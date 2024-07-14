@@ -157,7 +157,6 @@ class ArchiveWrapper:
             yield entry_wrapper
             entry_wrapper.close()
         self.reader = []
-        self.counter.update(incr=0, file_name=None)
         self.counter.close()
 
     def __getattr__(self, item):
