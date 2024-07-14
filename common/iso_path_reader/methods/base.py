@@ -44,11 +44,11 @@ class IsoPathReader:
 
         info = {}
 
+        encoding = getattr(pvd, "encoding", "utf-8")
+
         for field in ("system_identifier", "volume_identifier", "volume_set_identifier"):
-            info[field] = getattr(pvd, field).strip(). \
-                decode(errors='replace'). \
-                encode("cp1252", errors="replace"). \
-                decode()
+            info[field] = getattr(pvd, field).rstrip(b"\x00"). \
+                decode(encoding=encoding, errors='replace').strip()
 
         for field in (
                 "volume_creation_date",
