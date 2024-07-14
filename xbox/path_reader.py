@@ -87,10 +87,9 @@ class XboxStfsPathReader(XboxPathReader):
         return hash
 
     def open_file(self, file):
-        return self.iso.read_file(file)
-
-    def get_file_date(self, file):
-        return None
+        f = self.iso.read_file(file)
+        f.name = self.get_file_path(file)
+        return f
 
     def get_file_size(self,file):
         return file.size
