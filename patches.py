@@ -31,9 +31,16 @@ def apply_patches():
 
     # Hack to keep iso entries in the correct order in pycdlib
     import pycdlib.dr
+    import pycdlib.pycdlibexception
     orig_add_child = pycdlib.dr.DirectoryRecord._add_child
     def _add_child(self, child, *args, **kwargs):
-        ret = orig_add_child(self, child, *args, **kwargs)
+        try:
+            ret = orig_add_child(self, child, *args, **kwargs)
+        except pycdlib.pycdlibexception.PyCdlibInvalidInput:
+            # Ignore this duplicate if its exactly the same as what's already in the ISO FS
+            if child in self.children:
+                return
+            raise
         try:
             idx = self.children.index(child)
             if idx != len(self.children) - 1:
