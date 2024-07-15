@@ -286,7 +286,7 @@ def apply_patches():
     orig_check_int = libarchive.ffi.check_int
     def check_int(retcode, func, args):
         try:
-            orig_check_int(retcode, func, args)
+            return orig_check_int(retcode, func, args)
         except ArchiveError as e:
             if e.errno == 0:
                 return libarchive.ffi.ARCHIVE_EOF
