@@ -69,7 +69,9 @@ class IsoProcessorFactory:
                     return CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)
                 except Exception as e:
                     if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
-                        LOGGER.warning(e.msg)
+                        LOGGER.warning("Error processing %s: %s", file_name, e.msg)
+                    elif getattr(e, "msg", "").startswith("Unrecognized archive format"):
+                        LOGGER.warning("Error processing %s: %s", file_name, e.msg)
                     else:
                         raise
 

@@ -74,8 +74,9 @@ class ArchiveWrapper:
                 block_size = 65536
             # Test the archive
             with libarchive.stream_reader(file, block_size=block_size) as archive_test:
-                test_file = next(file for file in archive_test if not file.isdir)
-                next(test_file.get_blocks(block_size=block_size))
+                test_file = next((file for file in archive_test if not file.isdir), None)
+                if test_file:
+                    next(test_file.get_blocks(block_size=block_size), b"")
             file.seek(0)
             self.ctx = libarchive.stream_reader(file, block_size=block_size)
             total_size = float(get_file_size(file))
@@ -162,6 +163,7 @@ class ArchiveWrapper:
             yield entry_wrapper
             entry_wrapper.close()
         self.reader = []
+        self.counter.update(incr=0, file_name="")
         self.counter.close()
 
     def __getattr__(self, item):
