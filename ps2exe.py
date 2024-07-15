@@ -5,6 +5,7 @@ import logging
 import os
 import pathlib
 import sys
+from collections import defaultdict
 
 import enlighten
 
@@ -49,15 +50,31 @@ def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
 
 
 def process_nested_containers(initial_path_reader, base_iso_path, disable_contents_checksum, rows):
-    stack = [(initial_path_reader, base_iso_path)]
-    processed_containers = []
+    container_stack = defaultdict(list)
+    container_stack[None].append(initial_path_reader)
+    container_paths = defaultdict(str)
+    container_paths[initial_path_reader] = base_iso_path
+    file_stack = defaultdict(list)
+    processed_containers = defaultdict(list)
+    nested_path_reader = None
 
     LOGGER.info("Checking for nested containers")
 
-    while stack:
-        current_path_reader, current_base_path = stack.pop()
+    for file in initial_path_reader.iso_iterator(initial_path_reader.get_root_dir(), recursive=True):
+        file_stack[initial_path_reader].append(file)
 
-        for file in current_path_reader.iso_iterator(current_path_reader.get_root_dir(), recursive=True):
+    while container_stack:
+        parent_container = next(reversed(container_stack.keys()))
+        try:
+            current_path_reader = container_stack[parent_container].pop()
+        except IndexError:
+            current_path_reader = parent_container
+
+        current_base_path = container_paths[current_path_reader]
+
+        while file_stack[current_path_reader]:
+            nested_path_reader = None
+            file = file_stack[current_path_reader].pop()
             f = current_path_reader.open_file(file)
             try:
                 f.__enter__()
@@ -80,31 +97,48 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
                 f.__exit__()
                 continue
 
-            LOGGER.info("Found nested container %s", file_path)
+            nested_path = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
+
+            LOGGER.info("Found nested container %s", nested_path)
 
             nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
                                                              disable_contents_checksum)
 
             nested_info["name"] = basename.decode("cp1252")
-            nested_info["path"] = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
+            nested_info["path"] = nested_path
             if nested_info:
                 rows.append(nested_info)
-                stack.append((nested_path_reader, nested_info["path"]))
-                processed_containers.append((nested_iso_processor, f))
+                container_stack[current_path_reader].append(nested_path_reader)
+                processed_containers[current_path_reader].append((nested_iso_processor, f))
+                container_paths[nested_path_reader] = nested_path
+
+            else:
+                try:
+                    f.__exit__()
+                except AttributeError:
+                    pass
+
             bar = list(PROGRESS_MANAGER.counters.keys())[-1]
             bar.desc = os.path.basename(basename.decode("cp1252"))
             bar.refresh()
             cleanup_bars()
 
-        if not stack or stack[-1][0].parent_container != current_path_reader:
-            current_path_reader.close()
+            if nested_info:
+                break
 
-    for (container, file) in processed_containers:
-        container.close()
-        try:
-            file.__exit__()
-        except AttributeError:
-            pass
+        if nested_path_reader:
+            for file in nested_path_reader.iso_iterator(nested_path_reader.get_root_dir(), recursive=True):
+                file_stack[nested_path_reader].append(file)
+
+        if len(file_stack[current_path_reader]) == 0 and len(container_stack[current_path_reader]) == 0:
+            if current_path_reader:
+                current_path_reader.close()
+            try:
+                f.__exit__()
+            except AttributeError:
+                pass
+            container_stack.pop(current_path_reader)
+            file_stack.pop(current_path_reader)
 
     return rows
 
