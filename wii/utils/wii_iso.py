@@ -25,7 +25,7 @@ class WiiISO(GamecubeISO):
     def from_disc(cls, iso: Path, disc: Disc):
         for partition_info in disc.partitions:
             if partition_info.type == 0:
-                LOGGER.info("Found data partition index %d", partition_info.index)
+                LOGGER.info("Found data partition index %d on disc %s", partition_info.index, iso)
                 return cls.from_partition(iso, Partition(disc, partition_info))
 
     @classmethod
