@@ -288,12 +288,20 @@ def apply_patches():
         try:
             orig_check_int(retcode, func, args)
         except ArchiveError as e:
+            if e.errno == 0:
+                return libarchive.ffi.ARCHIVE_EOF
             if e.msg.startswith("ZIP compressed data is wrong size"):
+                libarchive.ffi.logger.warning(e.msg)
+                return libarchive.ffi.ARCHIVE_WARN
+            if e.msg.startswith("ZIP decompression failed"):
+                libarchive.ffi.logger.warning(e.msg)
+                return libarchive.ffi.ARCHIVE_WARN
+            if e.msg.startswith("ZIP bad CRC"):
                 libarchive.ffi.logger.warning(e.msg)
                 return libarchive.ffi.ARCHIVE_WARN
             raise
     libarchive.ffi.read_data.errcheck = check_int
-
+    libarchive.ffi.read_next_header2.errcheck = check_int
 
     import zipfile
     orig_decodeExtra = zipfile.ZipInfo._decodeExtra
