@@ -134,8 +134,9 @@ class IsoProcessorFactory:
         if wrapper.read(4) == b"\x5D\x1C\x9E\xA3":
             try:
                 disc = WiiDisc(wrapper)
-                iso = WiiISO.from_disc(fp.name, disc)
-                return WiiPathReader(iso, fp, parent_container)
+                iso = WiiISO.from_disc(file_name, disc)
+                if iso:
+                    return WiiPathReader(iso, fp, parent_container)
             except ValueError:
                 pass
 
@@ -143,6 +144,13 @@ class IsoProcessorFactory:
         for offset in [0x430, 0x630]:
             wrapper.seek(offset)
             if wrapper.read(9) == b"Apple_HFS":
+                try:
+                    # Check for an iso FS first
+                    iso = pycdlib.PyCdlib()
+                    iso.open_fp(wrapper)
+                    return PyCdLibPathReader(iso, wrapper, parent_container)
+                except Exception:
+                    pass
                 try:
                     volume = Volume()
                     volume.read(wrapper)
