@@ -97,6 +97,13 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         # Hack: If multiple files reference the same LBA but with different
         # sizes, update the inode's data size to be correct for this file
         if hasattr(file, "data_length"):
+            if not file.inode:
+                inode = pycdlib.inode.Inode()
+                inode.parse(file.extent_location(), file.data_length, self.fp,
+                          self.iso.logical_block_size)
+                f = pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.logical_block_size)
+                return f
+
             if len(file.inode.linked_records) > 1 and file.inode.data_length != file.data_length:
                 LOGGER.warning("File %s marked at LBA %d, which was already marked for file %s",
                                self.get_file_path(file), file.orig_extent_loc, self.get_file_path(file.inode.linked_records[0][0]))
