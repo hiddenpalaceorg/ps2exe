@@ -44,15 +44,15 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
 
     # noinspection PyRedeclaration
     def get_file_date(self, file):
-        if getattr(file, "date_time", None):
-            if file.date_time == (1980, 0, 0, 0, 0, 0):
-                return None
-            return datetime.datetime(*file.date_time, tzinfo=datetime.timezone.utc)
-        if isinstance(file.mtime, datetime.datetime):
-            return file.mtime
-        elif getattr(file, "mtime", None):
-            return datetime.datetime.fromtimestamp(file.mtime, tz=datetime.timezone.utc)
-
+        try:
+            if getattr(file, "date_time", None):
+                return datetime.datetime(*file.date_time, tzinfo=datetime.timezone.utc)
+            if isinstance(file.mtime, datetime.datetime):
+                return file.mtime
+            elif getattr(file, "mtime", None):
+                return datetime.datetime.fromtimestamp(file.mtime, tz=datetime.timezone.utc)
+        except ValueError:
+            return None
     def get_pvd_info(self):
         return {}
 
