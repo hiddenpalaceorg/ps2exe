@@ -128,9 +128,12 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 except AttributeError:
                     pass
                 for root_dir in root_dirs:
-                    for file in self.iso_iterator(root_dir, recursive=True):
-                        if path.lower() == self.get_file_path(file).lower():
-                            return file
+                    try:
+                        for file in self.iso_iterator(root_dir, recursive=True):
+                            if path.lower() == self.get_file_path(file).lower():
+                                return file
+                    except:
+                        pass
                 raise FileNotFoundError(e)
 
     def open_file(self, file):
