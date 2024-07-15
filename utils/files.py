@@ -561,7 +561,13 @@ class OffsetFile(BaseFile):
         return self.mmap[file_pos:file_pos+read_len]
 
     def write(self, data):
-        self.mmap.write(data)
+        try:
+            self.mmap.seek(self.pos)
+            ret = self.mmap.write(data)
+            self.pos += len(data)
+            return ret
+        except ValueError:
+            raise
 
     def length(self):
         return self.end_pos - self.offset
