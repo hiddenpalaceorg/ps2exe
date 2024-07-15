@@ -296,6 +296,9 @@ def apply_patches():
             if e.msg.startswith("ZIP decompression failed"):
                 libarchive.ffi.logger.warning(e.msg)
                 return libarchive.ffi.ARCHIVE_WARN
+            if e.msg.startswith("Decompression failed"):
+                libarchive.ffi.logger.warning(e.msg)
+                return libarchive.ffi.ARCHIVE_WARN
             if e.msg.startswith("ZIP bad CRC"):
                 libarchive.ffi.logger.warning(e.msg)
                 return libarchive.ffi.ARCHIVE_WARN
