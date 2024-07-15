@@ -72,6 +72,11 @@ class ArchiveWrapper:
                     block_size = 65536
             except (OSError, AttributeError):
                 block_size = 65536
+            # Test the archive
+            with libarchive.stream_reader(file, block_size=block_size) as archive_test:
+                test_file = next(file for file in archive_test if not file.isdir)
+                next(test_file.get_blocks(block_size=block_size))
+            file.seek(0)
             self.ctx = libarchive.stream_reader(file, block_size=block_size)
             total_size = float(get_file_size(file))
 

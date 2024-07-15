@@ -65,7 +65,13 @@ class IsoProcessorFactory:
         ]
         for magic_to_try in compressed_magic_values:
             if magic.startswith(magic_to_try):
-                return CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)
+                try:
+                    return CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)
+                except Exception as e:
+                    if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
+                        LOGGER.warning(e.msg)
+                    else:
+                        raise
 
         fp.seek(0)
         if fp.read(4) == b"LIVE":

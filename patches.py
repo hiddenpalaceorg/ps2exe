@@ -281,13 +281,15 @@ def apply_patches():
             LOGGER.exception(e)
     rarfile.RarExtFile._check = _check
 
+    from libarchive.exception import ArchiveError
     import libarchive.ffi
     orig_check_int = libarchive.ffi.check_int
     def check_int(retcode, func, args):
         try:
             orig_check_int(retcode, func, args)
-        except libarchive.exception.ArchiveError as e:
+        except ArchiveError as e:
             if e.msg.startswith("ZIP compressed data is wrong size"):
                 libarchive.ffi.logger.warning(e.msg)
                 return libarchive.ffi.ARCHIVE_WARN
+            raise
     libarchive.ffi.read_data.errcheck = check_int
