@@ -88,7 +88,7 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
             basename = os.path.basename(file_path).encode("cp1252", errors="replace")
             try:
                 nested_path_reader = IsoProcessorFactory.get_iso_path_reader(
-                    f, basename.decode(), current_path_reader, PROGRESS_MANAGER
+                    f, basename.decode("cp1252"), current_path_reader, PROGRESS_MANAGER
                 )
                 if not nested_path_reader:
                     f.__exit__()
