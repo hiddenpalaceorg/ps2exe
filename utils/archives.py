@@ -8,6 +8,7 @@ import tempfile
 
 import psutil
 import rarfile
+import zipfile
 
 from utils.common import format_bar_desc
 from utils.files import MmappedFile, OffsetFile, get_file_size
@@ -72,14 +73,36 @@ class ArchiveWrapper:
                     block_size = 65536
             except (OSError, AttributeError):
                 block_size = 65536
-            # Test the archive
-            with libarchive.stream_reader(file, block_size=block_size) as archive_test:
-                test_file = next((file for file in archive_test if not file.isdir), None)
-                if test_file:
-                    next(test_file.get_blocks(block_size=block_size), b"")
-            file.seek(0)
-            self.ctx = libarchive.stream_reader(file, block_size=block_size)
             total_size = float(get_file_size(file))
+            # Test the archive
+            try:
+                with libarchive.stream_reader(file, block_size=block_size) as archive_test:
+                    test_file = next((file for file in archive_test if not file.isdir), None)
+                    if test_file:
+                        next(test_file.get_blocks(block_size=block_size), b"")
+                file.seek(0)
+                self.ctx = libarchive.stream_reader(file, block_size=block_size)
+            except Exception as e:
+                file.seek(0)
+                if file.read(4) != b"PK\x03\x04":
+                    raise e
+                # Attempt to recover using zipfile
+                zipfile.ZipFile.__iter__ = lambda s: iter(s.filelist)
+                self.ctx = zipfile.ZipFile(io.BytesIO(), "w")
+                self.ctx.fp = file
+                self.ctx.mode = "rb"
+                try:
+                    self.ctx._RealGetContents()
+                except zipfile.BadZipFile:
+                    pass
+                finally:
+                    if not len(self.ctx.filelist):
+                        raise e
+                    try:
+                        f = self.ctx.open(self.ctx.filelist[0].filename, "r")
+                        f.read(block_size)
+                    except:
+                        raise e
 
         # 80% of free physical memory
         try:
@@ -127,7 +150,7 @@ class ArchiveWrapper:
             return
 
         for entry in self.reader:
-            if isinstance(entry, rarfile.RarInfo):
+            if isinstance(entry, (rarfile.RarInfo, zipfile.ZipInfo)):
                 file_path = entry.filename
                 file_size = entry.file_size
             else:
@@ -237,12 +260,15 @@ class BlockReader(ArchiveEntryReader):
             return data
 
 
-class RarFileReader(ArchiveEntryReader):
+class CompressedFileAsFileIoReader(ArchiveEntryReader):
     def __init__(self, entry, archive, *args, **kwargs):
         super().__init__(entry, archive, *args, **kwargs)
         self.name = self.entry.filename
-        self.rarfile = self.archive._file_parser.open(self.entry, None)
+        self.archive_file = self.open(self.entry)
         self.size = self.entry.file_size
+
+    def open(self, entry):
+        raise NotImplementedError
 
     def _get_data(self, n, discard=False):
         amount_need_read = min(self.size, self.pos + n)
@@ -252,7 +278,7 @@ class RarFileReader(ArchiveEntryReader):
             size_left = amount_need_read - self.read_bytes
             while size_left > 0:
                 chunk_size = min(65536, size_left)
-                data = self.rarfile.read(chunk_size)
+                data = self.archive_file.read(chunk_size)
                 read = len(data)
                 self.fp.write(data)
                 size_left -= read
@@ -267,7 +293,18 @@ class RarFileReader(ArchiveEntryReader):
 
     def close(self):
         super().close()
-        self.rarfile.close()
+        self.archive_file.close()
+
+
+class ZipFileReader(CompressedFileAsFileIoReader):
+    def open(self, entry):
+        return self.archive.open(entry, "r")
+
+
+class RarFileReader(CompressedFileAsFileIoReader):
+    def open(self, entry):
+        return self.archive._file_parser.open(entry, None)
+
 
 class ArchiveEntryWrapper:
     def __init__(self, archive, entry, fp, archive_reader, pbar=None):
@@ -277,7 +314,7 @@ class ArchiveEntryWrapper:
         self.entry = entry
         self.pbar = pbar
         self.entry_reader = None
-        if isinstance(entry, rarfile.RarInfo):
+        if isinstance(entry, (rarfile.RarInfo, zipfile.ZipInfo)):
             self.path = entry.filename
         else:
             self.path = entry.path
@@ -295,6 +332,8 @@ class ArchiveEntryWrapper:
             if self.entry.file_size > rarfile.HACK_SIZE_LIMIT:
                 self.entry.filename = self.entry.filename.replace("/", "\\")
             self.entry_reader = RarFileReader(self.entry, self.archive, self.fp, pbar=self.pbar)
+        elif isinstance(self.entry, zipfile.ZipInfo):
+            self.entry_reader = ZipFileReader(self.entry, self.archive, self.fp, pbar=self.pbar)
         else:
             self.entry_reader = BlockReader(self, self.archive, self.fp, pbar=self.pbar)
         return self.entry_reader
@@ -306,7 +345,7 @@ class ArchiveEntryWrapper:
 
     @property
     def file_name(self):
-        if isinstance(self.entry, rarfile.RarInfo):
+        if isinstance(self.entry, (rarfile.RarInfo, zipfile.ZipInfo)):
             if isinstance(self.entry.filename, bytes):
                 return self.entry.filename.decode(errors='replace')
             return self.entry.filename
@@ -324,7 +363,7 @@ class ArchiveEntryWrapper:
 
     @property
     def is_dir(self):
-        if isinstance(self.entry, rarfile.RarInfo):
+        if isinstance(self.entry, (rarfile.RarInfo, zipfile.ZipInfo)):
             return self.entry.is_dir()
         else:
             return self.entry.isdir

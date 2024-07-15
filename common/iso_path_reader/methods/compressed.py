@@ -45,6 +45,8 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
     # noinspection PyRedeclaration
     def get_file_date(self, file):
         if getattr(file, "date_time", None):
+            if file.date_time == (1980, 0, 0, 0, 0, 0):
+                return None
             return datetime.datetime(*file.date_time, tzinfo=datetime.timezone.utc)
         if isinstance(file.mtime, datetime.datetime):
             return file.mtime

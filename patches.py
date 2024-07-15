@@ -293,3 +293,13 @@ def apply_patches():
                 return libarchive.ffi.ARCHIVE_WARN
             raise
     libarchive.ffi.read_data.errcheck = check_int
+
+
+    import zipfile
+    orig_decodeExtra = zipfile.ZipInfo._decodeExtra
+    def _decodeExtra(self):
+        try:
+            orig_decodeExtra(self)
+        except zipfile.BadZipfile:
+            pass
+    zipfile.ZipInfo._decodeExtra = _decodeExtra
