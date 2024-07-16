@@ -252,6 +252,8 @@ class BlockReader(ArchiveEntryReader):
         amount_need_read = min(self.size, self.pos + n)
         left = n
         if amount_need_read > self.read_bytes:
+            # Hack: store the file name inside the module globally for loging purposes
+            libarchive.current_file_path = self.entry.path
             self.fp.seek(self.read_bytes)
             for data in self.entry.get_blocks(block_size=min(left, 65536)):
                 read = len(data)

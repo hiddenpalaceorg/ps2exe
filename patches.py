@@ -290,18 +290,18 @@ def apply_patches():
         except ArchiveError as e:
             if e.errno == 0:
                 return libarchive.ffi.ARCHIVE_EOF
-            if e.msg.startswith("ZIP compressed data is wrong size"):
-                libarchive.ffi.logger.warning(e.msg)
-                return libarchive.ffi.ARCHIVE_WARN
-            if e.msg.startswith("ZIP decompression failed"):
-                libarchive.ffi.logger.warning(e.msg)
-                return libarchive.ffi.ARCHIVE_WARN
-            if e.msg.startswith("Decompression failed"):
-                libarchive.ffi.logger.warning(e.msg)
-                return libarchive.ffi.ARCHIVE_WARN
-            if e.msg.startswith("ZIP bad CRC"):
-                libarchive.ffi.logger.warning(e.msg)
-                return libarchive.ffi.ARCHIVE_WARN
+            if getattr(libarchive, "current_file_path", None):
+                e.msg += f" file: {libarchive.current_file_path}"
+            errors_to_allow = [
+                "ZIP compressed data is wrong size",
+                "ZIP decompression failed",
+                "Decompression failed",
+                "ZIP bad CRC",
+            ]
+            for error in errors_to_allow:
+                if e.msg.startswith(error):
+                    libarchive.ffi.logger.warning(e.msg)
+                    return libarchive.ffi.ARCHIVE_WARN
             raise
     libarchive.ffi.read_data.errcheck = check_int
     libarchive.ffi.read_next_header2.errcheck = check_int
