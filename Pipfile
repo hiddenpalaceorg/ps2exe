@@ -17,7 +17,7 @@ enlighten = "*"
 pyisotools = "*"
 methodtools = "*"
 machfs = "*"
-rarfile = "*"
+rarfile = ">=4.2"
 psutil = "*"
 
 [requires]

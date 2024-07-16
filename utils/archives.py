@@ -35,7 +35,7 @@ except TypeError:
 from libarchive import ArchiveEntry
 
 try:
-    rarfile.tool_setup(unrar=True, unar=False, bsdtar=False)
+    rarfile.tool_setup(sevenzip=True, sevenzip2=True, unrar=True, unar=False, bsdtar=False)
 except rarfile.RarCannotExec:
     unrar_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib", "unrar")
     if os.name == "nt":
