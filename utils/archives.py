@@ -157,6 +157,9 @@ class ArchiveWrapper:
                 file_path = entry.name
                 file_size = entry.size
 
+            if file_path in self.entries:
+                continue
+
             if file_size is None or file_path is None:
                 last_file = next(reversed(self.entries.keys()), None)
                 LOGGER.warning("Archive %s could not be fully extracted. Last file: %s", self.path, last_file)
