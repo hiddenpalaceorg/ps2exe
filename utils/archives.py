@@ -61,8 +61,9 @@ class ArchiveWrapper:
         self.tempfile_used = 0
         self.entries = {}
         self._entries_pos = dict()
-        file_ext = os.path.splitext(self.path)[1]
-        if file_ext.lower() == ".rar":
+        file.seek(0)
+        if file.read(6) == b"Rar\x21\x1A\x07":
+            file.seek(0)
             self.ctx = rarfile.RarFile(file)
             total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
         else:
@@ -76,6 +77,7 @@ class ArchiveWrapper:
             total_size = float(get_file_size(file))
             # Test the archive
             try:
+                file.seek(0)
                 with libarchive.stream_reader(file, block_size=block_size) as archive_test:
                     test_file = next((file for file in archive_test if not file.isdir), None)
                     if test_file:
