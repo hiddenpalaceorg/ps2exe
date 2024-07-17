@@ -3,6 +3,7 @@ import logging
 import mmap
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 
@@ -61,34 +62,49 @@ class ArchiveWrapper:
         self.tempfile_used = 0
         self.entries = {}
         self._entries_pos = dict()
+        self.rar_tmpfile = None
         file.seek(0)
-        if file.read(6) == b"Rar\x21\x1A\x07":
-            file.seek(0)
-            self.ctx = rarfile.RarFile(file)
-            total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
-        else:
-            try:
-                if self.path:
-                    block_size = os.stat(self.path).st_blksize
-                else:
-                    block_size = 65536
-            except (OSError, AttributeError):
+        try:
+            if self.path:
+                block_size = os.stat(self.path).st_blksize
+            else:
                 block_size = 65536
-            total_size = float(get_file_size(file))
-            # Test the archive
-            try:
+        except (OSError, AttributeError):
+            block_size = 65536
+        total_size = float(get_file_size(file))
+        # Test the archive
+        try:
+            file.seek(0)
+            with libarchive.stream_reader(file, block_size=block_size) as archive_test:
+                i = 0
+                for test_file in archive_test:
+                    if i >= 10:
+                        break
+                    next(test_file.get_blocks(block_size=block_size), b"")
+                    i+=1
+            file.seek(0)
+            self.ctx = libarchive.stream_reader(file, block_size=block_size)
+        except Exception as e:
+            file.seek(0)
+            magic = file.read(6)
+            if magic == b"Rar\x21\x1A\x07":
                 file.seek(0)
-                with libarchive.stream_reader(file, block_size=block_size) as archive_test:
-                    test_file = next((file for file in archive_test if not file.isdir), None)
-                    if test_file:
-                        next(test_file.get_blocks(block_size=block_size), b"")
-                file.seek(0)
-                self.ctx = libarchive.stream_reader(file, block_size=block_size)
-            except Exception as e:
-                file.seek(0)
-                if file.read(4) != b"PK\x03\x04":
-                    raise e
+                if not os.path.exists(self.path):
+                    self.rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=".rar", delete=False)
+                    try:
+                        shutil.copyfileobj(file, self.rar_tmpfile, rarfile.BSIZE)
+                        self.rar_tmpfile.close()
+                    except BaseException:
+                        self.rar_tmpfile.close()
+                        os.unlink(self.rar_tmpfile.name)
+                        raise
+                    self.ctx = rarfile.RarFile(self.rar_tmpfile.name)
+                else:
+                    self.ctx = rarfile.RarFile(self.path)
+                total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
+            elif magic[0:4] == b"PK\x03\x04":
                 # Attempt to recover using zipfile
+                file.seek(0)
                 zipfile.ZipFile.__iter__ = lambda s: iter(s.filelist)
                 self.ctx = zipfile.ZipFile(io.BytesIO(), "w")
                 self.ctx.fp = file
@@ -144,6 +160,10 @@ class ArchiveWrapper:
             pass
         if self.tempfile:
             self.tempfile.close()
+
+        if self.rar_tmpfile:
+            self.rar_tmpfile.close()
+            os.unlink(self.rar_tmpfile.name)
 
     def __iter__(self):
         for _, entry in self.entries.items():
@@ -202,6 +222,8 @@ class ArchiveWrapper:
     def __getattr__(self, item):
         return getattr(self.reader, item)
 
+    def __del__(self):
+        self.__exit__(None, None, None)
 
 class ArchiveEntryReader(MmappedFile, io.IOBase):
     def __init__(self, entry, archive, entry_fp, pbar=None):
