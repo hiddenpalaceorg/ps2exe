@@ -36,7 +36,7 @@ except TypeError:
 from libarchive import ArchiveEntry
 
 try:
-    rarfile.tool_setup(sevenzip=True, sevenzip2=True, unrar=True, unar=False, bsdtar=False)
+    rarfile.tool_setup(unrar=True, unar=False, bsdtar=False)
 except rarfile.RarCannotExec:
     unrar_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib", "unrar")
     if os.name == "nt":
@@ -53,6 +53,7 @@ except rarfile.RarCannotExec:
 class ArchiveWrapper:
     def __init__(self, file, pbar=None):
         file.seek(0)
+        self.fp = file
         self.path = file.name
         self.reader = None
         self.pbar = pbar
@@ -66,61 +67,13 @@ class ArchiveWrapper:
         file.seek(0)
         try:
             if self.path:
-                block_size = os.stat(self.path).st_blksize
+                self.block_size = os.stat(self.path).st_blksize
             else:
-                block_size = 65536
+                self.block_size = 65536
         except (OSError, AttributeError):
-            block_size = 65536
+            self.block_size = 65536
         total_size = float(get_file_size(file))
-        # Test the archive
-        try:
-            file.seek(0)
-            with libarchive.stream_reader(file, block_size=block_size) as archive_test:
-                i = 0
-                for test_file in archive_test:
-                    if i >= 10:
-                        break
-                    next(test_file.get_blocks(block_size=block_size), b"")
-                    i+=1
-            file.seek(0)
-            self.ctx = libarchive.stream_reader(file, block_size=block_size)
-        except Exception as e:
-            file.seek(0)
-            magic = file.read(6)
-            if magic == b"Rar\x21\x1A\x07":
-                file.seek(0)
-                if not os.path.exists(self.path):
-                    self.rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=".rar", delete=False)
-                    try:
-                        shutil.copyfileobj(file, self.rar_tmpfile, rarfile.BSIZE)
-                        self.rar_tmpfile.close()
-                    except BaseException:
-                        self.rar_tmpfile.close()
-                        os.unlink(self.rar_tmpfile.name)
-                        raise
-                    self.ctx = rarfile.RarFile(self.rar_tmpfile.name)
-                else:
-                    self.ctx = rarfile.RarFile(self.path)
-                total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
-            elif magic[0:4] == b"PK\x03\x04":
-                # Attempt to recover using zipfile
-                file.seek(0)
-                zipfile.ZipFile.__iter__ = lambda s: iter(s.filelist)
-                self.ctx = zipfile.ZipFile(io.BytesIO(), "w")
-                self.ctx.fp = file
-                self.ctx.mode = "rb"
-                try:
-                    self.ctx._RealGetContents()
-                except zipfile.BadZipFile:
-                    pass
-                finally:
-                    if not len(self.ctx.filelist):
-                        raise e
-                    try:
-                        f = self.ctx.open(self.ctx.filelist[0].filename, "r")
-                        f.read(block_size)
-                    except:
-                        raise e
+        self.ctx = libarchive.stream_reader(file, block_size=self.block_size)
 
         # 80% of free physical memory
         try:
@@ -166,6 +119,51 @@ class ArchiveWrapper:
             os.unlink(self.rar_tmpfile.name)
 
     def __iter__(self):
+        try:
+            yield from self.iter()
+        except libarchive.ArchiveError as e:
+            self.ctx.__exit__(None, None, None)
+            self.fp.seek(0)
+            magic = self.fp.read(6)
+            if magic == b"Rar\x21\x1A\x07":
+                self.fp.seek(0)
+                if not os.path.exists(self.path):
+                    self.rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=".rar", delete=False)
+                    try:
+                        shutil.copyfileobj(self.fp, self.rar_tmpfile, rarfile.BSIZE)
+                        self.rar_tmpfile.close()
+                    except BaseException:
+                        self.rar_tmpfile.close()
+                        os.unlink(self.rar_tmpfile.name)
+                        raise
+                    self.ctx = rarfile.RarFile(self.rar_tmpfile.name)
+                else:
+                    self.ctx = rarfile.RarFile(self.path)
+                self.counter.total = float(sum([entry.file_size for entry in self.ctx.infolist()]))
+            elif magic[0:4] == b"PK\x03\x04":
+                # Attempt to recover using zipfile
+                self.fp.seek(0)
+                zipfile.ZipFile.__iter__ = lambda s: iter(s.filelist)
+                self.ctx = zipfile.ZipFile(io.BytesIO(), "w")
+                self.ctx.fp = self.fp
+                self.ctx.mode = "rb"
+                try:
+                    self.ctx._RealGetContents()
+                except zipfile.BadZipFile:
+                    pass
+                finally:
+                    if not len(self.ctx.filelist):
+                        raise e
+            else:
+                raise e
+
+            self.__enter__()
+            last_entry = next(reversed(self.entries.keys()), None)
+            if last_entry and self.entries[last_entry].entry_reader.read_bytes != self.entries[last_entry].entry_reader.size:
+                self.entries.pop(last_entry)
+            yield from self.iter()
+
+    def iter(self):
         for _, entry in self.entries.items():
             yield entry
         if not self.reader:
