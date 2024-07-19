@@ -297,6 +297,7 @@ def apply_patches():
                 "ZIP decompression failed",
                 "Decompression failed",
                 "ZIP bad CRC",
+                "Truncated input file",
             ]
             for error in errors_to_allow:
                 if e.msg.startswith(error):
