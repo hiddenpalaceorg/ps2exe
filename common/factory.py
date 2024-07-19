@@ -71,7 +71,17 @@ class IsoProcessorFactory:
                     if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
                         LOGGER.warning("Error processing %s: %s", file_name, e.msg)
                     elif getattr(e, "msg", "").startswith("Unrecognized archive format"):
-                        LOGGER.warning("Error processing %s: %s", file_name, e.msg)
+                        if magic_to_try != b"\x1F\x8B":
+                            LOGGER.warning("Error processing %s: %s", file_name, e.msg)
+                        else:
+                            # gzipped non-archive file. decompress the
+                            # file and check for other types of containers
+                            fp.seek(0)
+                            try:
+                                import gzip
+                                fp = gzip.GzipFile(fileobj=fp, mode="rb")
+                            except ImportError:
+                                LOGGER.warning("gzip support not available, not able to decompress %s", file_name)
                     else:
                         raise
 

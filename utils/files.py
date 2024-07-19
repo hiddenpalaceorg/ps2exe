@@ -88,10 +88,9 @@ class MmappedFile(BaseFile):
         else:
             try:
                 self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
-                self.name = fp.name
             except (AttributeError, UnsupportedOperation):
                 self.mmap = FakeMemoryMap(fp)
-                self.name = ""
+            self.name = getattr(fp, "name", "")
 
     def ranges(self):
         yield 0, 0, len(self)
@@ -180,8 +179,6 @@ class BinWrapper(BaseFile):
             self.mmap = MmappedFile(fp)
         else:
             self.mmap = fp
-
-
 
         self.is_scrambled, data_offset = ScrambledFile.test_scrambled(self.mmap)
         if self.is_scrambled:
