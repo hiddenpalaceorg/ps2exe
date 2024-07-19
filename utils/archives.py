@@ -121,7 +121,7 @@ class ArchiveWrapper:
         if self.tempfile:
             self.tempfile.close()
 
-        if self.rar_tmpfile:
+        if self.rar_tmpfile and os.path.exists(self.rar_tmpfile.name):
             self.rar_tmpfile.close()
             os.unlink(self.rar_tmpfile.name)
 
@@ -134,11 +134,12 @@ class ArchiveWrapper:
             last_entry = next(reversed(self.entries.keys()), None)
             if last_entry and self.entries[last_entry].entry_reader.read_bytes != self.entries[last_entry].entry_reader.size:
                 self.entries.pop(last_entry)
-            yield from self.iter()
+            yield from self.iter(skip_entries=True)
 
-    def iter(self):
-        for _, entry in self.entries.items():
-            yield entry
+    def iter(self, skip_entries=False):
+        if not skip_entries:
+            for _, entry in self.entries.items():
+                yield entry
         if not self.reader:
             return
 
@@ -203,7 +204,8 @@ class ArchiveWrapper:
                     self.rar_tmpfile.close()
                 except BaseException:
                     self.rar_tmpfile.close()
-                    os.unlink(self.rar_tmpfile.name)
+                    if os.path.exists(self.rar_tmpfile.name):
+                        os.unlink(self.rar_tmpfile.name)
                     raise
                 self.ctx = rarfile.RarFile(self.rar_tmpfile.name)
             else:
