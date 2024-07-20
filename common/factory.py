@@ -249,6 +249,10 @@ class IsoProcessorFactory:
 
         wrapper.seek(0)
 
+        path_reader_class = PyCdLibPathReader
+        if is_ps3:
+            path_reader_class = Ps3PathReader
+
         iso = pycdlib.PyCdlib()
         try:
             iso.open_fp(wrapper)
@@ -264,10 +268,6 @@ class IsoProcessorFactory:
                 exceptions["iso9660"] = e
 
         if iso._initialized:
-            path_reader_class = PyCdLibPathReader
-            if is_ps3:
-                path_reader_class = Ps3PathReader
-
             if iso.pvd.root_dir_record.children:
                 path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="iso9660"))
 
@@ -280,12 +280,12 @@ class IsoProcessorFactory:
             if iso.joliet_vd:
                 path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="joliet"))
 
-            if iso._has_udf:
-                iso = PyCdlibUdf()
-                iso.open_fp(wrapper)
-                path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="udf"))
+        if iso._has_udf:
+            iso = PyCdlibUdf()
+            iso.open_fp(wrapper)
+            path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="udf"))
 
-        else:
+        if not iso._initialized and not iso._has_udf:
             try:
                 iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
                 path_readers.append(PathlabPathReader(iso_accessor, wrapper, parent_container, pvd=iso.pvd))
