@@ -5,6 +5,8 @@ from common.iso_path_reader.methods.base import IsoPathReader
 
 
 class CdiPathReader(IsoPathReader):
+    volume_type = "cdi"
+
     def get_root_dir(self):
         return self.iso.path_tbl
 

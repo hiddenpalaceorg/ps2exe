@@ -6,6 +6,8 @@ from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 
 class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
+    volume_type = "archive"
+
     def __init__(self, iso, fp, *args, **kwargs):
         super().__init__(iso, fp, *args, **kwargs)
         iso.__enter__()
@@ -53,6 +55,7 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
                 return datetime.datetime.fromtimestamp(file.mtime, tz=datetime.timezone.utc)
         except ValueError:
             return None
+
     def get_pvd_info(self):
         return {}
 

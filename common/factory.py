@@ -1,11 +1,8 @@
 import io
 import logging
-import os
-import struct
 from pathlib import Path
 
 from common import pycdlib
-from pycdlib.pycdlibexception import PyCdlibInvalidInput
 from pyisotools.iso import GamecubeISO
 
 from cdi.path_reader import CdiPathReader
@@ -35,9 +32,10 @@ from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from p3do.operafs import OperaFs
 from utils.archives import ArchiveWrapper
-from utils.files import BinWrapper, ConcatenatedFile
+from utils.files import BinWrapper, ConcatenatedFile, BinWrapperException, MmappedFile
 from wii.path_reader import WiiPathReader
 from wii.processor import WiiIsoProcessor
+from wii.utils.partition import Partition
 from wii.utils.wii_iso import WiiISO
 from wii.utils.disc import Disc as WiiDisc
 from xbox.path_reader import XboxPathReader, XboxStfsPathReader
@@ -50,7 +48,11 @@ LOGGER = logging.getLogger(__name__)
 
 class IsoProcessorFactory:
     @staticmethod
-    def get_iso_path_reader(fp, file_name, parent_container, pbar):
+    def get_iso_path_readers(fp, file_name, parent_container, pbar):
+        path_readers = []
+        exceptions = {}
+        is_ps3 = False
+
         fp.seek(0)
         magic = fp.read(16)
         compressed_magic_values = [
@@ -66,14 +68,14 @@ class IsoProcessorFactory:
         for magic_to_try in compressed_magic_values:
             if magic.startswith(magic_to_try):
                 try:
-                    return CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)
+                    return [CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)], []
                 except Exception as e:
                     if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
                         LOGGER.warning("Error processing %s: %s", file_name, e.msg)
                     elif getattr(e, "msg", "").startswith("Unrecognized archive format"):
-                        if magic_to_try != b"\x1F\x8B":
+                        if magic_to_try not in [b"\x1F\x8B", b"BZh", b"\xFD7zXZ\x00"]:
                             LOGGER.warning("Error processing %s: %s", file_name, e.msg)
-                        else:
+                        elif magic_to_try == b"\x1F\x8B":
                             # gzipped non-archive file. decompress the
                             # file and check for other types of containers
                             fp.seek(0)
@@ -82,8 +84,26 @@ class IsoProcessorFactory:
                                 fp = gzip.GzipFile(fileobj=fp, mode="rb")
                             except ImportError:
                                 LOGGER.warning("gzip support not available, not able to decompress %s", file_name)
+                        elif magic_to_try == b"BZh":
+                            # gzipped non-archive file. decompress the
+                            # file and check for other types of containers
+                            fp.seek(0)
+                            try:
+                                import bz2
+                                fp = bz2.BZ2File(filename=fp, mode="rb")
+                            except ImportError:
+                                LOGGER.warning("bz2 support not available, not able to decompress %s", file_name)
+                        elif magic_to_try == b"\xFD7zXZ\x00":
+                            # gzipped non-archive file. decompress the
+                            # file and check for other types of containers
+                            fp.seek(0)
+                            try:
+                                import lzma
+                                fp = lzma.LZMAFile(filename=fp, mode="rb")
+                            except ImportError:
+                                LOGGER.warning("lzma support not available, not able to decompress %s", file_name)
                     else:
-                        raise
+                        exceptions[CompressedPathReader.volume_type] = e
 
         fp.seek(0)
         if fp.read(4) == b"LIVE":
@@ -107,158 +127,172 @@ class IsoProcessorFactory:
                 fp.seek(0)
                 if fp.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                     reader = XDvdFs(fp, 0, -stfs.god_offset)
-                    return XboxPathReader(reader, fp, parent_container)
+                    try:
+                        path_readers.append(XboxPathReader(reader, fp, parent_container))
+                    except Exception as e:
+                        exceptions[XboxPathReader.volume_type] = e
             else:
                 try:
                     stfs.parse_filetable()
-                    return XboxStfsPathReader(stfs, fp, parent_container)
-                except AssertionError:
-                    pass
+                    path_readers.append(XboxStfsPathReader(stfs, fp, parent_container))
+                except Exception as e:
+                    exceptions[XboxStfsPathReader.volume_type] = e
 
         if isinstance(fp, io.IOBase):
-            wrapper = BinWrapper(fp)
+            try:
+                wrapper = BinWrapper(fp)
+            except BinWrapperException:
+                if not isinstance(fp, MmappedFile):
+                    wrapper = MmappedFile(fp)
+                else:
+                    wrapper = fp
         else:
             wrapper = fp
 
         wrapper.seek(0)
         if wrapper.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
-            reader = OperaFs(wrapper)
-            reader.initialize()
-            return P3doPathReader(reader, wrapper, parent_container)
+            try:
+                reader = OperaFs(wrapper)
+                reader.initialize()
+                path_readers.append(P3doPathReader(reader, wrapper, parent_container))
+            except Exception as e:
+                exceptions[P3doPathReader.volume_type] = e
 
         wrapper.seek(0x1C)
         if wrapper.read(4) == b"\xC2\x33\x9F\x3D":
             try:
                 iso = GamecubeISO.from_iso(wrapper)
-                return GamecubePathReader(iso, fp, parent_container)
-            except:
-                pass
+                path_readers.append(GamecubePathReader(iso, fp, parent_container))
+            except Exception as e:
+                exceptions[GamecubePathReader.volume_type] = e
 
         wrapper.seek(0)
         if wrapper.read(64) == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
                 b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
-            iso = GamecubeISO.from_iso(wrapper)
-            return GamecubePathReader(iso, fp, parent_container)
+            try:
+                iso = GamecubeISO.from_iso(wrapper)
+                path_readers.append(GamecubePathReader(iso, fp, parent_container))
+            except Exception as e:
+                exceptions[GamecubePathReader.volume_type] = e
 
         wrapper.seek(0x18)
         if wrapper.read(4) == b"\x5D\x1C\x9E\xA3":
             try:
                 disc = WiiDisc(wrapper)
-                iso = WiiISO.from_disc(file_name, disc)
-                if iso:
-                    return WiiPathReader(iso, fp, parent_container)
-            except ValueError:
-                pass
+                for partition_info in disc.partitions:
+                    try:
+                        if partition_info.type == 0:
+                            LOGGER.info("Found data partition index %d on disc %s", partition_info.index, file_name)
+                        iso = WiiISO.from_partition(file_name, Partition(disc, partition_info))
+                        path_readers.append(WiiPathReader(iso, fp, parent_container))
+                    except Exception as e:
+                        exceptions[f"wii partition {partition_info.volume_group}:{partition_info.index}"] = e
+            except Exception as e:
+                exceptions["wii"] = e
 
         # Apple formatted disc
         for offset in [0x430, 0x630]:
             wrapper.seek(offset)
             if wrapper.read(9) == b"Apple_HFS":
                 try:
-                    # Check for an iso FS first
-                    iso = pycdlib.PyCdlib()
-                    iso.open_fp(wrapper)
-                    return PyCdLibPathReader(iso, wrapper, parent_container)
-                except Exception:
-                    pass
-                try:
                     volume = Volume()
                     volume.read(wrapper)
-                    return HfsPathReader(volume, fp, parent_container)
-                except (ValueError, struct.error):
-                    pass
+                    path_readers.append(HfsPathReader(volume, fp, parent_container))
+                except Exception as e:
+                    exceptions[HfsPathReader.volume_type] = e
 
         wrapper.seek(0x800)
         if wrapper.peek(12) == b"PlayStation3":
-            iso = PyCdlibUdf()
-            try:
-                iso.open_fp(wrapper)
-                return Ps3PathReader(iso, wrapper, parent_container, udf=True)
-            except:
-                if iso.udf_teas:
-                    raise
-                try:
-                    iso = pycdlib.PyCdlib()
-                    iso.open_fp(wrapper)
-                    return Ps3PathReader(iso, wrapper, parent_container, udf=False)
-                except:
-                    raise
+            is_ps3 = True
 
         wrapper.seek(0x7068)
         if wrapper.peek(25) == b"PlayStation Master Disc 3":
-            iso = PyCdlibUdf()
-            try:
-                iso.open_fp(wrapper)
-                return Ps3PathReader(iso, wrapper, parent_container)
-            except:
-                if iso.udf_teas:
-                    raise
-                try:
-                    iso = pycdlib.PyCdlib()
-                    iso.open_fp(wrapper)
-                    return Ps3PathReader(iso, wrapper, parent_container)
-                except:
-                    pass
+            is_ps3 = True
 
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":
-            cdi = Disc(fp, headers=True, scrambled=wrapper.is_scrambled)
-            cdi.read()
-            return CdiPathReader(cdi, fp, parent_container)
+            try:
+                cdi = Disc(fp, headers=True, scrambled=wrapper.is_scrambled)
+                cdi.read()
+                path_readers.append(CdiPathReader(cdi, fp, parent_container))
+            except Exception as e:
+                exceptions[CdiPathReader.volume_type] = e
 
         # Xbox and 360 ISO
-        if wrapper.length() > 65556:
-            wrapper.seek(0x10000)
-            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-                reader = XDvdFs(wrapper, 0x10000)
-                return XboxPathReader(reader, wrapper, parent_container)
-        if wrapper.length() > 34144276:
-            wrapper.seek(0x2090000)
-            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-                reader = XDvdFs(wrapper, 0x2090000)
-                return XboxPathReader(reader, wrapper, parent_container)
-        if wrapper.length() > 265945108:
-            wrapper.seek(0xFDA0000)
-            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-                reader = XDvdFs(wrapper, 0xFDA0000)
-                return XboxPathReader(reader, wrapper, parent_container)
-        # Redump-style dual layer DVD
-        if wrapper.length() > 405864468:
-            wrapper.seek(0x18310000)
-            if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-                reader = XDvdFs(wrapper, 0x18310000)
-                return XboxPathReader(reader, wrapper, parent_container)
+        possible_locations = [
+            0x10000,
+            0x2090000,
+            0xFDA0000,
+            0x18310000,
+        ]
+        for location_to_check in possible_locations:
+            if wrapper.length() > location_to_check + 20:
+                wrapper.seek(location_to_check)
+                if wrapper.read(20) == b"MICROSOFT*XBOX*MEDIA":
+                    try:
+                        reader = XDvdFs(wrapper, location_to_check)
+                        path_readers.append(XboxPathReader(reader, wrapper, parent_container))
+                        break
+                    except Exception as e:
+                        exceptions[XboxPathReader.volume_type] = e
+
+        found_iso_magic = False
+        for magic_offset, magics in [(0, [b"CD001", b"CD-I ", b"BEA01"]), (8, [b'CDROM'])]:
+            wrapper.seek(0x8001 + magic_offset)
+            ident = wrapper.read(5)
+            if ident in magics:
+                found_iso_magic = True
+                break
+
+        if not found_iso_magic:
+            return path_readers, exceptions
 
         wrapper.seek(0)
 
         iso = pycdlib.PyCdlib()
         try:
             iso.open_fp(wrapper)
-            return PyCdLibPathReader(iso, wrapper, parent_container)
-        except Exception:
+        except Exception as e:
             # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
-            if not hasattr(iso, "pvd") and not hasattr(iso, "pvds"):
-                return
-            if hasattr(iso, "pvd") and iso.pvd.root_dir_record.children:
-                iso._initialized = True
-                try:
-                    iso.get_record(iso_path="/test_path_that_does_not_exist")
-                except PyCdlibInvalidInput:
-                    return PyCdLibPathReader(iso, wrapper, parent_container)
-                except:
-                    pass
-            if not iso.pvds and not iso._has_udf:
-                return
             if not hasattr(iso, "pvd") and hasattr(iso, "pvds") and iso.pvds:
                 iso.pvd = iso.pvds[0]
 
-        if iso._has_udf:
-            iso = PyCdlibUdf()
-            iso.open_fp(wrapper)
-            return PyCdLibPathReader(iso, wrapper, parent_container, udf=True)
+            if hasattr(iso, "pvd"):
+                iso._initialized = True
+
+            if not iso._initialized:
+                exceptions["iso9660"] = e
+
+        if iso._initialized:
+            path_reader_class = PyCdLibPathReader
+            if is_ps3:
+                path_reader_class = Ps3PathReader
+
+            if iso.pvd.root_dir_record.children:
+                path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="iso9660"))
+
+            if iso.rock_ridge:
+                if next((child for child in
+                         iso.pvd.root_dir_record.children
+                         if not child.is_dot() and child.is_dotdot() and child.rock_ridge), None):
+                    path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="rock_ridge"))
+
+            if iso.joliet_vd:
+                path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="joliet"))
+
+            if iso._has_udf:
+                iso = PyCdlibUdf()
+                iso.open_fp(wrapper)
+                path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="udf"))
+
         else:
-            iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
-            return PathlabPathReader(iso_accessor, wrapper, parent_container, pvd=iso.pvd)
+            try:
+                iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
+                path_readers.append(PathlabPathReader(iso_accessor, wrapper, parent_container, pvd=iso.pvd))
+            except Exception as e:
+                exceptions[PathlabPathReader.volume_type] = e
+
+        return path_readers, exceptions
 
 
     @staticmethod

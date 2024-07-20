@@ -26,7 +26,15 @@ PROGRESS_MANAGER = enlighten.get_manager()
 
 
 def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
-    info = {"name": basename.decode("cp1252"), "path": iso_path}
+    info = {"name": basename.decode("cp1252"), "path": iso_path, "volume_type": path_reader.volume_type}
+    parent_volume_types = []
+    current_container = path_reader
+    while current_container.parent_container:
+        current_container = current_container.parent_container
+        parent_volume_types.append(current_container.volume_type)
+
+    info["parent_volume_type"] = "->".join(reversed(parent_volume_types))
+
     system = BaseIsoProcessor.get_system_type(path_reader)
     info.update({"system": system})
 
@@ -51,12 +59,12 @@ def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
 
 def process_nested_containers(initial_path_reader, base_iso_path, disable_contents_checksum, rows):
     container_stack = defaultdict(list)
-    container_stack[None].append(initial_path_reader)
+    container_stack[initial_path_reader.parent_container].append(initial_path_reader)
     container_paths = defaultdict(str)
     container_paths[initial_path_reader] = base_iso_path
     file_stack = defaultdict(list)
     processed_containers = defaultdict(list)
-    nested_path_reader = None
+    nested_path_readers = []
 
     LOGGER.info("Checking for nested containers")
 
@@ -73,7 +81,7 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
         current_base_path = container_paths[current_path_reader]
 
         while file_stack[current_path_reader]:
-            nested_path_reader = None
+            nested_info = []
             file = file_stack[current_path_reader].pop()
             f = current_path_reader.open_file(file)
             try:
@@ -86,57 +94,66 @@ def process_nested_containers(initial_path_reader, base_iso_path, disable_conten
                 continue
 
             basename = os.path.basename(file_path).encode("cp1252", errors="replace")
-            try:
-                nested_path_reader = IsoProcessorFactory.get_iso_path_reader(
-                    f, basename.decode("cp1252"), current_path_reader, PROGRESS_MANAGER
-                )
-                if not nested_path_reader:
-                    f.__exit__()
-                    continue
-            except utils.files.BinWrapperException:
+            nested_path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(
+                f, basename.decode("cp1252"), current_path_reader, PROGRESS_MANAGER
+            )
+            if nested_path_readers:
+                LOGGER.info("Found %d volumes and encountered %d errors", len(nested_path_readers), len(exceptions))
+            if exceptions:
+                LOGGER.warning("The following exceptions were encountered when searching for containers, iso: %s",
+                               file_path)
+                for volume_type, exception in exceptions.items():
+                    LOGGER.error("Volume type: %s", volume_type, exc_info=exception)
+            if not nested_path_readers:
                 f.__exit__()
                 continue
-
             nested_path = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
 
             LOGGER.info("Found nested container %s", nested_path)
 
-            nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
-                                                             disable_contents_checksum)
+            for nested_path_reader in nested_path_readers:
+                LOGGER.info("Found volume type %s", nested_path_reader.volume_type)
+                nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
+                                                                 disable_contents_checksum)
 
-            nested_info["name"] = basename.decode("cp1252")
-            nested_info["path"] = nested_path
-            if nested_info:
-                rows.append(nested_info)
-                container_stack[current_path_reader].append(nested_path_reader)
-                processed_containers[current_path_reader].append((nested_iso_processor, f))
-                container_paths[nested_path_reader] = nested_path
+                if nested_info:
+                    nested_info["name"] = basename.decode("cp1252")
+                    nested_info["path"] = nested_path
+                    rows.append(nested_info)
+                    container_stack[current_path_reader].append(nested_path_reader)
+                    processed_containers[current_path_reader].append((nested_iso_processor, f))
+                    container_paths[nested_path_reader] = nested_path
 
-            else:
+                bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+                bar.desc = os.path.basename(basename.decode("cp1252"))
+                if len(nested_path_readers) > 1:
+                    bar.desc = f"{bar.desc} ({nested_path_reader.volume_type})"
+                bar.refresh()
+                cleanup_bars()
+
+            if not nested_info:
                 try:
                     f.__exit__()
                 except AttributeError:
                     pass
 
-            bar = list(PROGRESS_MANAGER.counters.keys())[-1]
-            bar.desc = os.path.basename(basename.decode("cp1252"))
-            bar.refresh()
-            cleanup_bars()
-
             if nested_info:
                 break
 
-        if nested_path_reader:
-            for file in nested_path_reader.iso_iterator(nested_path_reader.get_root_dir(), recursive=True):
-                file_stack[nested_path_reader].append(file)
+        if nested_path_readers:
+            for nested_path_reader in nested_path_readers:
+                for file in nested_path_reader.iso_iterator(nested_path_reader.get_root_dir(), recursive=True):
+                    file_stack[nested_path_reader].append(file)
 
         if len(file_stack[current_path_reader]) == 0 and len(container_stack[current_path_reader]) == 0:
-            if current_path_reader:
-                current_path_reader.close()
-            try:
-                f.__exit__()
-            except AttributeError:
-                pass
+            if current_path_reader != initial_path_reader:
+                if current_path_reader:
+                    current_path_reader.close()
+                try:
+                    f.__exit__()
+                except AttributeError:
+                    pass
+
             container_stack.pop(current_path_reader)
             file_stack.pop(current_path_reader)
 
@@ -153,23 +170,39 @@ def get_iso_info(iso_filename, disable_contents_checksum):
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace").decode("cp1252")
     LOGGER.info("Reading %s", iso_path.decode("cp1252"))
 
-    iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, basename, parent_container, PROGRESS_MANAGER)
-    if not iso_path_reader:
-        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
+    path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(fp, basename, parent_container, PROGRESS_MANAGER)
+    if not path_readers:
+        LOGGER.warning(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
+    else:
+        LOGGER.info("Found %d volumes and encountered %d errors", len(path_readers), len(exceptions))
+    if exceptions:
+        LOGGER.warning("The following exceptions were encountered when searching for containers, iso: %s", iso_filename)
+        for volume_type, exception in exceptions.items():
+            LOGGER.error("Volume type: %s", volume_type, exc_info=exception)
+    if not path_readers:
         return rows
 
-    info, iso_processor = extract_info(iso_path_reader, basename.encode("cp1252", errors="replace"), iso_filename,
-                                       disable_contents_checksum)
-    if info:
-        rows.append(info)
+    processed = []
+    for iso_path_reader in path_readers:
+        LOGGER.info("Found volume type %s", iso_path_reader.volume_type)
+        info, iso_processor = extract_info(iso_path_reader, basename.encode("cp1252", errors="replace"), iso_filename,
+                                           disable_contents_checksum)
+        if info:
+            rows.append(info)
 
-    bar = list(PROGRESS_MANAGER.counters.keys())[-1]
-    bar.desc = os.path.basename(path)
-    bar.refresh()
+        bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+        bar.desc = os.path.basename(path)
+        if len(path_readers) > 1:
+            bar.desc = f"{bar.desc} ({iso_path_reader.volume_type})"
+        bar.refresh()
 
-    process_nested_containers(iso_path_reader, iso_filename, disable_contents_checksum, rows)
+        process_nested_containers(iso_path_reader, iso_filename, disable_contents_checksum, rows)
 
-    iso_processor.close()
+        processed.append(iso_processor)
+
+    for iso_processor in processed:
+        iso_processor.close()
+
     fp.close()
     return rows
 
@@ -223,6 +256,8 @@ csv_headers = (
     "exe_num_symbols",
     "new_all_files_hash",
     "new_alt_all_files_hash",
+    "volume_type",
+    "parent_volume_type",
 )
 
 if __name__ == '__main__':
