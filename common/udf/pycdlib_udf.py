@@ -295,6 +295,9 @@ class PyCdlibUdf(PyCdlib):
                 data += self._cdfp.read(desc.extent_length)
             offset = 0
             while offset < len(data):
+                if data[offset:] == b"\x00" * len(data[offset:]):
+                    offset = len(data)
+                    continue
                 current_extent = (abs_file_ident_extent * self.logical_block_size + offset) // self.logical_block_size
 
                 desc_tag = udfmod.UDFTag()
