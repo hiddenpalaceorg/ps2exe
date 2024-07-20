@@ -85,10 +85,10 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             path = "/" + path
         try:
             return self.iso.get_record(**{f"{self.pycdlib_volume_type}_path": path})
-        except PyCdlibInvalidInput as e:
+        except (PyCdlibInvalidInput, IndexError) as e:
             try:
                 return self.iso.get_record(**{f"{self.pycdlib_volume_type}_path":path + ";1"})
-            except PyCdlibInvalidInput:
+            except (PyCdlibInvalidInput, IndexError):
                 try:
                     for file in self.iso_iterator(self.get_root_dir(), recursive=True):
                         if path.lower() == self.get_file_path(file).lower():
