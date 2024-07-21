@@ -56,11 +56,14 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             return self.iso.full_path_from_dirrecord(file, rockridge=self.volume_type == "rock_ridge").replace(";1", "")
         except UnicodeDecodeError:
             path = []
-            while not file.is_root:
-                path.append(file.file_ident)
+            while file.parent:
+                ident = file.file_identifier()
+                if hasattr(file, "file_ident") and hasattr(file.file_ident, "encoding"):
+                    path.append(f"{ident.decode(file.file_ident.encoding, errors='replace')}")
+                else:
+                    path.append(ident.decode(errors="replace").replace(";1", ""))
                 file = file.parent
-            path = b"/" + b"/".join(reversed(path))
-            return path.decode(errors="replace").replace(";1", "")
+            return "/" + "/".join(reversed(path))
 
     def get_file_date(self, file):
         return datetime_from_iso_date(file.date if not self.volume_type == "udf" else file.mod_time)
