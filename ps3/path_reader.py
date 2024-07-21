@@ -26,6 +26,7 @@ class DecryptedFileReader(PyCdlibIO):
 
         read_size = min(size or (self._length - self._offset), self._length - self._offset)
         orig_pos = self._fp.tell()
+        orig_offset = self._offset
         read_offset = self._fp.tell() % 2048
         if read_offset != 0:
             self._offset -= read_offset
@@ -45,7 +46,7 @@ class DecryptedFileReader(PyCdlibIO):
                 block += self._fp.read(2048 - len(block))
             decrypted.write(self.decrypt_block(block, self.disc_key))
 
-        self._offset = self._offset - bytes_read + read_size
+        self._offset = orig_offset + read_size
         self._fp.seek(orig_pos + read_size)
         decrypted.seek(read_offset)
         return decrypted.read(read_size)
