@@ -265,7 +265,9 @@ class IsoProcessorFactory:
                 iso._initialized = True
 
             if not iso._initialized:
-                exceptions["iso9660"] = e
+                wrapper.seek(0x8001)
+                if wrapper.read(5) != b"BEA01":
+                    exceptions["iso9660"] = e
 
         if iso._initialized:
             if iso.pvd.root_dir_record.children:
