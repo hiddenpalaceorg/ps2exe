@@ -48,7 +48,7 @@ class IsoPathReader:
         encoding = getattr(pvd, "encoding", "utf-8")
 
         for field in ("system_identifier", "volume_identifier", "volume_set_identifier"):
-            info[field] = getattr(pvd, field). \
+            info[field] = getattr(pvd, field).rstrip(b"\x00"). \
                 decode(encoding=encoding, errors='replace').strip()
 
         for field in (
