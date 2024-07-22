@@ -47,7 +47,7 @@ except rarfile.RarCannotExec:
     elif sys.platform == "linux":
         rarfile.UNRAR_TOOL = os.path.join(unrar_path, "linux", "unrar")
 
-    rarfile.tool_setup(unrar=True, unar=False, bsdtar=False)
+    rarfile.tool_setup(sevenzip=True, sevenzip2=True, unrar=True, unar=False, bsdtar=False)
 
 
 class ArchiveWrapper:
