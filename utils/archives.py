@@ -11,9 +11,9 @@ import psutil
 import rarfile
 import zipfile
 
+from utils.InMemoryRolloverTempFile import InMemoryRolloverTempFile
 from utils.common import format_bar_desc
 from utils.files import MmappedFile, OffsetFile, get_file_size
-from utils.mmap import FakeMemoryMap
 
 LOGGER = logging.getLogger(__name__)
 
@@ -81,16 +81,14 @@ class ArchiveWrapper:
 
         # 80% of free physical memory
         try:
-            self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().available * .8),
-                                  access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
+            self.uncompressed = InMemoryRolloverTempFile(int(psutil.virtual_memory().available * .8))
         except OSError:
             # Try 60%
             try:
-                self.mmap = mmap.mmap(-1, int(psutil.virtual_memory().available * .6),
-                                      access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
-            except OSError:
+                self.uncompressed = InMemoryRolloverTempFile(int(psutil.virtual_memory().available * .6))
+            except:
                 # Give up
-                pass
+                self.uncompressed = InMemoryRolloverTempFile(0)
 
     def __enter__(self):
         try:
@@ -113,17 +111,16 @@ class ArchiveWrapper:
 
     def __exit__(self, *args):
         self.ctx.__exit__(*args)
-        try:
-            if self.mmap:
-                self.mmap.close()
-        except ValueError:
-            pass
-        if self.tempfile:
-            self.tempfile.close()
+        if self.uncompressed:
+            self.uncompressed.close()
 
         if self.rar_tmpfile and os.path.exists(self.rar_tmpfile.name):
             self.rar_tmpfile.close()
             os.unlink(self.rar_tmpfile.name)
+
+        if getattr(self, 'pipereader', None):
+            self.pipereader.really_close()
+
 
     def __iter__(self):
         try:
@@ -162,31 +159,13 @@ class ArchiveWrapper:
             if isinstance(file_path, bytes):
                 file_path = file_path.decode(errors='replace')
 
-            memory_available = 0
-            if self.mmap:
-                memory_available = len(self.mmap)
-            if not self.mmap or (self.mmap_used + file_size > memory_available):
-                if not self.tempfile:
-                    self.tempfile = tempfile.NamedTemporaryFile("r+b")
-                    self.tempfile_mmap = FakeMemoryMap(self.tempfile)
-                    # mark the temp file to 80% of free space
-                    self.tempfile_mmap._size = int(
-                        psutil.disk_usage(str(pathlib.Path(self.tempfile.name).parent)).free * .8
-                    )
-
-                self._entries_pos[file_path] = (self.tempfile_used, self.tempfile_mmap)
-                self.tempfile_used += file_size
-                entry_fp = OffsetFile(self.tempfile_mmap, self._entries_pos[file_path][0], self.tempfile_used, self.path)
-            else:
-                self._entries_pos[file_path] = (self.mmap_used, self.mmap)
-                self.mmap_used += file_size
-                entry_fp = OffsetFile(self.mmap, self._entries_pos[file_path][0], self.mmap_used, self.path)
-
+            entry_fp = OffsetFile(self.uncompressed, self.uncompressed.tell(), self.uncompressed.tell() + file_size, self.path)
             entry_wrapper = ArchiveEntryWrapper(self, entry, entry_fp, self.reader, pbar=self.counter)
             self.entries[file_path] = entry_wrapper
             self.counter.update(incr=0, file_name=format_bar_desc(entry_wrapper.file_name, 30))
             yield entry_wrapper
             entry_wrapper.close()
+        self.ctx.__exit__(None, None, None)
         self.reader = []
         self.counter.update(incr=0, file_name="")
         self.counter.close()
@@ -210,6 +189,38 @@ class ArchiveWrapper:
                 self.ctx = rarfile.RarFile(self.rar_tmpfile.name)
             else:
                 self.ctx = rarfile.RarFile(self.path)
+            if self.ctx.is_solid():
+                # Hack unrar to speed up solid archives
+                # For solid archives, the default behavior requires
+                # decompressing all prior files before getting to the
+                # file we want to extract. Since we go through all
+                # files in order anyway, just keep the extract process
+                # open and extract the whole thing at once
+                self.counter.count = 0
+                self.uncompressed.seek(0)
+                self.entries = {}
+                self.pipereader = None
+                def _open_unrar(rar, inf, pwd=None, tmpfile=None, force_file=False):
+                    setup = rarfile.tool_setup()
+
+                    if not tmpfile or force_file:
+                        inf.filename = inf.filename.replace("\\", os.path.sep)
+
+                    cmd = setup.open_cmdline(pwd, rar, None)
+                    if not self.pipereader:
+                        self.pipereader = rarfile.PipeReader(self, inf, cmd, tmpfile)
+                        self.pipereader.really_close = self.pipereader.close
+                        self.pipereader.close = lambda: None
+                    else:
+                        # Keep the pipe open and just update
+                        # the metadata so crc checks can still work
+                        self.pipereader._inf = inf
+                        self.pipereader.name = inf.filename
+                        self.pipereader._md_context = self.pipereader._md_context.__class__()
+                        self.pipereader._remain = inf.file_size
+                    return self.pipereader
+
+                self.ctx._file_parser._open_unrar = _open_unrar
             self.counter.total = float(sum([entry.file_size for entry in self.ctx.infolist()]))
         elif magic[0:4] == b"PK\x03\x04":
             # Attempt to recover using zipfile
