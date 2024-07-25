@@ -241,6 +241,7 @@ class PyCdlibUdf(PyCdlib):
         if desc_tag.tag_ident != 256:
             raise pycdlibexception.PyCdlibInvalidISO('UDF File Set Tag identifier not 256')
 
+        self.udf_file_set = UDFFileSetDescriptor()
         self.udf_file_set.parse(partition_data[:self.logical_block_size],
                                 current_extent, desc_tag)
 
@@ -559,3 +560,45 @@ class UDFVirtualAllocationTable:
             offset += 4
         self._initialized = True
 
+
+class UDFFileSetDescriptor(udfmod.UDFFileSetDescriptor):
+    def parse(self, data, extent, desc_tag):
+        """Same as parent class but without the DVD Read-only video restriction"""
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError('UDF File Set Descriptor already initialized')
+
+        (tag_unused, recording_date, interchange_level, max_interchange_level,
+         char_set_list, max_char_set_list, self.file_set_num, file_set_desc_num,
+         log_vol_char_set, self.log_vol_ident, file_set_char_set,
+         self.file_set_ident, self.copyright_file_ident,
+         self.abstract_file_ident, root_dir_icb, domain_ident, next_extent,
+         system_stream_dir_icb, reserved_unused) = struct.unpack_from(self.FMT, data, 0)
+
+        self.desc_tag = desc_tag
+
+        self.recording_date = udfmod.UDFTimestamp()
+        self.recording_date.parse(recording_date)
+
+        self.log_vol_char_set = udfmod.UDFCharspec()
+        self.log_vol_char_set.parse(log_vol_char_set)
+
+        self.file_set_char_set = udfmod.UDFCharspec()
+        self.file_set_char_set.parse(file_set_char_set)
+
+        self.domain_ident = udfmod.UDFEntityID()
+        self.domain_ident.parse(domain_ident)
+        if self.domain_ident.identifier[:19] != b'*OSTA UDF Compliant':
+            raise pycdlibexception.PyCdlibInvalidISO("File Set Descriptor Identifier not '*OSTA UDF Compliant'")
+
+        self.root_dir_icb = udfmod.UDFLongAD()
+        self.root_dir_icb.parse(root_dir_icb)
+
+        self.next_extent = udfmod.UDFLongAD()
+        self.next_extent.parse(next_extent)
+
+        self.system_stream_dir_icb = udfmod.UDFLongAD()
+        self.system_stream_dir_icb.parse(system_stream_dir_icb)
+
+        self.orig_extent_loc = extent
+
+        self._initialized = True
