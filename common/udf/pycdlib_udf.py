@@ -602,3 +602,44 @@ class UDFFileSetDescriptor(udfmod.UDFFileSetDescriptor):
         self.orig_extent_loc = extent
 
         self._initialized = True
+
+
+class UDFTimestamp(udfmod.UDFTimestamp):
+    def parse(self, data):
+        """Same as the parent but without erroring out on invalid timestamps"""
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError('UDF Timestamp already initialized')
+
+        (tz, timetype, self.year, self.month, self.day, self.hour, self.minute,
+         self.second, self.centiseconds, self.hundreds_microseconds,
+         self.microseconds) = struct.unpack_from(self.FMT, data, 0)
+
+        self.timetype = timetype >> 4
+
+        def twos_comp(val, bits):
+            # type: (int, int) -> int
+            """Compute the 2's complement of int value val"""
+            if (val & (1 << (bits - 1))) != 0:  # if sign bit is set e.g., 8bit: 128-255
+                val = val - (1 << bits)  # compute negative value
+            return val  # return positive value as is
+
+        self.tz = twos_comp(((timetype & 0xf) << 8) | tz, 12)
+        if self.tz < -1440 or self.tz > 1440:
+            if self.tz != -2047:
+                self.tz = -2047
+
+        if self.year < 1 or self.year > 9999:
+            self.year = None
+        if self.month < 1 or self.month > 12:
+            self.month = None
+        if self.day < 1 or self.day > 31:
+            self.day = None
+        if self.hour < 0 or self.hour > 23:
+            self.hour = None
+        if self.minute < 0 or self.minute > 59:
+            self.minute = None
+        if self.second < 0 or self.second > 59:
+            self.second = None
+
+        self._initialized = True
+udfmod.UDFTimestamp = UDFTimestamp

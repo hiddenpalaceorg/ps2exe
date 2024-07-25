@@ -15,7 +15,10 @@ def datetime_from_iso_date(iso_date):
     elif isinstance(iso_date, UDFTimestamp):
         year = iso_date.year
         day = iso_date.day
-        tz = datetime.timezone(datetime.timedelta(minutes=iso_date.tz))
+        if tz:
+            tz = datetime.timezone(datetime.timedelta(minutes=iso_date.tz))
+        else:
+            tz = datetime.timezone.utc
     else:
         return None
 
