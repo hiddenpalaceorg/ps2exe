@@ -69,6 +69,7 @@ class ArchiveWrapper:
         self._entries_pos = dict()
         self.rar_tmpfile = None
         self.counter = None
+        self.total_size = 0
         file.seek(0)
         try:
             if self.path:
@@ -77,7 +78,58 @@ class ArchiveWrapper:
                 self.block_size = 65536
         except (OSError, AttributeError):
             self.block_size = 65536
-        self.ctx = libarchive.stream_reader(file, block_size=self.block_size)
+
+        self.fp.seek(0)
+        magic = self.fp.read(6)
+        if magic == b"Rar\x21\x1A\x07":
+            self.fp.seek(0)
+            if not os.path.exists(self.path):
+                self.rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=".rar", delete=False)
+                try:
+                    shutil.copyfileobj(self.fp, self.rar_tmpfile, rarfile.BSIZE)
+                    self.rar_tmpfile.close()
+                except BaseException:
+                    self.rar_tmpfile.close()
+                    if os.path.exists(self.rar_tmpfile.name):
+                        os.unlink(self.rar_tmpfile.name)
+                    raise
+                self.ctx = rarfile.RarFile(self.rar_tmpfile.name)
+            else:
+                self.ctx = rarfile.RarFile(self.path)
+            if self.ctx.is_solid():
+                # Hack unrar to speed up solid archives
+                # For solid archives, the default behavior requires
+                # decompressing all prior files before getting to the
+                # file we want to extract. Since we go through all
+                # files in order anyway, just keep the extract process
+                # open and extract the whole thing at once
+                self.entries = {}
+                self.pipereader = None
+                def _open_unrar(rar, inf, pwd=None, tmpfile=None, force_file=False):
+                    setup = rarfile.tool_setup()
+
+                    if not tmpfile or force_file:
+                        inf.filename = inf.filename.replace("\\", os.path.sep)
+
+                    cmd = setup.open_cmdline(pwd, rar, None)
+                    if not self.pipereader:
+                        self.pipereader = rarfile.PipeReader(self, inf, cmd, tmpfile)
+                        self.pipereader.really_close = self.pipereader.close
+                        self.pipereader.close = lambda: None
+                    else:
+                        # Keep the pipe open and just update
+                        # the metadata so crc checks can still work
+                        self.pipereader._inf = inf
+                        self.pipereader.name = inf.filename
+                        self.pipereader._md_context = self.pipereader._md_context.__class__()
+                        self.pipereader._remain = inf.file_size
+                    return self.pipereader
+
+                self.ctx._file_parser._open_unrar = _open_unrar
+            self.total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
+        else:
+            self.ctx = libarchive.stream_reader(file, block_size=self.block_size)
+            self.total_size = get_file_size(self.fp)
 
         # 80% of free physical memory
         try:
@@ -93,10 +145,9 @@ class ArchiveWrapper:
     def __enter__(self):
         try:
             self.reader = self.ctx.__enter__()
-            total_size = float(get_file_size(self.fp))
             if not self.counter:
                 self.counter = self.pbar.counter(
-                    total=total_size,
+                    total=float(self.total_size),
                     desc=f"Decompressing",
                     unit='B',
                     leave=False,
@@ -177,55 +228,7 @@ class ArchiveWrapper:
         self.ctx.__exit__(None, None, None)
         self.fp.seek(0)
         magic = self.fp.read(6)
-        if magic == b"Rar\x21\x1A\x07":
-            self.fp.seek(0)
-            if not os.path.exists(self.path):
-                self.rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=".rar", delete=False)
-                try:
-                    shutil.copyfileobj(self.fp, self.rar_tmpfile, rarfile.BSIZE)
-                    self.rar_tmpfile.close()
-                except BaseException:
-                    self.rar_tmpfile.close()
-                    if os.path.exists(self.rar_tmpfile.name):
-                        os.unlink(self.rar_tmpfile.name)
-                    raise
-                self.ctx = rarfile.RarFile(self.rar_tmpfile.name)
-            else:
-                self.ctx = rarfile.RarFile(self.path)
-            if self.ctx.is_solid():
-                # Hack unrar to speed up solid archives
-                # For solid archives, the default behavior requires
-                # decompressing all prior files before getting to the
-                # file we want to extract. Since we go through all
-                # files in order anyway, just keep the extract process
-                # open and extract the whole thing at once
-                self.counter.count = 0
-                self.uncompressed.seek(0)
-                self.entries = {}
-                self.pipereader = None
-                def _open_unrar(rar, inf, pwd=None, tmpfile=None, force_file=False):
-                    setup = rarfile.tool_setup()
-
-                    if not tmpfile or force_file:
-                        inf.filename = inf.filename.replace("\\", os.path.sep)
-
-                    cmd = setup.open_cmdline(pwd, rar, None)
-                    if not self.pipereader:
-                        self.pipereader = rarfile.PipeReader(self, inf, cmd, tmpfile)
-                        self.pipereader.really_close = self.pipereader.close
-                        self.pipereader.close = lambda: None
-                    else:
-                        # Keep the pipe open and just update
-                        # the metadata so crc checks can still work
-                        self.pipereader._inf = inf
-                        self.pipereader.name = inf.filename
-                        self.pipereader._md_context = self.pipereader._md_context.__class__()
-                        self.pipereader._remain = inf.file_size
-                    return self.pipereader
-
-                self.ctx._file_parser._open_unrar = _open_unrar
-            self.counter.total = float(sum([entry.file_size for entry in self.ctx.infolist()]))
-        elif magic[0:4] == b"PK\x03\x04":
+        if magic[0:4] == b"PK\x03\x04":
             # Attempt to recover using zipfile
             self.fp.seek(0)
             zipfile.ZipFile.__iter__ = lambda s: iter(s.filelist)
