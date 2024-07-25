@@ -478,7 +478,7 @@ class OffsetFile(BaseFile):
         if n:
             ret = self[self.tell():self.tell()+n]
         else:
-            ret = self[self.tell():]
+            ret = self[self.tell():self.end_pos-self.offset]
 
         self.pos += len(ret)
         return ret

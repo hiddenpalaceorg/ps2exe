@@ -110,7 +110,8 @@ class ArchiveWrapper:
             return self
 
     def __exit__(self, *args):
-        self.ctx.__exit__(*args)
+        if self.ctx:
+            self.ctx.__exit__(*args)
         if self.uncompressed:
             self.uncompressed.close()
 
@@ -120,7 +121,6 @@ class ArchiveWrapper:
 
         if getattr(self, 'pipereader', None):
             self.pipereader.really_close()
-
 
     def __iter__(self):
         try:
@@ -159,13 +159,16 @@ class ArchiveWrapper:
             if isinstance(file_path, bytes):
                 file_path = file_path.decode(errors='replace')
 
-            entry_fp = OffsetFile(self.uncompressed, self.uncompressed.tell(), self.uncompressed.tell() + file_size, self.path)
+            entry_fp = OffsetFile(self.uncompressed, self.uncompressed.tell(), self.uncompressed.tell() + file_size, file_path)
             entry_wrapper = ArchiveEntryWrapper(self, entry, entry_fp, self.reader, pbar=self.counter)
             self.entries[file_path] = entry_wrapper
             self.counter.update(incr=0, file_name=format_bar_desc(entry_wrapper.file_name, 30))
             yield entry_wrapper
             entry_wrapper.close()
+            self.entries[file_path] = CompletedEntryWrapper(entry_wrapper)
+            del entry_wrapper
         self.ctx.__exit__(None, None, None)
+        self.ctx = None
         self.reader = []
         self.counter.update(incr=0, file_name="")
         self.counter.close()
@@ -244,6 +247,7 @@ class ArchiveWrapper:
 
     def __del__(self):
         self.__exit__(None, None, None)
+
 
 class ArchiveEntryReader(MmappedFile, io.IOBase):
     def __init__(self, entry, archive, entry_fp, pbar=None):
@@ -424,3 +428,33 @@ class ArchiveEntryWrapper:
 
     def __getattr__(self, item):
         return getattr(self.entry, item)
+
+
+class CompletedEntryWrapper:
+    def __init__(self, entry_wrapper):
+        self.file_name = entry_wrapper.file_name
+        self.file_size = entry_wrapper.file_size
+        self.is_dir = entry_wrapper.is_dir
+        self.path = entry_wrapper.path
+        if getattr(entry_wrapper, "date_time", None):
+            self.date_time = entry_wrapper.date_time
+        elif getattr(entry_wrapper, "mtime", None):
+            self.mtime = entry_wrapper.mtime
+        self.entry_fp = entry_wrapper.fp
+        del entry_wrapper
+
+    def __enter__(self):
+        self.entry_fp.seek(0)
+        return self
+
+    def __exit__(self, *args):
+        return
+
+    def __getattr__(self, item):
+        return getattr(self.entry_fp, item)
+
+    def open(self):
+        return self
+
+    def close(self):
+        return
