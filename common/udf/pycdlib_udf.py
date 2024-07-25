@@ -3,7 +3,7 @@ import functools
 import os
 import struct
 
-from pycdlib import PyCdlib, pycdlibexception, headervd, inode
+from pycdlib import PyCdlib, pycdlibexception, headervd, inode, pycdlib
 from pycdlib import udf as udfmod
 
 allzero = b'\x00' * 2048
@@ -236,7 +236,7 @@ class PyCdlibUdf(PyCdlib):
 
         for anchor in self.udf_anchors[1:]:
             if self.udf_anchors[0] != anchor:
-                raise pycdlibexception.PyCdlibInvalidISO('Anchor points do not match')
+                pycdlib._logger.warning('UDF anchor points do not match')
 
         if desc_tag.tag_ident != 256:
             raise pycdlibexception.PyCdlibInvalidISO('UDF File Set Tag identifier not 256')
