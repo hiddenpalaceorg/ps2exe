@@ -139,6 +139,7 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
                 bar.desc = f"{bar.desc} ({nested_path_reader.volume_type})"
             bar.refresh()
             cleanup_bars()
+        cleanup_bars()
 
         if not nested_info:
             try:
@@ -193,6 +194,7 @@ def get_iso_info(iso_filename, disable_contents_checksum):
     for iso_processor in processed:
         iso_processor.close()
 
+    cleanup_bars()
     fp.close()
     return rows
 
