@@ -433,7 +433,7 @@ class ArchiveEntryWrapper:
         return getattr(self.entry, item)
 
 
-class CompletedEntryWrapper:
+class CompletedEntryWrapper(io.IOBase):
     def __init__(self, entry_wrapper):
         self.file_name = entry_wrapper.file_name
         self.file_size = entry_wrapper.file_size
@@ -461,3 +461,9 @@ class CompletedEntryWrapper:
 
     def close(self):
         return
+
+    def seek(self, *args, **kwargs):
+        return self.entry_fp.seek(*args, **kwargs)
+
+    def tell(self):
+        return self.entry_fp.tell()
