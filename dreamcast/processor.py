@@ -15,6 +15,9 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
     def __init__(self, iso_path_reader, iso_filename, *args):
         from common.factory import IsoProcessorFactory
         self.iso_path_reader = iso_path_reader
+        if self.iso_path_reader.fp.starting_sector == 0:
+            super().__init__(iso_path_reader, iso_filename, *args)
+            return
         file_dir = self.iso_path_reader.parent_container.get_file(str(pathlib.Path(iso_filename).parent))
         found = False
         # Try to find a gdi file in this directory
@@ -42,7 +45,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
                   if rule.match(iso_path_reader.parent_container.get_file_path(entry))]:
             if not (tracks := self.parse_cue(self.iso_path_reader.parent_container.get_file_path(i))):
                 continue
-            if tracks[0]["file_name"] != basename(iso_filename):
+            if not any(track["file_name"] != basename(iso_filename) for track in tracks):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
             cue_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")

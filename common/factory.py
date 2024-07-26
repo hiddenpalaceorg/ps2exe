@@ -261,6 +261,7 @@ class IsoProcessorFactory:
         try:
             iso.open_fp(wrapper)
         except Exception as e:
+            raise e
             # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
             if not hasattr(iso, "pvd") and hasattr(iso, "pvds") and iso.pvds:
                 iso.pvd = iso.pvds[0]
