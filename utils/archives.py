@@ -87,7 +87,7 @@ class ArchiveWrapper:
         if magic == b"Rar\x21\x1A\x07":
             self.fp.seek(0)
             if not os.path.exists(self.path):
-                rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=".rar", delete=False)
+                rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=os.path.basename(self.path), delete=False)
                 try:
                     shutil.copyfileobj(self.fp, rar_tmpfile, rarfile.BSIZE)
                     rar_tmpfile.close()
@@ -108,11 +108,16 @@ class ArchiveWrapper:
                 next_vol_fn = self.ctx._file_parser._next_volname
                 def patched_next_vol(volname):
                     next_volname = next_vol_fn(volname)
-                    orig_file, _ext = os.path.splitext(os.path.basename(self.path))
-                    tmpname, ext = os.path.splitext(os.path.basename(next_volname))
+                    if next_volname == volname:
+                        return next_volname
+                    orig_filename = os.path.basename(self.path)
+                    tmp_position = os.path.basename(volname).index(orig_filename)
+                    new_file = os.path.basename(next_volname)[tmp_position:]
                     try:
-                        next_vol = parent_container.get_file(str(pathlib.Path(self.path).parent / f"{orig_file}{ext}"))
+                        nextvol_real_path = str(pathlib.Path(self.path).parent / new_file)
+                        next_vol = parent_container.get_file(nextvol_real_path)
                         next_vol_tmp_fp = open(next_volname, "wb")
+                        self.path = nextvol_real_path
                         try:
                             with parent_container.open_file(next_vol) as next_vol_fp:
                                 shutil.copyfileobj(next_vol_fp, next_vol_tmp_fp, rarfile.BSIZE)
