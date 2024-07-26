@@ -214,20 +214,12 @@ class ArchiveWrapper:
         try:
             yield from self.iter()
         except libarchive.ArchiveError as e:
-            # We read as much as we can from the 7z file,
-            # just return if we have any read entries
-            if str(e).startswith("Damaged 7-Zip archive file"):
-                if self.entries:
-                    return
-                else:
-                    raise
-            else:
-                self.recover_decompressor(e)
-                self.__enter__()
-                if self.entries:
-                    if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
-                        self.entries.pop(next(reversed(self.entries)))
-                yield from self.iter(skip_entries=True)
+            self.recover_decompressor(e)
+            self.__enter__()
+            if self.entries:
+                if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
+                    self.entries.pop(next(reversed(self.entries)))
+            yield from self.iter(skip_entries=True)
 
     def iter(self, skip_entries=False):
         if not skip_entries:

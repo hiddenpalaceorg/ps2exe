@@ -305,7 +305,17 @@ def apply_patches():
                     return libarchive.ffi.ARCHIVE_WARN
             raise
     libarchive.ffi.read_data.errcheck = check_int
-    libarchive.ffi.read_next_header2.errcheck = check_int
+
+    def check_int_header(retcode, func, args):
+        try:
+            return check_int(retcode, func, args)
+        except ArchiveError as e:
+            if e.msg.startswith("Damaged 7-Zip archive"):
+                libarchive.ffi.logger.warning(e.msg)
+                return libarchive.ffi.ARCHIVE_WARN
+            raise
+
+    libarchive.ffi.read_next_header2.errcheck = check_int_header
 
     import zipfile
     orig_decodeExtra = zipfile.ZipInfo._decodeExtra
