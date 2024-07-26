@@ -33,6 +33,7 @@ except TypeError:
 
     os.environ["LIBARCHIVE"] = libarchive_path
     import libarchive
+import libarchive.ffi
 from libarchive import ArchiveEntry
 
 try:
@@ -208,12 +209,20 @@ class ArchiveWrapper:
         try:
             yield from self.iter()
         except libarchive.ArchiveError as e:
-            self.recover_decompressor(e)
-            self.__enter__()
-            if self.entries:
-                if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
-                    self.entries.pop(next(reversed(self.entries)))
-            yield from self.iter(skip_entries=True)
+            # We read as much as we can from the 7z file,
+            # just return if we have any read entries
+            if str(e).startswith("Damaged 7-Zip archive file"):
+                if self.entries:
+                    return
+                else:
+                    raise
+            else:
+                self.recover_decompressor(e)
+                self.__enter__()
+                if self.entries:
+                    if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
+                        self.entries.pop(next(reversed(self.entries)))
+                yield from self.iter(skip_entries=True)
 
     def iter(self, skip_entries=False):
         if not skip_entries:
@@ -355,15 +364,23 @@ class BlockReader(ArchiveEntryReader):
             # Hack: store the file name inside the module globally for logging purposes
             libarchive.current_file_path = self.entry.path
             self.fp.seek(self.read_bytes)
-            for data in self.entry.get_blocks(block_size=min(left, 65536)):
-                read = len(data)
-                self.fp.write(data)
-                left -= read
-                self.read_bytes += read
-                if self.pbar:
-                    self.pbar.update(self.entry.archive_reader.bytes_read - self.pbar.count)
-                if left <= 0:
-                    break
+            try:
+                for data in self.entry.get_blocks(block_size=min(left, 65536)):
+                    read = len(data)
+                    self.fp.write(data)
+                    left -= read
+                    self.read_bytes += read
+                    if self.pbar:
+                        self.pbar.update(self.entry.archive_reader.bytes_read - self.pbar.count)
+                    if left <= 0:
+                        break
+            except libarchive.ArchiveError as e:
+                if str(e).startswith("Damaged 7-Zip archive file"):
+                    self.fp.end_pos = self.fp.offset + self.read_bytes
+                    self.read_bytes = self.size
+                    LOGGER.warning(e)
+                    return self._get_data(n, discard)
+                raise
 
         if not discard:
             data = self.fp[self.pos:self.pos+n]
