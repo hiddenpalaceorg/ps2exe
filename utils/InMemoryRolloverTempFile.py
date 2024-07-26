@@ -36,10 +36,10 @@ class InMemoryRolloverTempFile(BaseFile):
             n -= mmap_read
         if n:
             if not self.temp_file:
-                self.tempfile = tempfile.NamedTemporaryFile("r+b")
+                self.temp_file = tempfile.NamedTemporaryFile("r+b")
             tempfile_pos = self.tell() - self.mmap_size
-            self.tempfile.seek(tempfile_pos)
-            data += self.tempfile.read(n)
+            self.temp_file.seek(tempfile_pos)
+            data += self.temp_file.read(n)
         return data
 
     def write(self, data):
@@ -52,10 +52,10 @@ class InMemoryRolloverTempFile(BaseFile):
             self.pos += mmap_write
         if len(data) > mmap_write:
             if not self.temp_file:
-                self.tempfile = tempfile.NamedTemporaryFile("r+b")
+                self.temp_file = tempfile.NamedTemporaryFile("r+b")
             tempfile_pos = self.tell() - self.mmap_size
-            self.tempfile.seek(tempfile_pos)
-            self.tempfile.write(data[mmap_write:])
+            self.temp_file.seek(tempfile_pos)
+            self.temp_file.write(data[mmap_write:])
 
     def __getitem__(self, item):
         if isinstance(item, slice):
