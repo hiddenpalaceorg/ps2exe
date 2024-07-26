@@ -2,6 +2,8 @@ import io
 import logging
 from pathlib import Path
 
+import rarfile
+
 from common import pycdlib
 from pyisotools.iso import GamecubeISO
 
@@ -68,7 +70,9 @@ class IsoProcessorFactory:
         for magic_to_try in compressed_magic_values:
             if magic.startswith(magic_to_try):
                 try:
-                    return [CompressedPathReader(ArchiveWrapper(fp, pbar), fp, parent_container)], []
+                    return [CompressedPathReader(ArchiveWrapper(fp, parent_container, pbar), fp, parent_container)], []
+                except rarfile.NeedFirstVolume:
+                    return None, None
                 except Exception as e:
                     if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
                         LOGGER.warning("Error processing %s: %s", file_name, e.msg)

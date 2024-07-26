@@ -64,12 +64,13 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
     processed_containers = defaultdict(list)
     current_path_reader = initial_path_readers[0]
     fp = current_path_reader.fp
+    parent_fp = None
 
     LOGGER.info("Checking for nested containers")
 
     for path_reader in initial_path_readers:
         for file in path_reader.iso_iterator(path_reader.get_root_dir(), recursive=True):
-            file_stack.append((file, path_reader, path_reader.fp, base_iso_path))
+            file_stack.append((file, path_reader, path_reader.fp, None, base_iso_path))
 
     while file_stack:
         nested_info = []
@@ -86,8 +87,17 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
                     fp.close()
                 except AttributeError:
                     pass
+                if parent_fp:
+                    try:
+                        parent_fp.__exit__()
+                    except AttributeError:
+                        pass
+                    try:
+                        parent_fp.close()
+                    except AttributeError:
+                        pass
 
-        file, current_path_reader, fp, current_base_path = file_stack.pop()
+        file, current_path_reader, fp, parent_fp, current_base_path = file_stack.pop()
 
         file_path = current_path_reader.get_file_path(file)
         if not is_path_allowed(file_path, args.allow_extensions, current_path_reader.get_file_size(file)):
@@ -131,7 +141,7 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
                 container_paths[nested_path_reader] = nested_path
 
             for file in nested_path_reader.iso_iterator(nested_path_reader.get_root_dir(), recursive=True):
-                file_stack.append((file, nested_path_reader, nested_path_reader.fp, nested_path))
+                file_stack.append((file, nested_path_reader, nested_path_reader.fp, current_path_reader.fp, nested_path))
 
             bar = list(PROGRESS_MANAGER.counters.keys())[-1]
             bar.desc = os.path.basename(basename.decode("cp1252"))

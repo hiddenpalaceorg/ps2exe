@@ -55,8 +55,10 @@ class ArchiveWrapper:
               '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
               '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
 
-    def __init__(self, file, pbar=None):
+    def __init__(self, file, parent_container, pbar=None):
         file.seek(0)
+        self.ctx = None
+        self.uncompressed = None
         self.fp = file
         self.path = file.name
         self.reader = None
@@ -84,18 +86,52 @@ class ArchiveWrapper:
         if magic == b"Rar\x21\x1A\x07":
             self.fp.seek(0)
             if not os.path.exists(self.path):
-                self.rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=".rar", delete=False)
+                rar_tmpfile = tempfile.NamedTemporaryFile("r+b", suffix=".rar", delete=False)
                 try:
-                    shutil.copyfileobj(self.fp, self.rar_tmpfile, rarfile.BSIZE)
-                    self.rar_tmpfile.close()
+                    shutil.copyfileobj(self.fp, rar_tmpfile, rarfile.BSIZE)
+                    rar_tmpfile.close()
                 except BaseException:
-                    self.rar_tmpfile.close()
-                    if os.path.exists(self.rar_tmpfile.name):
-                        os.unlink(self.rar_tmpfile.name)
+                    rar_tmpfile.close()
+                    if os.path.exists(rar_tmpfile.name):
+                        os.unlink(rar_tmpfile.name)
                     raise
-                self.ctx = rarfile.RarFile(self.rar_tmpfile.name)
+                path = rar_tmpfile.name
+                self.rar_tmpfile = [rar_tmpfile]
             else:
-                self.ctx = rarfile.RarFile(self.path)
+                path = self.path
+
+            self.ctx = rarfile.RarFile(path)
+
+            if self.ctx.strerror() and self.ctx.strerror().startswith("Cannot open next volume"):
+                # Hack to allow multi-volume rars to work in subcontainers
+                next_vol_fn = self.ctx._file_parser._next_volname
+                def patched_next_vol(volname):
+                    next_volname = next_vol_fn(volname)
+                    orig_file, _ext = os.path.splitext(os.path.basename(self.path))
+                    tmpname, ext = os.path.splitext(os.path.basename(next_volname))
+                    try:
+                        next_vol = parent_container.get_file(str(pathlib.Path(self.path).parent / f"{orig_file}{ext}"))
+                        next_vol_tmp_fp = open(next_volname, "wb")
+                        try:
+                            with parent_container.open_file(next_vol) as next_vol_fp:
+                                shutil.copyfileobj(next_vol_fp, next_vol_tmp_fp, rarfile.BSIZE)
+                                next_vol_tmp_fp.close()
+                        except BaseException:
+                            next_vol_fp.close()
+                            if os.path.exists(next_vol_fp.name):
+                                os.unlink(next_vol_fp.name)
+                            raise
+                        self.rar_tmpfile.append(next_vol_tmp_fp)
+                    except FileNotFoundError:
+                        pass
+                    return next_volname
+                self.ctx._file_parser._next_volname = patched_next_vol
+                self.ctx._file_parser._parse_error = None
+                self.ctx._file_parser.parse()
+                if self.ctx.strerror():
+                    LOGGER.warning(self.ctx.strerror())
+                # Hack to make sure there's no dupes in the file listing
+                self.ctx._file_parser._info_list = list(self.ctx._file_parser._info_map.values())
             if self.ctx.is_solid():
                 # Hack unrar to speed up solid archives
                 # For solid archives, the default behavior requires
@@ -165,13 +201,7 @@ class ArchiveWrapper:
             self.ctx.__exit__(*args)
         if self.uncompressed:
             self.uncompressed.close()
-
-        if self.rar_tmpfile and os.path.exists(self.rar_tmpfile.name):
-            self.rar_tmpfile.close()
-            os.unlink(self.rar_tmpfile.name)
-
-        if getattr(self, 'pipereader', None):
-            self.pipereader.really_close()
+        self.close_readers()
 
     def __iter__(self):
         try:
@@ -220,6 +250,7 @@ class ArchiveWrapper:
             del entry_wrapper
         self.ctx.__exit__(None, None, None)
         self.ctx = None
+        self.close_readers()
         self.reader = []
         self.counter.update(incr=0, file_name="")
         self.counter.close()
@@ -244,6 +275,17 @@ class ArchiveWrapper:
                     raise libarchive_exception
         else:
             raise libarchive_exception
+
+    def close_readers(self):
+        if self.rar_tmpfile:
+            for tempfile in self.rar_tmpfile:
+                if os.path.exists(tempfile.name):
+                    tempfile.close()
+                    os.unlink(tempfile.name)
+            self.rar_tmpfile = []
+
+        if getattr(self, 'pipereader', None):
+            self.pipereader.really_close()
 
     def __getattr__(self, item):
         return getattr(self.reader, item)
@@ -303,7 +345,7 @@ class BlockReader(ArchiveEntryReader):
         amount_need_read = min(self.size, self.pos + n)
         left = n
         if amount_need_read > self.read_bytes:
-            # Hack: store the file name inside the module globally for loging purposes
+            # Hack: store the file name inside the module globally for logging purposes
             libarchive.current_file_path = self.entry.path
             self.fp.seek(self.read_bytes)
             for data in self.entry.get_blocks(block_size=min(left, 65536)):
@@ -363,17 +405,26 @@ class ZipFileReader(CompressedFileAsFileIoReader):
 
 
 class RarFileReader(CompressedFileAsFileIoReader):
+    def __init__(self, entry, archive, *args, **kwargs):
+        super().__init__(entry, archive, *args, **kwargs)
+        self.buf = b""
+        orig_read = self.archive_file._read
+        def patched_read(cnt):
+            buf = orig_read(cnt)
+            self.buf = buf
+            return buf
+        self.archive_file._read = patched_read
+
     def _get_data(self, n=None, discard=False):
         try:
             return super()._get_data(n, discard)
         except rarfile.BadRarFile as e:
             if str(e).startswith("Failed the read enough data"):
                 # Hack to get the amount of data on the previous read
-                readback = int(str(e).split("got=")[1])
-                self.archive_file._fd.seek(-readback, io.SEEK_CUR)
-                self.fp.write(self.archive_file._fd.read(readback))
+                self.fp.write(self.buf)
                 if self.pbar:
-                    self.pbar.update(readback)
+                    self.pbar.update(len(self.buf))
+                self.fp.end_pos = self.fp.offset + self.read_bytes + len(self.buf)
                 self.read_bytes = self.size
                 LOGGER.warning(e)
                 return super()._get_data(n, discard)
