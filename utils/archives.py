@@ -363,6 +363,21 @@ class ZipFileReader(CompressedFileAsFileIoReader):
 
 
 class RarFileReader(CompressedFileAsFileIoReader):
+    def _get_data(self, n=None, discard=False):
+        try:
+            return super()._get_data(n, discard)
+        except rarfile.BadRarFile as e:
+            if str(e).startswith("Failed the read enough data"):
+                # Hack to get the amount of data on the previous read
+                readback = int(str(e).split("got=")[1])
+                self.archive_file._fd.seek(-readback, io.SEEK_CUR)
+                self.fp.write(self.archive_file._fd.read(readback))
+                if self.pbar:
+                    self.pbar.update(readback)
+                self.read_bytes = self.size
+                LOGGER.warning(e)
+                return super()._get_data(n, discard)
+
     def open(self, entry):
         return self.archive._file_parser.open(entry, None)
 
