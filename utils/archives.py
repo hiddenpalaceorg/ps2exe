@@ -210,8 +210,9 @@ class ArchiveWrapper:
         except libarchive.ArchiveError as e:
             self.recover_decompressor(e)
             self.__enter__()
-            if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
-                self.entries.pop(next(reversed(self.entries)))
+            if self.entries:
+                if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
+                    self.entries.pop(next(reversed(self.entries)))
             yield from self.iter(skip_entries=True)
 
     def iter(self, skip_entries=False):
@@ -273,8 +274,9 @@ class ArchiveWrapper:
             finally:
                 if not len(self.ctx.filelist):
                     raise libarchive_exception
-                if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
-                    self.entries.pop(next(reversed(self.entries)))
+                if self.entries:
+                    if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
+                        self.entries.pop(next(reversed(self.entries)))
                 self.total_size = sum([entry.file_size for entry in self.ctx.infolist()])
                 self.counter.total = float(self.total_size)
                 self.counter.count = sum([entry.file_size for entry in self.entries.values()])
