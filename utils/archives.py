@@ -164,6 +164,7 @@ class ArchiveWrapper:
                 self.ctx._file_parser._open_unrar = _open_unrar
             self.total_size = float(sum([entry.file_size for entry in self.ctx.infolist()]))
         else:
+            self.fp.seek(0)
             self.ctx = libarchive.stream_reader(file, block_size=self.block_size)
             self.total_size = get_file_size(self.fp)
 
