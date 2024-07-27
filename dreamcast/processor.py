@@ -30,6 +30,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
+            if not fp:
+                continue
             gdi_name = i.name.encode("cp1252", errors="replace")
             iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name)
             found = True
@@ -48,6 +50,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if not any(track["file_name"] != basename(iso_filename) for track in tracks):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
+            if not fp:
+                continue
             cue_name = i.name.encode("cp1252", errors="replace")
             iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, cue_name)
             break
@@ -98,22 +102,26 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
 
         # Duplicate track 3 as offset 0 to fool the iso parser to see it as a normal iso with the PVD at 0x8000
         offsets = [0]
-        files = [BinWrapper(
-            MmappedFile(open(gdi_file.parent / data_tracks[0]["file_name"], "rb")),
-            sector_size=data_tracks[0]["sector_size"],
-            sector_offset=16 if data_tracks[0]["sector_size"] == 2352 else 0,
-            virtual_sector_size=2048
-        )]
-        for track in data_tracks:
-            offsets.append(int(track["sector"]) * 2048)
-            files.append(
-                BinWrapper(
-                    open(gdi_file.parent / track["file_name"], "rb"),
-                    sector_size=track["sector_size"],
-                    sector_offset=16 if track["sector_size"] == 2352 else 0,
-                    virtual_sector_size=2048
+        try:
+            files = [BinWrapper(
+                MmappedFile(open(gdi_file.parent / data_tracks[0]["file_name"], "rb")),
+                sector_size=data_tracks[0]["sector_size"],
+                sector_offset=16 if data_tracks[0]["sector_size"] == 2352 else 0,
+                virtual_sector_size=2048
+            )]
+            for track in data_tracks:
+
+                offsets.append(int(track["sector"]) * 2048)
+                files.append(
+                    BinWrapper(
+                        open(gdi_file.parent / track["file_name"], "rb"),
+                        sector_size=track["sector_size"],
+                        sector_offset=16 if track["sector_size"] == 2352 else 0,
+                        virtual_sector_size=2048
+                    )
                 )
-            )
+        except FileNotFoundError:
+            return
 
         return ConcatenatedFile(files, offsets)
 
