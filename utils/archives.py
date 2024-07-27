@@ -429,7 +429,9 @@ class RarFileReader(CompressedFileAsFileIoReader):
     def __init__(self, entry, archive, *args, **kwargs):
         super().__init__(entry, archive, *args, **kwargs)
         self.buf = b""
-        orig_read = self.archive_file._read
+        orig_read = getattr(self.archive_file, "orig_read", self.archive_file._read)
+        self.archive_file.orig_read = orig_read
+
         def patched_read(cnt):
             buf = orig_read(cnt)
             self.buf = buf
