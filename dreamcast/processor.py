@@ -29,6 +29,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
+            if not fp:
+                continue
             gdi_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
             iso_path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(fp, gdi_name, *args)
             iso_path_reader = iso_path_readers[0]
@@ -48,6 +50,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if not any(track["file_name"] != basename(iso_filename) for track in tracks):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
+            if not fp:
+                continue
             cue_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
             iso_path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(fp, cue_name, *args)
             iso_path_reader = iso_path_readers[0]
@@ -97,7 +101,10 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
 
         gdi_path = self.iso_path_reader.parent_container.get_file_path(gdi_file)
         gdi_dir = pathlib.Path(gdi_path).parent
-        track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / data_tracks[0]["file_name"]))
+        try:
+            track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / data_tracks[0]["file_name"]))
+        except FileNotFoundError:
+            return
 
         # Duplicate track 3 as offset 0 to fool the iso parser to see it as a normal iso with the PVD at 0x8000
         offsets = [0]
@@ -107,17 +114,20 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             sector_offset=16 if data_tracks[0]["sector_size"] == 2352 else 0,
             virtual_sector_size=2048
         )]
-        for track in data_tracks:
-            track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / track["file_name"]))
-            offsets.append(int(track["sector"]) * 2048)
-            files.append(
-                BinWrapper(
-                    self.iso_path_reader.parent_container.open_file(track_file),
-                    sector_size=track["sector_size"],
-                    sector_offset=16 if track["sector_size"] == 2352 else 0,
-                    virtual_sector_size=2048
+        try:
+            for track in data_tracks:
+                track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / track["file_name"]))
+                offsets.append(int(track["sector"]) * 2048)
+                files.append(
+                    BinWrapper(
+                        self.iso_path_reader.parent_container.open_file(track_file),
+                        sector_size=track["sector_size"],
+                        sector_offset=16 if track["sector_size"] == 2352 else 0,
+                        virtual_sector_size=2048
+                    )
                 )
-            )
+        except FileNotFoundError:
+            return
 
         return ConcatenatedFile(files, offsets)
 
