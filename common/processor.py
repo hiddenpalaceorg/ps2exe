@@ -16,6 +16,10 @@ from xbox.path_reader import XboxPathReader, XboxStfsPathReader
 LOGGER = logging.getLogger(__name__)
 
 class BaseIsoProcessor:
+    globally_ignored_paths = [
+        re.compile(".*\.nfo$", re.IGNORECASE),
+        re.compile(".*\.diz$", re.IGNORECASE),
+    ]
     ignored_paths = []
 
     def get_disc_type(self):
@@ -198,6 +202,7 @@ class BaseIsoProcessor:
         file_hashes = {}
         file_hashes_excluding_ignored = {}
         root = self.iso_path_reader.get_root_dir()
+        ignored_paths = self.ignored_paths + self.globally_ignored_paths
         file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
         hash_format = '    Hashing {file_name}{desc_pad}{percentage:3.0f}%|{bar}| ' \
                       '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
@@ -215,7 +220,7 @@ class BaseIsoProcessor:
                     hash_wrapper = HashProgressWrapper(hash_bar, hash_type)
                     if file_hash := self.iso_path_reader.get_file_hash(file, hash_wrapper):
                         file_hashes[file_path] = file_hash.digest()
-                        if self.ignored_paths and not any(regex.match(file_path) for regex in self.ignored_paths):
+                        if not any(regex.match(file_path) for regex in ignored_paths):
                             file_hashes_excluding_ignored[file_path] = file_hash.digest()
                     pbar.update()
         return file_hashes, file_hashes_excluding_ignored
@@ -232,8 +237,10 @@ class BaseIsoProcessor:
 
         hashes = {
             "all_files_hash": all_hashes.hexdigest(),
-            "alt_all_files_hash": hashes_excluding_ignored.hexdigest() if self.ignored_paths else None
+            "alt_all_files_hash": ""
         }
+        if hashes_excluding_ignored.hexdigest() != all_hashes.hexdigest():
+            hashes["alt_all_files_hash"] = hashes_excluding_ignored.hexdigest()
 
         all_hashes = hashlib.md5()
         hashes_excluding_ignored = hashlib.md5()
@@ -244,11 +251,13 @@ class BaseIsoProcessor:
 
 
         hashes["new_all_files_hash"] = all_hashes.hexdigest()
-        hashes["new_alt_all_files_hash"] = hashes_excluding_ignored.hexdigest() if self.ignored_paths else None
+        hashes["new_alt_all_files_hash"] = ""
+        if hashes_excluding_ignored.hexdigest() != all_hashes.hexdigest():
+            hashes["new_alt_all_files_hash"] = hashes_excluding_ignored.hexdigest()
         return hashes
 
     def get_most_recent_file(self):
-        ignored_paths = [re.compile(path) for path in self.ignored_paths]
+        ignored_paths = [re.compile(path) for path in self.ignored_paths + self.globally_ignored_paths]
         most_recent_file_date = datetime.datetime.min
         most_recent_file_date = most_recent_file_date.replace(tzinfo=datetime.timezone.utc)
         most_recent_file = None
