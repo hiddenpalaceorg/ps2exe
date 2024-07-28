@@ -49,7 +49,7 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
         try:
             if getattr(file, "date_time", None):
                 return datetime.datetime(*file.date_time, tzinfo=datetime.timezone.utc)
-            if isinstance(file.mtime, datetime.datetime):
+            if isinstance(getattr(file, "mtime", None), datetime.datetime):
                 return file.mtime
             elif getattr(file, "mtime", None):
                 return datetime.datetime.fromtimestamp(file.mtime, tz=datetime.timezone.utc)
