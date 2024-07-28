@@ -536,10 +536,10 @@ class Inflate64Reader(ArchiveEntryReader):
         super().__init__(entry, archive, *args, **kwargs)
         self.name = self.entry.filename
         self.decomp = inflate64.Inflater()
+        self._running_crc = None
         self.open(self.entry)
         self.size = self.entry.file_size
         self.start_pos = 0
-        self._running_crc = None
 
     def _get_data(self, n=None, discard=False):
         amount_need_read = min(self.size, self.pos + n)
