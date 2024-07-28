@@ -428,6 +428,17 @@ class ZipFileReader(CompressedFileAsFileIoReader):
     def open(self, entry):
         return self.archive.open(entry, "r")
 
+    def _get_data(self, n, discard=False):
+        try:
+            super()._get_data(n, discard)
+        except zipfile.BadZipFile as e:
+            if str(e).startswith("Bad CRC-32"):
+                LOGGER.warning(str(e))
+                if not discard:
+                    return self.fp[self.pos:self.pos + n]
+                return
+            raise
+
 
 class RarFileReader(CompressedFileAsFileIoReader):
     def __init__(self, entry, archive, *args, **kwargs):
@@ -544,6 +555,7 @@ class Inflate64Reader(ArchiveEntryReader):
                 if size_left <= 0:
                     break
 
+        # Check the CRC if we're at the end of the file
         if self.read_bytes == self.size and self._running_crc != self._expected_crc:
             raise zipfile.BadZipFile("Bad CRC-32 for file %r" % self.name)
 
@@ -555,7 +567,6 @@ class Inflate64Reader(ArchiveEntryReader):
             # No need to compute the CRC if we don't have a reference value
             return
         self._running_crc = zipfile.crc32(newdata, self._running_crc)
-        # Check the CRC if we're at the end of the file
 
     def open(self, entry):
         try:
