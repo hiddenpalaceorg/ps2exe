@@ -226,7 +226,14 @@ class ArchiveWrapper:
             if self.entries:
                 if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
                     self.entries.pop(next(reversed(self.entries)))
-            yield from self.iter(skip_entries=True)
+            try:
+                yield from self.iter(skip_entries=True)
+            except Exception:
+                self.ctx.__exit__(None, None, None)
+                self.ctx = None
+                self.reader = []
+                gc.collect()
+                raise
 
     def iter(self, skip_entries=False):
         if not skip_entries:
