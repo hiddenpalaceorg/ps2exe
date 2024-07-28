@@ -437,7 +437,18 @@ class CompressedFileAsFileIoReader(ArchiveEntryReader):
 
 class ZipFileReader(CompressedFileAsFileIoReader):
     def open(self, entry):
-        return self.archive.open(entry, "r")
+        try:
+            return self.archive.open(entry, "r")
+        except zipfile.BadZipFile as e:
+            if str(e).startswith("File name in directory"):
+                if "/" in entry.orig_filename:
+                    entry.orig_filename = entry.orig_filename.replace("/", "\\")
+                elif "\\" in entry.orig_filename:
+                    entry.orig_filename = entry.orig_filename.replace("\\", "//")
+                else:
+                    raise
+                return self.archive.open(entry, "r")
+
 
     def _get_data(self, n, discard=False):
         try:
