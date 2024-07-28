@@ -85,9 +85,18 @@ class IsoProcessorFactory:
                             fp.seek(0)
                             try:
                                 import gzip
-                                fp = gzip.GzipFile(fileobj=fp, mode="rb")
+                                gzfp = gzip.GzipFile(fileobj=fp, mode="rb")
+                                # Test if the file can be gzipped
+                                gzfp.seek(0, io.SEEK_END)
+                                fp = gzfp
                             except ImportError:
                                 LOGGER.warning("gzip support not available, not able to decompress %s", file_name)
+                            except Exception as e:
+                                if e.__class__.__name__ == "BadGzipFile":
+                                    LOGGER.warning("Gzipped file %s could not be decompressed", file_name)
+                                    gzfp = None
+                                else:
+                                    raise
                         elif magic_to_try == b"BZh":
                             # gzipped non-archive file. decompress the
                             # file and check for other types of containers
