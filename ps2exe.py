@@ -1,5 +1,6 @@
 import argparse
 import csv
+import gc
 import io
 import logging
 import os
@@ -407,6 +408,6 @@ if __name__ == '__main__':
             if len(rows):
                 writer.writerows(rows)
                 csv_file.flush()
-
+                gc.collect()
         except Exception:
             LOGGER.exception("Error reading %s", args.file)

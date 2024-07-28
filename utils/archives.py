@@ -1,3 +1,4 @@
+import gc
 import io
 import logging
 import mmap
@@ -214,6 +215,7 @@ class ArchiveWrapper:
         if self.uncompressed:
             self.uncompressed.close()
         self.close_readers()
+        gc.collect()
 
     def __iter__(self):
         try:
@@ -266,9 +268,11 @@ class ArchiveWrapper:
         self.reader = []
         self.counter.update(incr=0, file_name="")
         self.counter.close()
+        gc.collect()
 
     def recover_decompressor(self, libarchive_exception):
         self.ctx.__exit__(None, None, None)
+        gc.collect()
         self.fp.seek(0)
         magic = self.fp.read(6)
         if magic[0:4] == b"PK\x03\x04":
