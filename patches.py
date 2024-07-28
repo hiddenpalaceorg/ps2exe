@@ -1,5 +1,7 @@
 import pyisotools.iso
 
+import utils.archives
+
 
 def apply_patches():
     import pycdlib.dates
@@ -325,3 +327,14 @@ def apply_patches():
         except zipfile.BadZipfile:
             pass
     zipfile.ZipInfo._decodeExtra = _decodeExtra
+
+    orig_update_crc = zipfile.ZipExtFile._update_crc
+    def _update_crc(self, newdata):
+        # Ignore 0 crc
+        if self._expected_crc == 0:
+            return
+        try:
+            return orig_update_crc(self, newdata)
+        except zipfile.BadZipFile as e:
+            utils.archives.LOGGER.warning(e)
+    zipfile.ZipExtFile._update_crc = _update_crc
