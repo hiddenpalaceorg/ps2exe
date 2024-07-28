@@ -50,6 +50,11 @@ except rarfile.RarCannotExec:
 
     rarfile.tool_setup(sevenzip=True, sevenzip2=True, unrar=True, unar=False, bsdtar=False)
 
+try:
+    import inflate64
+except ImportError:
+    from stream_inflate import stream_inflate64
+
 
 class ArchiveWrapper:
     BAR_FMT = '{desc} {file_name}{desc_pad}{percentage:3.0f}%|{bar}| ' \
@@ -396,7 +401,6 @@ class CompressedFileAsFileIoReader(ArchiveEntryReader):
 
     def _get_data(self, n, discard=False):
         amount_need_read = min(self.size, self.pos + n)
-
         if amount_need_read > self.read_bytes:
             self.fp.seek(self.read_bytes)
             size_left = amount_need_read - self.read_bytes
@@ -413,7 +417,7 @@ class CompressedFileAsFileIoReader(ArchiveEntryReader):
                     break
 
         if not discard:
-          return self.fp[self.pos:self.pos+n]
+            return self.fp[self.pos:self.pos+n]
 
     def close(self):
         super().close()
@@ -456,6 +460,115 @@ class RarFileReader(CompressedFileAsFileIoReader):
         return self.archive._file_parser.open(entry, None)
 
 
+class StreamInflate64Reader(ArchiveEntryReader):
+    def __init__(self, entry, archive, *args, **kwargs):
+        super().__init__(entry, archive, *args, **kwargs)
+        self.name = self.entry.filename
+        self.decomp = None
+        self.open(self.entry)
+        self.size = self.entry.file_size
+        self.start_pos = 0
+        self._running_crc = None
+
+    def _get_data(self, n=None, discard=False):
+        amount_need_read = min(self.size, self.pos + n)
+        left = n
+        if amount_need_read > self.read_bytes:
+            self.fp.seek(self.read_bytes)
+            for data in self.decomp:
+                read = len(data)
+                self.fp.write(data)
+                left -= read
+                self.read_bytes += read
+                self._update_crc(data)
+                if self.pbar:
+                    self.pbar.update(read)
+                if left <= 0:
+                    break
+
+        if not discard:
+            data = self.fp[self.pos:self.pos+n]
+            return data
+
+    def compressed_chunks(self, chunk_size):
+        while data := self.archive.fp.read(chunk_size):
+            yield data
+
+    def _update_crc(self, newdata):
+        if self._expected_crc is None:
+            # No need to compute the CRC if we don't have a reference value
+            return
+        self._running_crc = zipfile.crc32(newdata, self._running_crc)
+        # Check the CRC if we're at the end of the file
+        if self.is_done() and self._running_crc != self._expected_crc:
+            raise zipfile.BadZipFile("Bad CRC-32 for file %r" % self.name)
+
+    def open(self, entry):
+        try:
+            self.archive.open(entry, "r")
+        except NotImplementedError:
+            if hasattr(self.entry, 'CRC'):
+                self._expected_crc = self.entry.CRC
+                self._running_crc = zipfile.crc32(b'')
+            else:
+                self._expected_crc = None
+            self.start_pos = self.archive.fp.tell()
+            self.decomp = self.decompresser(self.compressed_chunks(65536))
+
+
+class Inflate64Reader(ArchiveEntryReader):
+    def __init__(self, entry, archive, *args, **kwargs):
+        super().__init__(entry, archive, *args, **kwargs)
+        self.name = self.entry.filename
+        self.decomp = inflate64.Inflater()
+        self.open(self.entry)
+        self.size = self.entry.file_size
+        self.start_pos = 0
+        self._running_crc = None
+
+    def _get_data(self, n=None, discard=False):
+        amount_need_read = min(self.size, self.pos + n)
+        if amount_need_read > self.read_bytes:
+            self.fp.seek(self.read_bytes)
+            size_left = amount_need_read - self.read_bytes
+            while size_left > 0:
+                chunk = self.archive.fp.read(65535)
+                data = self.decomp.inflate(chunk)
+                read = len(data)
+                self._update_crc(data)
+                self.fp.write(data)
+                size_left -= read
+                self.read_bytes += read
+                if self.pbar:
+                    self.pbar.update(read)
+                if size_left <= 0:
+                    break
+
+        if self.read_bytes == self.size and self._running_crc != self._expected_crc:
+            raise zipfile.BadZipFile("Bad CRC-32 for file %r" % self.name)
+
+        if not discard:
+            return self.fp[self.pos:self.pos+n]
+
+    def _update_crc(self, newdata):
+        if self._expected_crc is None:
+            # No need to compute the CRC if we don't have a reference value
+            return
+        self._running_crc = zipfile.crc32(newdata, self._running_crc)
+        # Check the CRC if we're at the end of the file
+
+    def open(self, entry):
+        try:
+            self.archive.open(entry, "r")
+        except NotImplementedError:
+            if hasattr(self.entry, 'CRC'):
+                self._expected_crc = self.entry.CRC
+                self._running_crc = zipfile.crc32(b'')
+            else:
+                self._expected_crc = None
+            self.start_pos = self.archive.fp.tell()
+
+
 class ArchiveEntryWrapper:
     def __init__(self, archive, entry, fp, archive_reader, pbar=None):
         self.fp = fp
@@ -483,7 +596,13 @@ class ArchiveEntryWrapper:
                 self.entry.filename = self.entry.filename.replace("/", "\\")
             self.entry_reader = RarFileReader(self.entry, self.archive, self.fp, pbar=self.pbar)
         elif isinstance(self.entry, zipfile.ZipInfo):
-            self.entry_reader = ZipFileReader(self.entry, self.archive, self.fp, pbar=self.pbar)
+            if self.entry.compress_type == 9:
+                if "inflate64" in sys.modules:
+                    self.entry_reader = Inflate64Reader(self.entry, self.archive, self.fp, pbar=self.pbar)
+                else:
+                    self.entry_reader = StreamInflate64Reader(self.entry, self.archive, self.fp, pbar=self.pbar)
+            else:
+                self.entry_reader = ZipFileReader(self.entry, self.archive, self.fp, pbar=self.pbar)
         else:
             self.entry_reader = BlockReader(self, self.archive, self.fp, pbar=self.pbar)
         return self.entry_reader

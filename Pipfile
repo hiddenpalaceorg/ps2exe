@@ -14,11 +14,13 @@ libarchive-c = "*"
 pefile = "*"
 pycryptodome = "*"
 enlighten = "*"
-pyisotools = "*"
+pyisotools = {file = "https://github.com/hiddenpalaceorg/pyisotools/archive/refs/heads/main.zip"}
 methodtools = "*"
 machfs = "*"
 rarfile = ">=4.2"
 psutil = "*"
+stream-inflate = "*"
+inflate64 = "*"
 
 [requires]
 python_version = "3.8"
