@@ -296,29 +296,29 @@ if __name__ == '__main__':
                        required=False)
 
     parser.add_argument('--no-contents-checksum',
-                       help="Disable calculating the hash of the image contents",
-                       action='store_true',
-                       default=False)
+                        help="Disable calculating the hash of the image contents",
+                        action='store_true',
+                        default=False)
 
     parser.add_argument('--append-output',
-                       help="Append to file instead of overwriting",
-                       action='store_true',
-                       default=False)
+                        help="Append to file instead of overwriting",
+                        action='store_true',
+                        default=False)
 
     parser.add_argument('--ignore-existing',
-                       help="Don't process discs already in the output csv",
-                       action='store_true',
-                       default=False)
+                        help="Don't process discs already in the output csv",
+                        action='store_true',
+                        default=False)
 
     parser.add_argument('--allow-extensions',
-                       help="Allow these normally ignored extensions to be processed",
-                       nargs='+',
-                       default=[])
+                        help="Allow these normally ignored extensions to be processed",
+                        nargs='+',
+                        default=[])
 
-    parser.add_argument('--archives-as-folder',
-                       help="Tread compressed archives as if they were folders, processing each file individually",
-                       action='store_true',
-                       default=False)
+    parser.add_argument('--exclude',
+                        help="Exclude file/dir. Can specify multiple",
+                        nargs='+',
+                        default=[])
 
     args = parser.parse_args()
 
@@ -384,6 +384,13 @@ if __name__ == '__main__':
             dirnames.sort()
             for filename in sorted(filenames):
                 path = os.path.join(root, filename)
+                skip = False
+                for exclude in args.exclude:
+                    if path.startswith(exclude):
+                        skip = True
+                        break
+                if skip:
+                    continue
                 if path in existing_files:
                     continue
                 if not is_path_allowed(path, args.allow_extensions):
