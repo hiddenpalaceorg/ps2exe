@@ -249,12 +249,15 @@ class PyCdlibUdf(PyCdlib):
         current_extent += 1
         # FIXME: deal with running out of space on the Partition
         terminating_data = self._cdfp.read(self.logical_block_size)
-        desc_tag = udfmod.UDFTag()
-        desc_tag.parse(terminating_data,
-                       current_extent - self.udf_main_descs.partitions[0].part_start_location)
-        if desc_tag.tag_ident == 8:
-            self.udf_file_set_terminator = udfmod.UDFTerminatingDescriptor()
-            self.udf_file_set_terminator.parse(current_extent, desc_tag)
+        try:
+            desc_tag = udfmod.UDFTag()
+            desc_tag.parse(terminating_data,
+                           current_extent - self.udf_main_descs.partitions[0].part_start_location)
+            if desc_tag.tag_ident == 8:
+                self.udf_file_set_terminator = udfmod.UDFTerminatingDescriptor()
+                self.udf_file_set_terminator.parse(current_extent, desc_tag)
+        except pycdlibexception.PyCdlibInvalidISO:
+            pass
 
     def _walk_udf_directories(self, extent_to_inode):
         # type: (Dict[int, inode.Inode]) -> None
