@@ -279,6 +279,7 @@ class ArchiveWrapper:
 
     def recover_decompressor(self, libarchive_exception):
         self.ctx.__exit__(None, None, None)
+        self.ctx = None
         gc.collect()
         self.fp.seek(0)
         magic = self.fp.read(6)
@@ -303,6 +304,7 @@ class ArchiveWrapper:
                 self.counter.total = float(self.total_size)
                 self.counter.count = sum([entry.file_size for entry in self.entries.values()])
         else:
+            gc.collect()
             raise libarchive_exception
 
     def close_readers(self):

@@ -425,6 +425,7 @@ if __name__ == '__main__':
             if len(rows):
                 writer.writerows(rows)
                 csv_file.flush()
-                gc.collect()
         except Exception:
-            LOGGER.exception("Error reading %s", args.file)
+            LOGGER.exception("Error reading %s", path)
+        finally:
+            gc.collect()
