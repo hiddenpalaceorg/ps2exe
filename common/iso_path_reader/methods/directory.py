@@ -31,9 +31,6 @@ class DirectoryPathReader(ChunkedHashTrait, IsoPathReader):
     def get_file_size(self, file):
         return file.stat().st_size
 
-    def get_file_sector(self, file):
-        return file.orig_extent_loc
-
     def is_directory(self, file):
         return file.is_dir()
 

@@ -88,7 +88,7 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
                     fp.close()
                 except AttributeError:
                     pass
-                if parent_fp:
+                if parent_fp and not any(tuple for tuple in file_stack if parent_fp in tuple):
                     try:
                         parent_fp.__exit__()
                     except AttributeError:
@@ -114,6 +114,16 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
         nested_path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(
             f, basename.decode("cp1252"), current_path_reader, PROGRESS_MANAGER
         )
+        for i in range(0, len(nested_path_readers)):
+            try:
+                # If the nested path reader is the same as the parent, but the lba of the
+                # file is at 0 in the parent, then we're probably in a loop, as the data
+                # will be exactly the same as in the parent
+                if (nested_path_readers[i].__class__ == current_path_reader.__class__ and
+                        current_path_reader.get_file_sector(file) == 0):
+                    nested_path_readers.pop(i)
+            except NotImplementedError:
+                pass
         if nested_path_readers:
             LOGGER.info("Found %d volumes and encountered %d errors", len(nested_path_readers), len(exceptions))
         if exceptions:
