@@ -697,6 +697,9 @@ class CompletedEntryWrapper(io.IOBase):
     def __getattr__(self, item):
         return getattr(self.entry_fp, item)
 
+    def __getitem__(self, item):
+        return self.entry_fp.__getitem__(item)
+
     def open(self):
         return self
 

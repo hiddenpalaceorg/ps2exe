@@ -250,7 +250,7 @@ class IsoProcessorFactory:
                         exceptions[XboxPathReader.volume_type] = e
 
         found_iso_magic = False
-        for magic_offset, magics in [(0, [b"CD001", b"CD-I ", b"BEA01"]), (8, [b'CDROM'])]:
+        for magic_offset, magics in [(0, [b"CD001", b"BEA01"]), (8, [b'CDROM'])]:
             wrapper.seek(0x8001 + magic_offset)
             ident = wrapper.read(5)
             if ident in magics:
