@@ -296,6 +296,8 @@ class ArchiveWrapper:
                 pass
             finally:
                 if not len(self.ctx.filelist):
+                    self.ctx = None
+                    gc.collect()
                     raise libarchive_exception
                 if self.entries:
                     if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
