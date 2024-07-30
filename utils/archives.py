@@ -70,9 +70,7 @@ class ArchiveWrapper:
         self.path = file.name
         self.reader = None
         self.pbar = pbar
-        self.mmap = None
         self.tempfile = None
-        self.mmap_used = 0
         self.tempfile_used = 0
         self.entries = {}
         self._entries_pos = dict()
@@ -243,6 +241,7 @@ class ArchiveWrapper:
         if not self.reader:
             return
 
+        entry = None
         for entry in self.reader:
             if isinstance(entry, (rarfile.RarInfo, zipfile.ZipInfo)):
                 file_path = entry.filename
@@ -272,6 +271,7 @@ class ArchiveWrapper:
             del entry_wrapper
         self.ctx.__exit__(None, None, None)
         self.ctx = None
+        entry = None
         self.close_readers()
         self.reader = []
         self.counter.update(incr=0, file_name="")
@@ -713,6 +713,9 @@ class CompletedEntryWrapper(io.IOBase):
 
     def seek(self, *args, **kwargs):
         return self.entry_fp.seek(*args, **kwargs)
+
+    def seekable(self):
+        return True
 
     def tell(self):
         return self.entry_fp.tell()
