@@ -36,7 +36,7 @@ class BaseFile:
         return self._get_data(n)
 
     def readinto(self, b):
-        readsize = self.length() - self.pos
+        readsize = self.length() - self.tell()
         if readsize > 0:
             mv = memoryview(b)
             m = mv.cast('B')
