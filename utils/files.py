@@ -487,9 +487,13 @@ class OffsetFile(BaseFile):
         self.name = file_name or self.mmap.name
 
     def seek(self, pos, whence=os.SEEK_SET):
+        if whence == os.SEEK_CUR:
+            pos = self.pos - self.offset + pos
+        elif whence == os.SEEK_END:
+            pos = len(self) + pos
         if pos >= self.length():
             pos = self.length()
-        return super().seek(pos+self.offset, whence)
+        return super().seek(pos+self.offset, os.SEEK_SET)
 
     def tell(self):
         return super().tell() - self.offset
