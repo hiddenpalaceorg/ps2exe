@@ -232,6 +232,7 @@ class ArchiveWrapper:
                 self.ctx.__exit__(None, None, None)
                 self.ctx = None
                 self.reader = []
+                self.entries = dict()
                 gc.collect()
                 raise
 
