@@ -210,6 +210,7 @@ class ArchiveWrapper:
     def __exit__(self, *args):
         if self.ctx:
             self.ctx.__exit__(*args)
+            self.ctx = None
         if self.uncompressed:
             self.uncompressed.close()
         self.close_readers()
@@ -219,20 +220,19 @@ class ArchiveWrapper:
         try:
             yield from self.iter()
         except libarchive.ArchiveError as e:
-            self.recover_decompressor(e)
+            try:
+                self.recover_decompressor(e)
+            except libarchive.ArchiveError:
+                self.recover_partial_data(e)
+                return
             self.__enter__()
             if self.entries:
                 if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
                     self.entries.pop(next(reversed(self.entries)))
             try:
                 yield from self.iter(skip_entries=True)
-            except Exception:
-                self.ctx.__exit__(None, None, None)
-                self.ctx = None
-                self.reader = []
-                self.entries = dict()
-                gc.collect()
-                raise
+            except Exception as e:
+                return self.recover_partial_data(e)
 
     def iter(self, skip_entries=False):
         if not skip_entries:
@@ -266,7 +266,11 @@ class ArchiveWrapper:
             self.entries[file_path] = entry_wrapper
             self.counter.update(incr=0, file_name=format_bar_desc(entry_wrapper.file_name, 30))
             yield entry_wrapper
-            entry_wrapper.close()
+            try:
+                entry_wrapper.close()
+            except Exception:
+                entry_wrapper.closed = True
+                raise
             self.entries[file_path] = CompletedEntryWrapper(entry_wrapper)
             del entry_wrapper
         self.ctx.__exit__(None, None, None)
@@ -301,14 +305,44 @@ class ArchiveWrapper:
                     gc.collect()
                     raise libarchive_exception
                 if self.entries:
-                    if not isinstance(self.entries[next(reversed(self.entries))], CompletedEntryWrapper):
-                        self.entries.pop(next(reversed(self.entries)))
+                    last_entry = next(reversed(self.entries))
+                    self.entries[last_entry].closed = True
+                    if not isinstance(self.entries[last_entry], CompletedEntryWrapper):
+                        self.entries.pop(last_entry)
                 self.total_size = sum([entry.file_size for entry in self.ctx.infolist()])
                 self.counter.total = float(self.total_size)
                 self.counter.count = sum([entry.file_size for entry in self.entries.values()])
         else:
             gc.collect()
             raise libarchive_exception
+
+    def recover_partial_data(self, exception):
+        self.reader = []
+        if self.ctx:
+            self.ctx.__exit__(None, None, None)
+            self.ctx = None
+        gc.collect()
+        if len(self.entries):
+            last_entry = next(reversed(self.entries))
+            if not isinstance(self.entries[last_entry], CompletedEntryWrapper):
+                self.entries[last_entry].closed = True
+                self.entries[last_entry].close()
+                self.entries[last_entry] = CompletedEntryWrapper(self.entries[last_entry])
+            if not any(entry for entry in self.entries.values() if not entry.is_dir):
+                self.entries = dict()
+                gc.collect()
+                raise exception
+            self.close_readers()
+            self.reader = []
+            self.counter.update(incr=0, file_name="")
+            self.counter.close()
+            LOGGER.warning("Archive %s could not be fully extracted. Last file: %s", self.path, last_entry)
+            return
+        else:
+            self.ctx = None
+            self.entries = dict()
+            gc.collect()
+            raise exception
 
     def close_readers(self):
         if self.rar_tmpfile:
@@ -336,6 +370,7 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
         self.read_bytes = 0
         self.fp = entry_fp
         self.pbar = pbar
+        self._closed = False
 
     def length(self):
         return self.entry.file_size
@@ -344,7 +379,9 @@ class ArchiveEntryReader(MmappedFile, io.IOBase):
         return self
 
     def close(self):
-        self.seek(0, io.SEEK_END)
+        if not self._closed:
+            self.seek(0, io.SEEK_END)
+            self._closed = True
 
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -453,7 +490,6 @@ class ZipFileReader(CompressedFileAsFileIoReader):
                 else:
                     raise
                 return self.archive.open(entry, "r")
-
 
     def _get_data(self, n, discard=False):
         try:
@@ -615,6 +651,7 @@ class ArchiveEntryWrapper:
         self.entry = entry
         self.pbar = pbar
         self.entry_reader = None
+        self.closed = False
         if isinstance(entry, (rarfile.RarInfo, zipfile.ZipInfo)):
             self.path = entry.filename
         else:
@@ -646,9 +683,12 @@ class ArchiveEntryWrapper:
         return self.entry_reader
 
     def close(self):
-        if not self.entry_reader:
-            self.open()
-        self.entry_reader.close()
+        if not self.closed:
+            if not self.entry_reader:
+                self.open()
+            self.entry_reader.close()
+        else:
+            self.entry_reader._closed = True
 
     @property
     def file_name(self):
