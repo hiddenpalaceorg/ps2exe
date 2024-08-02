@@ -1,4 +1,3 @@
-import faulthandler; faulthandler.enable()
 import argparse
 import csv
 import gc
