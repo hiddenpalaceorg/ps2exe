@@ -220,6 +220,8 @@ class ArchiveWrapper:
         try:
             yield from self.iter()
         except libarchive.ArchiveError as e:
+            if str(e).startswith("Passphrase required"):
+                raise e
             try:
                 self.recover_decompressor(e)
             except libarchive.ArchiveError:
