@@ -72,7 +72,7 @@ class IsoProcessorFactory:
                 try:
                     return [CompressedPathReader(ArchiveWrapper(fp, parent_container, pbar), fp, parent_container)], []
                 except rarfile.NeedFirstVolume:
-                    return None, None
+                    return [], []
                 except Exception as e:
                     if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
                         LOGGER.warning("Error processing %s: %s", file_name, e.msg)
