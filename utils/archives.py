@@ -687,7 +687,7 @@ class ArchiveEntryWrapper:
             if not self.entry_reader:
                 self.open()
             self.entry_reader.close()
-        else:
+        elif self.entry_reader:
             self.entry_reader._closed = True
 
     @property
