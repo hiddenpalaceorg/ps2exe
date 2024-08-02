@@ -213,6 +213,16 @@ class ArchiveWrapper:
             self.ctx = None
         if self.uncompressed:
             self.uncompressed.close()
+        if self.counter:
+            try:
+                self.counter.update(incr=0, file_name="")
+            except KeyError:
+                pass
+            try:
+                self.counter.close()
+            except KeyError:
+                pass
+            self.counter = None
         self.close_readers()
         gc.collect()
 
@@ -220,8 +230,6 @@ class ArchiveWrapper:
         try:
             yield from self.iter()
         except libarchive.ArchiveError as e:
-            if str(e).startswith("Passphrase required"):
-                raise e
             try:
                 self.recover_decompressor(e)
             except libarchive.ArchiveError:
@@ -282,6 +290,7 @@ class ArchiveWrapper:
         self.reader = []
         self.counter.update(incr=0, file_name="")
         self.counter.close()
+        self.counter = None
         gc.collect()
 
     def recover_decompressor(self, libarchive_exception):
@@ -325,15 +334,18 @@ class ArchiveWrapper:
             self.ctx = None
         gc.collect()
         if len(self.entries):
+            if not any(entry for entry in self.entries.values() if not entry.is_dir and (
+                    isinstance(entry, CompletedEntryWrapper) or
+                    (entry.entry_reader and entry.entry_reader.read_bytes)
+            )):
+                self.entries = dict()
+                gc.collect()
+                raise exception
             last_entry = next(reversed(self.entries))
             if not isinstance(self.entries[last_entry], CompletedEntryWrapper):
                 self.entries[last_entry].closed = True
                 self.entries[last_entry].close()
                 self.entries[last_entry] = CompletedEntryWrapper(self.entries[last_entry])
-            if not any(entry for entry in self.entries.values() if not entry.is_dir):
-                self.entries = dict()
-                gc.collect()
-                raise exception
             self.close_readers()
             self.reader = []
             self.counter.update(incr=0, file_name="")

@@ -14,6 +14,7 @@ import utils.files
 from common.factory import IsoProcessorFactory
 from common.processor import BaseIsoProcessor
 from common.iso_path_reader.methods.directory import DirectoryPathReader
+from exceptions import SkippableError
 from patches import apply_patches
 from utils.common import is_path_allowed
 
@@ -140,8 +141,12 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
 
         for nested_path_reader in nested_path_readers:
             LOGGER.info("Found volume type %s", nested_path_reader.volume_type)
-            nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
-                                                             disable_contents_checksum)
+            try:
+                nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
+                                                                 disable_contents_checksum)
+            except SkippableError as e:
+                LOGGER.warning(str(e))
+                continue
 
             if nested_info:
                 nested_info["name"] = basename.decode("cp1252")

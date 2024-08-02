@@ -3,6 +3,7 @@ import io
 
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
+from exceptions import SkippableError
 
 
 class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
@@ -16,11 +17,18 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
         return self.iso
 
     def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
-        # always recursive
-        for file in self.iso:
-            if self.is_directory(file) and not include_dirs:
-                continue
-            yield file
+        try:
+            # always recursive
+            for file in self.iso:
+                if self.is_directory(file) and not include_dirs:
+                    continue
+                yield file
+        except Exception as e:
+            if (str(e).startswith("Passphrase required for this entry") or
+                    str(e).endswith("password required for extraction")):
+                self.iso.__exit__(e)
+                raise SkippableError(str(e))
+            raise
 
     def get_file(self, path):
         if path in [".", "/", ""]:
@@ -41,8 +49,15 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
         return file.file_size
 
     def open_file(self, file):
-        path = self.get_file_path(file)
-        return self.iso.entries[path].open()
+        try:
+            path = self.get_file_path(file)
+            return self.iso.entries[path].open()
+        except Exception as e:
+            if (str(e).startswith("Passphrase required for this entry") or
+                    str(e).endswith("password required for extraction")):
+                self.iso.__exit__(e)
+                raise SkippableError(str(e))
+            raise
 
     # noinspection PyRedeclaration
     def get_file_date(self, file):
