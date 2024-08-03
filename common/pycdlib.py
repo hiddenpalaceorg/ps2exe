@@ -5,6 +5,9 @@ import collections
 import logging
 import os
 import struct
+
+import pycdlib.dr
+import pycdlib.rockridge
 import pycdlib.udf as udfmod
 
 from pycdlib import PyCdlib as _PyCdlib, pycdlibexception, path_table_record, headervd, utils, dates, inode
@@ -666,3 +669,52 @@ class HsDirectoryRecordDate(dates.DirectoryRecordDate):
 
         self.gmtoffset = 0
         self._initialized = True
+
+
+class RockRidge(pycdlib.rockridge.RockRidge):
+    def parse(self, record, is_first_dir_record_of_root, bytes_to_skip,
+              continuation, dr_name):
+        # Skip Apple rock ridge extensions
+        (rtype, su_len, _) = struct.unpack_from('=2sBB', record[:bytes_to_skip + 4], bytes_to_skip)
+        if rtype in (b'AA', b'AB'):
+            record = record[su_len:]
+        return super().parse(record, is_first_dir_record_of_root, bytes_to_skip, continuation, dr_name)
+
+
+class DirectoryRecord(pycdlib.dr.DirectoryRecord):
+    def parse(self, vd, record, parent):
+        super().parse(vd, record, parent)
+        if not self.rock_ridge and not self.is_root:
+            record_offset = 33
+            record_offset += self.len_fi
+            if self.len_fi % 2 == 0:
+                record_offset += 1
+            if self.xa_record:
+                record_offset += len(self.xa_record.record())
+            if len(record[record_offset:]) >= 2 and record[record_offset:record_offset + 2] in (b'AA', b'AB'):
+                self.rock_ridge = RockRidge()
+
+                is_first_dir_record_of_root = False
+
+                if self.parent.is_root:
+                    if self.file_ident == b'\x00':
+                        is_first_dir_record_of_root = True
+                        bytes_to_skip = 0
+                    else:
+                        bytes_to_skip = self.parent.children[0].rock_ridge.bytes_to_skip
+                else:
+                    bytes_to_skip = self.parent.rock_ridge.bytes_to_skip
+
+                self.rock_ridge.parse(record[record_offset:],
+                                      is_first_dir_record_of_root,
+                                      bytes_to_skip,
+                                      False,
+                                      self._printable_name)
+            if self.rock_ridge is None:
+                ret = ''
+            else:
+                ret = self.rock_ridge.rr_version
+            return ret
+
+
+pycdlib.dr.DirectoryRecord = DirectoryRecord
