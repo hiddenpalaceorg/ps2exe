@@ -219,7 +219,8 @@ class ArchiveWrapper:
             except KeyError:
                 pass
             try:
-                self.counter.close()
+                if not self.counter._closed:
+                    self.counter.close()
             except KeyError:
                 pass
             self.counter = None
@@ -317,8 +318,9 @@ class ArchiveWrapper:
                     raise libarchive_exception
                 if self.entries:
                     last_entry = next(reversed(self.entries))
-                    self.entries[last_entry].closed = True
                     if not isinstance(self.entries[last_entry], CompletedEntryWrapper):
+                        self.entries[last_entry].closed = True
+                        self.entries[last_entry].close()
                         self.entries.pop(last_entry)
                 self.total_size = sum([entry.file_size for entry in self.ctx.infolist()])
                 self.counter.total = float(self.total_size)
