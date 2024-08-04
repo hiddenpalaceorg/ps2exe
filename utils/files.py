@@ -560,3 +560,45 @@ def get_file_size(file):
         file.seek(pos)
         return size
 
+
+def iterate_patterns(fp, pattern, chunk_size=0):
+    if chunk_size < len(pattern):
+        chunk_size = len(pattern)
+
+    initial_position = fp.tell()
+
+    compensation = len(pattern) - 1
+    try:
+        while True:
+            current_position = fp.tell()
+
+            # Prepend the padding from the last chunk, to make sure that we find the pattern,
+            # even if it straddles the chunk boundary.
+            data = fp.read(chunk_size)
+            if data == b"":
+                # We've reached the end of the stream.
+                return
+
+            if len(data) < len(pattern):
+                # The length that we read from the file is the same
+                # length or less than as the pattern we're looking
+                # for, and we didn't find the pattern in there.
+                return
+
+            marker = data.find(pattern)
+            while marker != -1:
+                found_pos = current_position + marker
+                # Reset the file pointer so that calling code cannot
+                # depend on the side effect of this iterator advancing
+                # it.
+                fp.seek(initial_position)
+                yield found_pos
+                # We want to seek past the found position to the next byte,
+                # so we can call find_first again without extra seek
+                # This might seek past the actual end of the file
+                fp.seek(found_pos + len(pattern))
+                marker = data.find(pattern, marker + len(pattern))
+
+            fp.seek(-compensation, os.SEEK_CUR)
+    finally:
+        fp.seek(initial_position)

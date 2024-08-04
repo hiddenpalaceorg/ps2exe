@@ -1,10 +1,10 @@
 import gc
 import io
 import logging
-import mmap
 import os
 import pathlib
 import shutil
+import struct
 import sys
 import tempfile
 
@@ -14,7 +14,7 @@ import zipfile
 
 from utils.InMemoryRolloverTempFile import InMemoryRolloverTempFile
 from utils.common import format_bar_desc
-from utils.files import MmappedFile, OffsetFile, get_file_size
+from utils.files import MmappedFile, OffsetFile, get_file_size, iterate_patterns
 
 LOGGER = logging.getLogger(__name__)
 
@@ -313,9 +313,38 @@ class ArchiveWrapper:
                 pass
             finally:
                 if not len(self.ctx.filelist):
-                    self.ctx = None
-                    gc.collect()
-                    raise libarchive_exception
+                    # Attempt to recover the zip central dir using local file header data
+                    fake_central_dir = io.BytesIO()
+                    num_entries = 0
+                    self.fp.seek(0)
+                    while (pos := next(iterate_patterns(self.fp, b"PK\003\004", 65536), None)) is not None:
+                        num_entries += 1
+                        self.fp.seek(pos)
+                        local_header = self.fp.read(0x1E)
+                        # Write signature and version
+                        fake_central_dir.write(b"PK\x01\x02\xFF\x00")
+                        # write pkzip version, flags, compression type, time/date, crc32,
+                        # compressed size, uncompressed size, file name len and extra field len
+                        fake_central_dir.write(local_header[0x04:])
+                        fake_central_dir.write(b"\x00" * 10)
+                        fake_central_dir.write(struct.pack("<L", pos))
+                        fake_central_dir.write(self.fp.read(struct.unpack("<H", local_header[0x1A:0x1C])[0]))
+                        fake_central_dir.write(self.fp.read(struct.unpack("<H", local_header[0x1C:0x1E])[0]))
+                        self.fp.seek(struct.unpack("<L", local_header[0x12:0x16])[0], 1)
+                    if not num_entries:
+                        raise libarchive_exception
+                    fake_central_dir.write(b"PK\x05\x06\x00\x00\x00\x00")
+                    fake_central_dir.write(struct.pack("<H", num_entries) * 2)
+                    fake_central_dir.write(struct.pack("<I", fake_central_dir.tell() - 12))
+                    fake_central_dir.write(b"\x00\x00\x00\x00\x00\x00")
+                    fake_central_dir.seek(0)
+                    self.ctx.fp = fake_central_dir
+                    self.ctx._RealGetContents()
+                    if not len(self.ctx.filelist):
+                        raise libarchive_exception
+                    self.fp.seek(0)
+                    self.ctx.fp = self.fp
+
                 if self.entries:
                     last_entry = next(reversed(self.entries))
                     if not isinstance(self.entries[last_entry], CompletedEntryWrapper):
@@ -475,7 +504,11 @@ class CompressedFileAsFileIoReader(ArchiveEntryReader):
             size_left = amount_need_read - self.read_bytes
             while size_left > 0:
                 chunk_size = min(65536, size_left)
-                data = self.archive_file.read(chunk_size)
+                try:
+                    data = self.archive_file.read(chunk_size)
+                except EOFError:
+                    self.fp.end_pos = self.fp.offset + self.read_bytes
+                    raise
                 read = len(data)
                 self.fp.write(data)
                 size_left -= read
