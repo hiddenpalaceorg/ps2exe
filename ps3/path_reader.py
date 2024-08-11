@@ -1,4 +1,5 @@
 import collections
+import functools
 import io
 import logging
 import math
@@ -172,7 +173,8 @@ class Ps3PathReader(PyCdLibPathReader):
         for region in self.regions:
             if region.start <= file.inode.fp_offset < region.end:
                 if region.encrypted:
-                    return DecryptedFileReader(file.inode, self.iso.logical_block_size, self.disc_key)
+                    io_class = functools.partial(DecryptedFileReader, disc_key=self.disc_key)
+                    return super().open_file(file, io_class)
                 else:
                     return super().open_file(file)
         return super().open_file(file)

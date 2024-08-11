@@ -1,4 +1,5 @@
 import logging
+import pathlib
 
 import pycdlib.inode
 import pycdlib.pycdlibio
@@ -60,13 +61,19 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         return datetime_from_iso_date(file.date if not self.udf else file.mod_time)
 
     def get_file_size(self, file):
+        size = 0
         try:
-            return file.data_length
+            size += file.data_length
         except AttributeError:
             try:
-                return file.inode.data_length
+                size += file.inode.data_length
             except AttributeError:
-                return file.get_data_length()
+                size += file.get_data_length()
+        if getattr(file, "data_continuation", None):
+            while file.data_continuation:
+                file = file.data_continuation
+                size += file.get_data_length()
+        return size
 
     def get_file_sector(self, file):
         return file.orig_extent_loc
@@ -75,6 +82,8 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         return file.is_dir()
 
     def get_file(self, path):
+        if path[0] == "\\":
+            path = pathlib.Path(path).as_posix()
         if path[0] != "/":
             path = "/" + path
         try:
@@ -99,7 +108,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                     pass
                 raise FileNotFoundError(e)
 
-    def open_file(self, file):
+    def open_file(self, file, file_io_cls=pycdlib.pycdlibio.PyCdlibIO):
         # Hack: If multiple files reference the same LBA but with different
         # sizes, update the inode's data size to be correct for this file
         if hasattr(file, "data_length"):
@@ -107,7 +116,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 inode = pycdlib.inode.Inode()
                 inode.parse(file.extent_location(), file.data_length, self.fp,
                           self.iso.logical_block_size)
-                f = pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.logical_block_size)
+                f = file_io_cls(inode, self.iso.logical_block_size)
                 return f
 
             if len(file.inode.linked_records) > 1 and file.inode.data_length != file.data_length:
@@ -128,13 +137,25 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 inode = pycdlib.inode.Inode()
                 inode.parse(part_start + alloc_desc.log_block_num, alloc_desc.extent_length, self.fp,
                             self.iso.logical_block_size)
-                f = pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.logical_block_size)
+                f = file_io_cls(inode, self.iso.logical_block_size)
                 f.__enter__()
                 readers.append(FakeMemoryMap(f))
                 offsets.append(alloc_desc.extent_length + offsets[-1])
             f = ConcatenatedFile(readers, offsets[0:-1])
+        elif getattr(file, "data_continuation", None):
+            f = file_io_cls(file.inode, self.iso.logical_block_size)
+            f.__enter__()
+            readers = [FakeMemoryMap(f)]
+            offsets = [0]
+            while file.data_continuation:
+                offsets.append(file.get_data_length())
+                file = file.data_continuation
+                f = file_io_cls(file.inode, self.iso.logical_block_size)
+                f.__enter__()
+                readers.append(FakeMemoryMap(f))
+            f = ConcatenatedFile(readers, offsets)
         else:
-            f = pycdlib.pycdlibio.PyCdlibIO(file.inode, self.iso.logical_block_size)
+            f = file_io_cls(file.inode, self.iso.logical_block_size)
         return f
 
     def get_pvd(self):
