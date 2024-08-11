@@ -190,9 +190,9 @@ class IsoProcessorFactory:
 
         wrapper.seek(0x8001)
         if wrapper.read(5) == b"CD-I ":
-            cdi = Disc(fp, headers=True, scrambled=wrapper.is_scrambled)
+            cdi = Disc(wrapper.mmap, headers=True)
             cdi.read()
-            return CdiPathReader(cdi, fp)
+            return CdiPathReader(cdi, wrapper.mmap)
 
         # Xbox and 360 ISO
         if wrapper.length() > 65556:
