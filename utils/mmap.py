@@ -6,6 +6,7 @@ class FakeMemoryMap(object):
     def __init__(self, f):
         self._lock = threading.Lock()
         self._file = f
+        self.name = getattr(f, "name", "")
         with self._lock:
             f.seek(0, io.SEEK_END)
             self._size = f.tell()
