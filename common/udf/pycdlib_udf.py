@@ -50,7 +50,7 @@ class PyCdlibUdf(PyCdlib):
             anchor_tag = udfmod.UDFTag()
             try:
                 anchor_tag.parse(anchor_data, extent)
-            except pycdlibexception.PyCdlibInvalidISO:
+            except (pycdlibexception.PyCdlibInvalidISO, struct.error):
                 continue
             if anchor_tag.tag_ident != 2:
                 continue
