@@ -1,6 +1,9 @@
+import logging
 from os.path import basename
 
 from common.iso_path_reader.methods.base import IsoPathReader
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CdiPathReader(IsoPathReader):
@@ -50,7 +53,10 @@ class CdiPathReader(IsoPathReader):
                 block = self.iso.block(lbn)
             except IndexError:
                 if lbn == file.first_lbn:
+                    LOGGER.warning("File %s out of iso range", self.get_file_path(file))
                     return
+                LOGGER.warning("File %s partially out of iso range. Read %d bytes out of %d bytes",
+                               self.get_file_path(file), file.size - size_left, self.get_file_size(file))
                 break
             file_data = block.data[0:min(block.data_size, size_left)]
             hash.update(file_data)
