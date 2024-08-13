@@ -1,5 +1,6 @@
 import logging
 
+import pycdlib.inode
 import pycdlib.pycdlibio
 from pycdlib.pycdlib import _yield_children
 from pycdlib.pycdlibexception import PyCdlibInvalidInput
@@ -7,6 +8,8 @@ from pycdlib.pycdlibexception import PyCdlibInvalidInput
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 from dates import datetime_from_iso_date
+from utils.files import ConcatenatedFile
+from utils.mmap import FakeMemoryMap
 
 LOGGER = logging.getLogger(__name__)
 
@@ -104,7 +107,22 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             if hasattr(file, "data_length") and file.inode.data_length < file.data_length:
                 file.inode.data_length = file.data_length
 
-        return pycdlib.pycdlibio.PyCdlibIO(file.inode, self.iso.logical_block_size)
+        if self.udf and len(file.alloc_descs) > 1:
+            part_start = self.iso.udf_main_descs.partitions[0].part_start_location
+            readers = []
+            offsets = [0]
+            for alloc_desc in file.alloc_descs:
+                inode = pycdlib.inode.Inode()
+                inode.parse(part_start + alloc_desc.log_block_num, alloc_desc.extent_length, self.fp,
+                            self.iso.logical_block_size)
+                f = pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.logical_block_size)
+                f.__enter__()
+                readers.append(FakeMemoryMap(f))
+                offsets.append(alloc_desc.extent_length + offsets[-1])
+            f = ConcatenatedFile(readers, offsets[0:-1])
+        else:
+            f = pycdlib.pycdlibio.PyCdlibIO(file.inode, self.iso.logical_block_size)
+        return f
 
     def get_pvd(self):
         return self.iso.pvd
