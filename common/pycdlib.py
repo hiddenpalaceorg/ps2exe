@@ -327,6 +327,9 @@ class PyCdlib(_PyCdlib):
 
         return interchange_level, lastbyte
 
+    def _get_iso_size(self):
+        return float("inf")
+
 # Volume descriptor parsers with HS filesystem support
 class PrimaryOrSupplementaryVD(_PrimaryOrSupplementaryVD):
     FMT_HS = '<B5sBB32s32sQLL32sHHHHHHLLLLLLLLLL34s128s128s128s128s37s37s17s17s17s17sBB512s653s'
