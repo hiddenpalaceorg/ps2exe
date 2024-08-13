@@ -107,10 +107,6 @@ class BaseIsoProcessor:
         except FileNotFoundError:
             pass
 
-        fp.seek(0x8008)
-        if fp.peek(17) == b'CD-RTOS CD-BRIDGE':
-            return "cdi"
-
         for dir in ["/S", "/s"]:
             try:
                 for file in iso_path_reader.iso_iterator(iso_path_reader.get_file(dir)):
