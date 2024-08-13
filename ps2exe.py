@@ -229,7 +229,7 @@ if __name__ == '__main__':
     for path in files:
         status_bar.update(game_name=os.path.basename(path))
 
-        if len(PROGRESS_MANAGER.counters) > 10:
+        while len(PROGRESS_MANAGER.counters) > 10:
             oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
             oldest_bar[0].leave = False
             if getattr(oldest_bar[0], "_closed", False):
