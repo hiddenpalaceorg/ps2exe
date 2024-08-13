@@ -60,7 +60,13 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         return datetime_from_iso_date(file.date if not self.udf else file.mod_time)
 
     def get_file_size(self, file):
-        return file.get_data_length()
+        try:
+            return file.data_length
+        except AttributeError:
+            try:
+                return file.inode.data_length
+            except AttributeError:
+                return file.get_data_length()
 
     def get_file_sector(self, file):
         return file.orig_extent_loc
