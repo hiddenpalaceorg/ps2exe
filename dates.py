@@ -5,20 +5,28 @@ from pycdlib.udf import UDFTimestamp
 
 def datetime_from_iso_date(iso_date):
     year = None
+    tz = None
     if isinstance(iso_date, VolumeDescriptorDate):
         year = iso_date.year
         day = iso_date.dayofmonth
-        tz = datetime.timezone(datetime.timedelta(minutes=15 * iso_date.gmtoffset))
     elif isinstance(iso_date, DirectoryRecordDate):
         year = 1900 + iso_date.years_since_1900
         day = iso_date.day_of_month
-        tz = datetime.timezone(datetime.timedelta(minutes=15 * iso_date.gmtoffset))
     elif isinstance(iso_date, UDFTimestamp):
         year = iso_date.year
         day = iso_date.day
-        tz = datetime.timezone(datetime.timedelta(minutes=iso_date.tz))
+        if tz:
+            tz = datetime.timezone(datetime.timedelta(minutes=iso_date.tz))
+        else:
+            tz = datetime.timezone.utc
     else:
         return None
+
+    if not tz:
+        try:
+            tz = datetime.timezone(datetime.timedelta(minutes=15 * iso_date.gmtoffset))
+        except ValueError:
+            tz = datetime.timezone.utc
 
     if not year:
         return None
