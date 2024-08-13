@@ -289,10 +289,13 @@ class BaseIsoProcessor:
         most_recent_path = self.iso_path_reader.get_file_path(most_recent_file)
         most_recent_file_hash = self.iso_path_reader.get_file_hash(most_recent_file, hashlib.md5)
 
+        if most_recent_file_hash:
+            most_recent_file_hash = most_recent_file_hash.hexdigest()
+
         return {
             "most_recent_file": most_recent_path.replace(";1", ""),
             "most_recent_file_date": most_recent_file_date,
-            "most_recent_file_hash": most_recent_file_hash.hexdigest()
+            "most_recent_file_hash": most_recent_file_hash
         }
 
     def get_extra_fields(self):
