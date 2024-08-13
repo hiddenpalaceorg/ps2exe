@@ -1,6 +1,7 @@
 import collections
 import functools
 import os
+import struct
 
 from pycdlib import PyCdlib, pycdlibexception, headervd, inode
 from pycdlib import udf as udfmod
@@ -8,10 +9,13 @@ from pycdlib import udf as udfmod
 allzero = b'\x00' * 2048
 
 class PyCdlibUdf(PyCdlib):
+    vat = None
+
     def _initialize(self):
         super()._initialize()
         self.pvd = None
         self.udf_tea = udfmod.TEAVolumeStructure()
+        self.vat = None
 
     def _parse_volume_descriptors(self):
         try:
@@ -54,18 +58,18 @@ class PyCdlibUdf(PyCdlib):
             anchor.parse(anchor_data, extent, anchor_tag)
             self.udf_anchors.append(anchor)
 
-        if len(self.udf_anchors) < 2:
-            raise pycdlibexception.PyCdlibInvalidISO('Expected at least 2 UDF Anchors, only saw %d' % (len(self.udf_anchors)))
-
-        for anchor in self.udf_anchors[1:]:
-            if self.udf_anchors[0] != anchor:
-                raise pycdlibexception.PyCdlibInvalidISO('Anchor points do not match')
-
         # ECMA-167, Part 3, 8.4.2 says that the anchors identify the main
         # volume descriptor sequence, so look for it here.
 
         # Parse the Main Volume Descriptor Sequence.
         self.udf_main_descs = self._parse_udf_vol_descs(self.udf_anchors[0].main_vd)
+        for part_id, pmap in enumerate(self.udf_main_descs.logical_volumes[0].partition_maps):
+            if isinstance(pmap, udfmod.UDFType2PartitionMap):
+                part_type = pmap.part_ident[3:26].rstrip(b'\x00')
+                if part_type == b"*UDF Virtual Partition":
+                    type2map = UDFVirtualPartitionMap()
+                    type2map.parse(pmap.part_ident)
+                    self.udf_main_descs.logical_volumes[0].partition_maps[part_id] = type2map
 
         # ECMA-167, Part 3, 8.4.2 and 8.4.2.2 says that the anchors *may*
         # identify a reserve volume descriptor sequence.  10.2.3 says that
@@ -161,13 +165,52 @@ class PyCdlibUdf(PyCdlib):
             file_entry.parse(partition_data, current_extent, None, desc_tag)
             part_start = self.udf_main_descs.partitions[0].part_start_location
             desc = file_entry.alloc_descs[0]
-            abs_file_ident_extent = part_start + desc.log_block_num
-            self._seek_to_extent(abs_file_ident_extent)
-            self._cdfp.seek(desc.offset, 1)
-            partition_data = self._cdfp.read(self.logical_block_size)
-            current_extent = abs_file_ident_extent
-            desc_tag = udfmod.UDFTag()
-            desc_tag.parse(partition_data[:self.logical_block_size], 0)
+            if not isinstance(desc, udfmod.UDFInlineAD):
+                abs_file_ident_extent = part_start + desc.log_block_num
+                self._seek_to_extent(abs_file_ident_extent)
+                self._cdfp.seek(desc.offset, 1)
+                partition_data = self._cdfp.read(self.logical_block_size)
+                current_extent = abs_file_ident_extent
+                desc_tag = udfmod.UDFTag()
+                desc_tag.parse(partition_data[:self.logical_block_size], 0)
+
+        if isinstance(self.udf_main_descs.logical_volumes[0].partition_maps[-1], UDFVirtualPartitionMap):
+            # Try to find a VAT. They are supposed to be at the last extent, but could be earlier
+            pmap = self.udf_main_descs.logical_volumes[0].partition_maps[-1]
+            part_extent = next(part for part in self.udf_main_descs.partitions if part.part_num == pmap.part_num).part_num
+            for block in reversed(range(part_extent, last_extent+1)):
+                self._seek_to_extent(block)
+                partition_data = self._cdfp.read(self.logical_block_size)
+                desc_tag = udfmod.UDFTag()
+                try:
+                    desc_tag.parse(partition_data[:self.logical_block_size], 0)
+                except:
+                    continue
+                if desc_tag.tag_ident == 261:
+                    file_entry = udfmod.UDFFileEntry()
+                    file_entry.parse(partition_data, block, None, desc_tag)
+                    desc = file_entry.alloc_descs[0]
+                    part_start = self.udf_main_descs.partitions[0].part_start_location
+                    if isinstance(desc, udfmod.UDFInlineAD):
+                        abs_file_ident_extent = desc.log_block_num
+                    else:
+                        abs_file_ident_extent = part_start + desc.log_block_num
+                    self._seek_to_extent(abs_file_ident_extent)
+                    self._cdfp.seek(desc.offset, 1)
+                    partition_data = self._cdfp.read(file_entry.info_len)
+                    self.vat = UDFVirtualAllocationTable()
+                    self.vat.parse(partition_data, file_entry.info_len)
+                    fsd_extent = self.vat.vat_entries[0] + part_start
+                    self._seek_to_extent(fsd_extent)
+                    partition_data = self._cdfp.read(self.logical_block_size)
+                    current_extent = fsd_extent
+                    desc_tag = udfmod.UDFTag()
+                    desc_tag.parse(partition_data[:self.logical_block_size], 0)
+                    break
+
+        for anchor in self.udf_anchors[1:]:
+            if self.udf_anchors[0] != anchor:
+                raise pycdlibexception.PyCdlibInvalidISO('Anchor points do not match')
 
         if desc_tag.tag_ident != 256:
             raise pycdlibexception.PyCdlibInvalidISO('UDF File Set Tag identifier not 256')
@@ -210,73 +253,89 @@ class PyCdlibUdf(PyCdlib):
             if udf_file_entry is None:
                 continue
 
+            data = b""
             for desc in udf_file_entry.alloc_descs:
-                abs_file_ident_extent = fsd_start + desc.log_block_num
+                if isinstance(desc, udfmod.UDFInlineAD):
+                    abs_file_ident_extent = desc.log_block_num
+                elif self.vat:
+                    part_start = self.udf_main_descs.partitions[0].part_start_location
+                    if len(self.vat.vat_entries) >= desc.log_block_num:
+                        abs_file_ident_extent = self.vat.vat_entries[desc.log_block_num] + part_start
+                    else:
+                        abs_file_ident_extent = desc.log_block_num + part_start
+                else:
+                    abs_file_ident_extent = fsd_start + desc.log_block_num
                 self._seek_to_extent(abs_file_ident_extent)
                 self._cdfp.seek(desc.offset, 1)
-                data = self._cdfp.read(desc.extent_length)
-                offset = 0
-                while offset < len(data):
-                    current_extent = (abs_file_ident_extent * self.logical_block_size + offset) // self.logical_block_size
+                data += self._cdfp.read(desc.extent_length)
+            offset = 0
+            while offset < len(data):
+                current_extent = (abs_file_ident_extent * self.logical_block_size + offset) // self.logical_block_size
 
-                    desc_tag = udfmod.UDFTag()
-                    desc_tag.parse(data[offset:], current_extent - fsd_start)
-                    if desc_tag.tag_ident != 257:
-                        raise pycdlibexception.PyCdlibInvalidISO('UDF File Identifier Tag identifier not 257')
-                    file_ident = udfmod.UDFFileIdentifierDescriptor()
-                    offset += file_ident.parse(data[offset:],
-                                               current_extent,
-                                               desc_tag,
-                                               udf_file_entry)
-                    if file_ident.is_parent():
-                        # For a parent, no further work to do.
-                        udf_file_entry.track_file_ident_desc(file_ident)
-                        continue
-
-                    abs_file_entry_extent = fsd_start + file_ident.icb.log_block_num
-                    next_entry = self._parse_udf_file_entry(abs_file_entry_extent,
-                                                            file_ident.icb,
-                                                            udf_file_entry)
-
-                    # For a non-parent, we delay adding this to the list of
-                    # fi_descs until after we check whether this is a valid
-                    # entry or not.
+                desc_tag = udfmod.UDFTag()
+                desc_tag.parse(data[offset:], current_extent - fsd_start)
+                if desc_tag.tag_ident != 257:
+                    raise pycdlibexception.PyCdlibInvalidISO('UDF File Identifier Tag identifier not 257')
+                file_ident = udfmod.UDFFileIdentifierDescriptor()
+                offset += file_ident.parse(data[offset:],
+                                           current_extent,
+                                           desc_tag,
+                                           udf_file_entry)
+                if file_ident.is_parent():
+                    # For a parent, no further work to do.
                     udf_file_entry.track_file_ident_desc(file_ident)
+                    continue
 
-                    if next_entry is None:
-                        if file_ident.is_dir():
-                            raise pycdlibexception.PyCdlibInvalidISO('Empty UDF File Entry for directories are not allowed')
+                if isinstance(file_ident.icb, udfmod.UDFInlineAD):
+                    abs_file_entry_extent = file_ident.icb.log_block_num
+                elif self.vat and len(self.vat.vat_entries) >= file_ident.icb.log_block_num:
+                    part_start = self.udf_main_descs.partitions[0].part_start_location
+                    abs_file_entry_extent = self.vat.vat_entries[file_ident.icb.log_block_num] + part_start
+                else:
+                    abs_file_entry_extent = fsd_start + file_ident.icb.log_block_num
+                next_entry = self._parse_udf_file_entry(abs_file_entry_extent,
+                                                        file_ident.icb,
+                                                        udf_file_entry)
 
-                        # If the next_entry is None, then we just skip the
-                        # rest of the code dealing with the entry and the
-                        # Inode.
-                        continue
+                # For a non-parent, we delay adding this to the list of
+                # fi_descs until after we check whether this is a valid
+                # entry or not.
+                udf_file_entry.track_file_ident_desc(file_ident)
 
-                    file_ident.file_entry = next_entry
-                    next_entry.file_ident = file_ident
-
+                if next_entry is None:
                     if file_ident.is_dir():
-                        udf_file_entries.append(next_entry)
-                    else:
-                        if next_entry.get_data_length() > 0:
-                            abs_file_data_extent = part_start + next_entry.alloc_descs[0].log_block_num
-                        else:
-                            abs_file_data_extent = 0
-                        if self.eltorito_boot_catalog is not None and abs_file_data_extent == self.eltorito_boot_catalog.extent_location():
-                            self.eltorito_boot_catalog.add_dirrecord(next_entry)
-                        else:
-                            if abs_file_data_extent in extent_to_inode:
-                                ino = extent_to_inode[abs_file_data_extent]
-                            else:
-                                ino = inode.Inode()
-                                ino.parse(abs_file_data_extent,
-                                          next_entry.get_data_length(),
-                                          self._cdfp, self.logical_block_size)
-                                extent_to_inode[abs_file_data_extent] = ino
-                                self.inodes.append(ino)
+                        raise pycdlibexception.PyCdlibInvalidISO('Empty UDF File Entry for directories are not allowed')
 
-                            ino.linked_records.append((next_entry, False))
-                            next_entry.inode = ino
+                    # If the next_entry is None, then we just skip the
+                    # rest of the code dealing with the entry and the
+                    # Inode.
+                    continue
+
+                file_ident.file_entry = next_entry
+                next_entry.file_ident = file_ident
+
+                if file_ident.is_dir():
+                    udf_file_entries.append(next_entry)
+                else:
+                    if next_entry.get_data_length() > 0:
+                        abs_file_data_extent = part_start + next_entry.alloc_descs[0].log_block_num
+                    else:
+                        abs_file_data_extent = 0
+                    if self.eltorito_boot_catalog is not None and abs_file_data_extent == self.eltorito_boot_catalog.extent_location():
+                        self.eltorito_boot_catalog.add_dirrecord(next_entry)
+                    else:
+                        if abs_file_data_extent in extent_to_inode:
+                            ino = extent_to_inode[abs_file_data_extent]
+                        else:
+                            ino = inode.Inode()
+                            ino.parse(abs_file_data_extent,
+                                      next_entry.get_data_length(),
+                                      self._cdfp, self.logical_block_size)
+                            extent_to_inode[abs_file_data_extent] = ino
+                            self.inodes.append(ino)
+
+                        ino.linked_records.append((next_entry, False))
+                        next_entry.inode = ino
 
     def _open_fp(self, fp):
         if hasattr(fp, 'mode') and 'b' not in fp.mode:
@@ -371,4 +430,74 @@ class UDFExtendedFileEntry(udfmod.UDFExtendedFileEntry):
 
     # Hack, wrap UDFExtendedFileEntry calls around UDFFileEntry
     def __getattr__(self, item):
-        return functools.partial(getattr(udfmod.UDFFileEntry, item), self)
+        if callable(getattr(udfmod.UDFFileEntry, item)):
+            return functools.partial(getattr(udfmod.UDFFileEntry, item), self)
+        return getattr(udfmod.UDFFileEntry, item)
+
+
+class UDFVirtualPartitionMap(udfmod.UDFType1PartitionMap):
+    """A class representing a UDF Type 2 Virtual Partition Map (UDF 2.60, 2.2.8)."""
+    __slots__ = ('_initialized', 'num_files', 'num_dirs',
+                 'min_udf_read_revision', 'min_udf_write_revision',
+                 'max_udf_write_revision', 'impl_id', 'impl_use')
+
+    FMT = '<HB23s8sHH24s'
+
+    def parse(self, data):
+        # type: (bytes) -> None
+        """
+        Parse the passed in data into a UDF Type 2 Virtual Partition Map
+
+        Parameters:
+         data - The data to parse.
+        Returns:
+         Nothing.
+        """
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError('UDF Type 2 Virtual Partition Map already initialized')
+
+        (unused1, part_type_flags, part_type_id, part_type_id_suffix, self.vol_seqnum,
+         self.part_num, unused2) = struct.unpack_from(self.FMT, data, 0)
+
+        if part_type_id.rstrip(b'\x00') != b"*UDF Virtual Partition":
+            raise pycdlibexception.PyCdlibInvalidISO('UDF Type 2 Virtual Partition Map Ident not "UDF Virtual Partition"')
+
+        self._initialized = True
+
+
+class UDFVirtualAllocationTable:
+    """A class representing a UDF Virtual Allocation Table (UDF 2.60 2.2.11)."""
+
+    __slots__ = ('_initialized', 'logical_volume_identifier', 'prev_vat_loc',
+                 'length_impl_use', 'num_files', 'num_dirs',
+                 'min_udf_read_revision', 'min_udf_write_revision',
+                 'max_udf_write_revision', 'impl_use', 'vat_entries')
+
+    FMT = '<HH128sIIIHHHH'
+
+    def __init__(self):
+        self._initialized = False
+        self.vat_entries = []
+
+    def parse(self, data, info_len):
+
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError(
+                'UDF Virtual Allocation Table already initialized')
+
+        (header_length, self.length_impl_use, self.logical_volume_identifier, self.prev_vat_loc,
+         self.num_files, self.num_dirs, self.min_udf_read_revision, self.min_udf_write_revision,
+         self.max_udf_write_revision, unused) = struct.unpack_from(self.FMT, data, 0)
+
+        self.impl_use = data[152:152+self.length_impl_use]
+
+        num_vat_entries = (info_len - header_length) // 4
+
+        offset = header_length
+        for vat_entry_num in range(0, num_vat_entries):
+            vat_entry = struct.unpack('<I', data[offset:offset+4])[0]
+            if vat_entry != 0xFFFFFFFF:
+                self.vat_entries.append(vat_entry)
+            offset += 4
+        self._initialized = True
+
