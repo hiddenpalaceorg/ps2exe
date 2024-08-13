@@ -20,11 +20,12 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         self.iso_path_reader = iso_path_reader
         file_dir = pathlib.Path(iso_filename).parent.absolute()
         found = False
+        iso_filename = basename(iso_filename)
         # Try to find a gdi file in this directory
         rule = re.compile(fnmatch.translate("*.gdi"), re.IGNORECASE)
         for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
             i = pathlib.Path(i)
-            if not (tracks := self.parse_gdi(i)):
+            if not (tracks := self.parse_gdi(i, iso_filename)):
                 continue
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
@@ -42,7 +43,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         rule = re.compile(fnmatch.translate("*.cue"), re.IGNORECASE)
         for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
             i = pathlib.Path(i)
-            if not (tracks := self.parse_cue(i)):
+            if not (tracks := self.parse_cue(i, iso_filename)):
                 continue
             if not any(track["file_name"] != basename(iso_filename) for track in tracks):
                 continue
@@ -53,8 +54,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
 
         super().__init__(iso_path_reader, iso_filename, *args)
 
-
-    def parse_gdi(self, gdi_file):
+    def parse_gdi(self, gdi_file, iso_filename):
         with gdi_file.open() as f:
             try:
                 text = f.read()
@@ -65,6 +65,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             _n_tracks = int(lines.pop(0))
 
             tracks = []
+            found_iso = False
             for track_i, line in enumerate(lines):
                 match = re.match(r" *?(?P<index>\d+) +(?P<sector>(?:\d+|\[fix\])) +(?P<type>\d+) +(?P<sector_size>\d+)"
                                  r" +\"?(?P<file_name>[^\"\n]+)\"? +(\d+)", line)
@@ -79,9 +80,12 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
                     else:
                         track[key] = int(track[key])
 
+                if track["file_name"] == iso_filename:
+                    found_iso = True
 
                 tracks.append(track)
-        return tracks
+        if found_iso:
+            return tracks
 
     def get_fp_from_gdi(self, gdi_file, tracks):
         if len(tracks) < 3:
@@ -113,7 +117,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
 
         return ConcatenatedFile(files, offsets)
 
-    def parse_cue(self, cue_file):
+    def parse_cue(self, cue_file, iso_filename):
         with cue_file.open() as f:
             text = f.read()
             lines = text.splitlines()
@@ -121,6 +125,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             tracks = []
             sector = 0
             track = {}
+            found_iso = False
             for line in lines:
                 if line == "REM SINGLE-DENSITY AREA":
                     continue
@@ -132,6 +137,10 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
                             sector += int((cue_file.parent / track["file_name"]).stat().st_size / track["sector_size"])
                         tracks.append(track)
                     track = match.groupdict()
+                    if track["file_name"] == iso_filename:
+                        if self.iso_path_reader.fp.starting_sector:
+                            sector = self.iso_path_reader.fp.starting_sector
+                        found_iso = True
                     track["sector"] = sector
                 if match := re.match(r" *?TRACK (?P<index>\d+) (?P<type>.*)", line):
                     track.update(match.groupdict())
@@ -148,7 +157,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if (self.iso_path_reader.get_file_sector(self.iso_path_reader.get_root_dir())) == 45020:
                 tracks[0]["sector"] = 45000
 
-        return tracks
+        if found_iso:
+            return tracks
 
     def get_disc_type(self):
         return {"disc_type": "gdr"}
