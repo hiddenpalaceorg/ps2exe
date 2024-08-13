@@ -1,4 +1,3 @@
-import os
 import re
 
 
@@ -94,12 +93,6 @@ def is_path_allowed(path, allowed_extensions=None):
             rf"[Tt]rack ?(?:\d?[2-9]|[1-9]\d+)\)?\.(?:bin|iso)$|({ignored_filenames})$|\.({disallowed_extensions})$",
             path,
             re.IGNORECASE):
-        return False
-
-    size = os.path.getsize(path)
-
-    # Allow bin/iso files to be any size (to detect Dreamcast games via track 1 which can be very small)
-    if not re.search(r"\.(iso|bin)", path, re.IGNORECASE) and size < 1024 * 1024 * 2:
         return False
 
     return True
