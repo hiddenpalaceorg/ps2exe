@@ -129,7 +129,16 @@ class PyCdlib(_PyCdlib):
          dictionary of the extent locations to the path table record entries.
         """
         if not self.is_hs:
-            return super()._parse_path_table(ptr_size, extent)
+            try:
+                return super()._parse_path_table(ptr_size, extent)
+            except:
+                extent = getattr(extent, "real", extent)
+                if extent == getattr(self.pvd.path_table_location_le, "real", self.pvd.path_table_location_be):
+                    return super()._parse_path_table(ptr_size, self.pvd.path_table_location_le)
+                if self.joliet_vd and extent == getattr(self.joliet_vd.path_table_location_be, "real", self.joliet_vd.path_table_location_be):
+                    return super()._parse_path_table(ptr_size, self.joliet_vd.path_table_location_le)
+                raise
+
 
         self._seek_to_extent(extent)
         old = self._cdfp.tell()
