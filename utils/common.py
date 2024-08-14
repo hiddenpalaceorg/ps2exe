@@ -95,3 +95,10 @@ def is_path_allowed(path, allowed_extensions=None):
         return False
 
     return True
+
+
+def format_bar_desc(text, max_len):
+    if len(text) > max_len:
+        return "..." + text[-(max_len - 3):]
+    else:
+        return text.rjust(max_len, " ")
