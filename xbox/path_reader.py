@@ -8,6 +8,8 @@ from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 LOGGER = logging.getLogger(__name__)
 
 class XboxPathReader(ChunkedHashTrait, IsoPathReader):
+    volume_type = "xdvdfs"
+
     def get_root_dir(self):
         return self.iso.root
 
@@ -59,6 +61,8 @@ class XboxPathReader(ChunkedHashTrait, IsoPathReader):
         return {}
 
 class XboxStfsPathReader(XboxPathReader):
+    volume_type = "stfs"
+
     def get_root_dir(self):
         return self.iso.allfiles
 

@@ -86,9 +86,12 @@ class PyCdlib(_PyCdlib):
                     # the loop above.
                     raise pycdlibexception.PyCdlibInvalidISO('Invalid volume identification type')
             elif desc_type == headervd.VOLUME_DESCRIPTOR_TYPE_SUPPLEMENTARY:
-                svd = headervd.PrimaryOrSupplementaryVD(headervd.VOLUME_DESCRIPTOR_TYPE_SUPPLEMENTARY)
-                svd.parse(vd, curr_extent)
-                self.svds.append(svd)
+                try:
+                    svd = headervd.PrimaryOrSupplementaryVD(headervd.VOLUME_DESCRIPTOR_TYPE_SUPPLEMENTARY)
+                    svd.parse(vd, curr_extent)
+                    self.svds.append(svd)
+                except pycdlibexception.PyCdlibInvalidISO:
+                    continue
             # Since we checked for the valid descriptors above, it is impossible
             # to see an invalid desc_type here, so no check necessary.
 

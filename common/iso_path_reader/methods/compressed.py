@@ -7,6 +7,8 @@ from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 
 class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
+    volume_type = "archive"
+
     def __init__(self, iso, fp):
         super().__init__(iso, fp)
         self.files = {}
@@ -26,8 +28,6 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
             for block in entry.get_blocks():
                 self.files[entry.path].write(block)
             self.files[entry.path].seek(0)
-    def __init__(self, iso, fp, *args, **kwargs):
-        super().__init__(iso, fp, *args, **kwargs)
 
     def get_root_dir(self):
         return self.entries

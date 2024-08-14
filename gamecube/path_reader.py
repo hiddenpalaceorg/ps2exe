@@ -9,6 +9,8 @@ from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 LOGGER = logging.getLogger(__name__)
 
 class GamecubePathReader(ChunkedHashTrait, IsoPathReader):
+    volume_type = "gamecube"
+
     def get_root_dir(self):
         return self.iso.rootnode
 

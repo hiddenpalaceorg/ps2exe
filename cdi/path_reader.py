@@ -8,6 +8,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class CdiPathReader(IsoPathReader):
+    volume_type = "cdi"
+
     def get_root_dir(self):
         return self.iso.path_tbl
 

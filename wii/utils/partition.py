@@ -150,7 +150,8 @@ class Partition(object):
 
         self.decryption_key = None
         self.master_key = self._get_master_key(encrypted_title_key, title_id)
-        LOGGER.info("Found master key %s", self.master_key)
+        LOGGER.info("Found master key %s, volume %d, index %d",
+                    self.master_key, self.disc_infos.volume_group, self.disc_infos.index)
 
     def _get_master_key(self, encrypted_key, title_id):
         # First check if the partition is even decrypted at all
