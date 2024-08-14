@@ -1,3 +1,4 @@
+import io
 import logging
 from os.path import basename
 
@@ -35,6 +36,23 @@ class CdiPathReader(IsoPathReader):
         for file in self.iso_iterator(self.get_root_dir(), recursive=True):
             if file.name == file_basename:
                 return file
+
+    def open_file(self, file):
+        f = io.BytesIO()
+        lbn = file.first_lbn
+        size_left = file.size
+        while size_left > 0:
+            try:
+                block = self.iso.block(lbn)
+            except IndexError:
+                if lbn == file.first_lbn:
+                    return f
+                break
+            f.write(block.data[0:min(block.data_size, size_left)])
+            lbn += 1
+            size_left -= block.data_size
+        f.seek(0)
+        return f
 
     def get_file_path(self, file):
         if hasattr(file, "path"):

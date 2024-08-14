@@ -38,7 +38,9 @@ class P3doPathReader(ChunkedHashTrait, IsoPathReader):
     def open_file(self, file):
         inode = pycdlib.inode.Inode()
         inode.new(file.byte_length, self.fp, False, file.copy_offset * file.block_size)
-        return pycdlib.pycdlibio.PyCdlibIO(inode, file.block_size)
+        reader = pycdlib.pycdlibio.PyCdlibIO(inode, file.block_size)
+        reader.name = self.get_file_path(file)
+        return reader
 
     def get_file_sector(self, file):
         return file.copy_offset

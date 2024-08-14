@@ -55,7 +55,7 @@ class BaseIsoProcessor:
             return "dreamcast"
 
         fp.seek(0)
-        if fp.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
+        if fp.read(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             return "3do"
 
         fp.seek(0x1C)
@@ -72,15 +72,8 @@ class BaseIsoProcessor:
             return "wii"
 
         fp.seek(0x8001)
-        if fp.peek(5) == b'CD-I ':
+        if fp.read(5) == b'CD-I ':
             return "cdi"
-
-        try:
-            user_l0 = iso_path_reader.get_file("/USER_L0.IMG")
-            with iso_path_reader.open_file(user_l0):
-                return "psp"
-        except FileNotFoundError:
-            pass
 
         if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader, PathlabPathReader)):
             for sys_type, exe_type, expected_header in (("xbox360", ".xex", b"XEX"), ("xbox", ".xbe", b"XBE")):
@@ -146,15 +139,6 @@ class BaseIsoProcessor:
                 return "xbox"
         except FileNotFoundError:
             pass
-
-        # Look for an XBLA package
-        hex_pattern = re.compile(r'.*/?(?:([0-9a-fA-F]{16})|([0-9a-fA-F]{6}~1$))')
-        for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
-            file_path = iso_path_reader.get_file_path(file)
-            if hex_pattern.match(file_path):
-                with iso_path_reader.open_file(file) as f:
-                    if f.read(4) in [b"LIVE", b"PIRS"]:
-                        return "xbla"
 
         # Look for a windows EXE
         for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
@@ -276,7 +260,7 @@ class BaseIsoProcessor:
                     continue
 
                 file_date = self.iso_path_reader.get_file_date(file)
-                if file_date > most_recent_file_date:
+                if file_date and file_date > most_recent_file_date:
                     most_recent_file = file
                     most_recent_file_date = file_date
                 pbar.update()
@@ -320,6 +304,9 @@ class BaseIsoProcessor:
 
     def get_pvd_info(self):
         return self.iso_path_reader.get_pvd_info()
+
+    def close(self):
+        self.iso_path_reader.close()
 
 class GenericIsoProcessor(BaseIsoProcessor):
     def hash_exe(self):

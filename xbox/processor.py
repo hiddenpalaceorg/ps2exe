@@ -693,26 +693,6 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
 
 class XboxLiveProcessor(Xbox360IsoProcessor):
-    def __init__(self, iso_path_reader, *args, **kwargs):
-        if isinstance(iso_path_reader, XboxStfsPathReader):
-            super().__init__(iso_path_reader, *args, **kwargs)
-            return
-        hex_pattern = re.compile(r'.*/?(?:([0-9a-fA-F]{16})|([0-9a-fA-F]{6}~1$))')
-        for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
-            file_path = iso_path_reader.get_file_path(file)
-            if hex_pattern.match(file_path):
-                f = iso_path_reader.open_file(file)
-                f.__enter__()
-                if f.read(4) in [b"LIVE", b"PIRS"]:
-                    f.seek(0)
-                    stfs = STFS(filename=None, fd=f)
-                    if stfs.content_type not in [0xD0000, 0x80000]:
-                        continue
-                    stfs.parse_filetable()
-                    iso_path_reader = XboxStfsPathReader(stfs, iso_path_reader.fp)
-                    break
-        super().__init__(iso_path_reader, *args, **kwargs)
-
     def get_exe_filename(self):
         # Check for an XNA game EXE
         try:

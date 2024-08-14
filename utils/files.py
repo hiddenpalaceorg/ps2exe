@@ -1,3 +1,4 @@
+import io
 import logging
 import math
 import mmap
@@ -5,6 +6,7 @@ import os
 from io import UnsupportedOperation
 
 from utils.common import MSF
+from utils.mmap import FakeMemoryMap
 from utils.unscambler import unscramble_data, lookup_table
 
 LOGGER = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ class BaseFile:
 
     def read(self, n):
         ret = self._get_data(n)
-        self.pos += n
+        self.pos += len(ret)
         return ret
 
     def close(self):
@@ -52,6 +54,13 @@ class AccessBySliceFile(BaseFile):
         pos = self.tell()
         return self[pos:pos + n]
 
+    def __enter__(self):
+        self.pos = 0
+        return self
+
+    def __exit__(self, *args):
+        return
+
     def __getitem__(self, key):
         raise NotImplementedError
 
@@ -60,13 +69,13 @@ class MmapWrapper(AccessBySliceFile, BaseFile):
     def __init__(self, mmap):
         super().__init__()
         self.mmap = mmap
-
-    @property
-    def name(self):
-        return getattr(self.mmap, "name", None)
+        self.name = getattr(self.mmap, "name", None)
 
     def __len__(self):
         return len(self.mmap)
+
+    def close(self):
+        self.mmap.close()
 
 
 class MmappedFile(MmapWrapper):
@@ -75,13 +84,12 @@ class MmappedFile(MmapWrapper):
             _mmap = fp
             self._name = None
         else:
-            _mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
-            self._name = fp.name
-        super().__init__(_mmap)
-
-    @property
-    def name(self):
-        return self._name
+            try:
+                self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
+                self.name = fp.name
+            except (AttributeError, UnsupportedOperation):
+                self.mmap = FakeMemoryMap(fp)
+                self.name = ""
 
     def __getattr__(self, item):
         return getattr(self.mmap, item)
@@ -106,6 +114,8 @@ class ConcatenatedFile(AccessBySliceFile):
         self.lengths = []
         self.offsets = offsets[:]
         self.offsets.sort()
+        self.pos = 0
+        self.name = fps[0].name
 
         for fp in fps:
             if not isinstance(fp, BaseFile):
@@ -167,7 +177,7 @@ class BinWrapperException(Exception):
 class BinWrapper(AccessBySliceFile):
     def __init__(self, fp, sector_size=None, sector_offset=None, virtual_sector_size=None):
         super().__init__()
-        self.file = self.name = fp.name
+        self.file = self.name = getattr(fp, "name", "")
 
         if not isinstance(fp, MmapWrapper):
             self.mmap = MmappedFile(fp)
@@ -274,7 +284,10 @@ class BinWrapper(AccessBySliceFile):
         return ret
 
     def length(self):
-        return self.mmap.length() // self.sector_size * 2048
+        len = self.mmap.length() // self.sector_size * self.virtual_sector_size
+        if self.mmap.length() % self.sector_size:
+            return len + (self.mmap.length() - len)
+        return len
 
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -485,6 +498,9 @@ class ScrambledFile(MmapWrapper):
             item += self.offset
         return unscramble_data(self.mmap.__getitem__(item), actual_pos)
 
+    def length(self):
+        return super().length() - self.offset
+
     @staticmethod
     def test_scrambled(fp):
         # Some dumps are offset by 128 bytes and contain scrambled data afterwards
@@ -506,10 +522,12 @@ class ScrambledFile(MmapWrapper):
 
 
 class OffsetFile(MmapWrapper):
-    def __init__(self, mmap, offset, end_pos):
+    def __init__(self, mmap, offset, end_pos, file_name=None):
         super().__init__(mmap)
         self.offset = offset
         self.end_pos = end_pos
+        self.mmap = mmap
+        self.name = file_name or self.mmap.name
 
     def seek(self, pos, whence=os.SEEK_SET):
         if whence == os.SEEK_CUR:
