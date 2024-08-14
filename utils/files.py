@@ -364,6 +364,16 @@ class BinWrapper(AccessBySliceFile):
                 self.sector_offset = 24
                 return
 
+            self.mmap.seek(0x9801 + magic_offset)
+            ident = self.mmap.read(5)
+            LOGGER.debug(ident)
+            if ident in magics:
+                self.sector_size = 2048
+                self.sector_offset = 0
+                self.mmap = OffsetFile(self.mmap, 0x9801 - 0x8001, self.mmap.length())
+
+                return
+
             self.mmap.seek(0x9c41 + magic_offset)
             ident = self.mmap.read(5)
             LOGGER.debug(ident)
