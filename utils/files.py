@@ -1,4 +1,5 @@
 import logging
+import math
 import mmap
 import os
 
@@ -179,16 +180,20 @@ class BinWrapper(AccessBySliceFile):
         if not LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug = lambda x: x
 
+        self.virtual_sector_size = None
         if sector_size is None or sector_offset is None:
             self.detect_sector_size()
         else:
             self.sector_size = sector_size
             self.sector_offset = sector_offset
 
+        if self.virtual_sector_size is None:
+            self.virtual_sector_size = self.sector_size - self.sector_offset
+
         self.starting_sector = self.virtual_offset = 0
         if self.sector_size == 2352:
             self.starting_sector = self.get_first_sector()
-            self.virtual_offset = self.starting_sector * 2048
+            self.virtual_offset = self.starting_sector * self.virtual_sector_size
 
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
 
@@ -225,12 +230,12 @@ class BinWrapper(AccessBySliceFile):
         buffer = bytearray()
 
         while length > 0:
-            sector = pos // 2048
+            sector = pos // self.virtual_sector_size
             if sector >= self.starting_sector:
                 sector -= self.starting_sector
-            pos_in_sector = pos % 2048
-            sector_read_length = min(length, 2048 - pos_in_sector)
-            read_pos = sector * self.sector_size + self.sector_offset + pos % 2048
+            pos_in_sector = pos % self.virtual_sector_size
+            sector_read_length = min(length, self.virtual_sector_size - pos_in_sector)
+            read_pos = sector * self.sector_size + self.sector_offset + pos % self.virtual_sector_size
 
             LOGGER.debug(f"{pos=} {sector=} {pos_in_sector=} {sector_read_length=}")
 
@@ -296,6 +301,7 @@ class BinWrapper(AccessBySliceFile):
         if ident == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
             self.sector_size = 2352
             self.sector_offset = 16
+            self.virtual_sector_size = 2048
             return
 
         # Gamecube disc
@@ -336,6 +342,7 @@ class BinWrapper(AccessBySliceFile):
         if ident == b"Apple_HFS":
             self.sector_size = 2352
             self.sector_offset = 16
+            self.virtual_sector_size = 2048
             return
 
         # ISO9660 or CD-I discs
@@ -354,6 +361,7 @@ class BinWrapper(AccessBySliceFile):
             if ident in magics:
                 self.sector_size = 2352
                 self.sector_offset = 16
+                self.virtual_sector_size = 2048
                 return
 
             self.mmap.seek(0x9319 + magic_offset)
@@ -362,6 +370,7 @@ class BinWrapper(AccessBySliceFile):
             if ident in magics:
                 self.sector_size = 2352
                 self.sector_offset = 24
+                self.virtual_sector_size = 2048
                 return
 
             self.mmap.seek(0x9c41 + magic_offset)
@@ -370,6 +379,7 @@ class BinWrapper(AccessBySliceFile):
             if ident in magics:
                 self.sector_size = 2352
                 self.sector_offset = 16
+                self.virtual_sector_size = 2048
                 return
 
         # Xbox (360) discs

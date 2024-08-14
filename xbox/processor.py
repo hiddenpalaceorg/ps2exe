@@ -1,3 +1,4 @@
+import base64
 import ctypes
 import datetime
 import hashlib
@@ -15,8 +16,10 @@ from Crypto.Cipher import AES
 
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.processor import BaseIsoProcessor
+from utils.files import ConcatenatedFile
 from xbox.path_reader import XboxPathReader, XboxStfsPathReader
 from xbox.stfs.stfs import STFS
+from xbox.utils.xdbf import XDBF
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +49,7 @@ class XboxIsoProcessor(BaseIsoProcessor):
                 try:
                     if not (exe_info := self._parse_exe(file_path)):
                         continue
-                except (pefile.PEFormatError, AssertionError, struct.error):
+                except (pefile.PEFormatError, AssertionError, struct.error, UnicodeDecodeError):
                         continue
                 self.ignored_paths.append(re.compile(rf"^{re.escape(file_path_lower)}$", re.IGNORECASE))
                 if exe_info.get("header_title") in ["CDX", "Installer"]:
@@ -63,15 +66,12 @@ class XboxIsoProcessor(BaseIsoProcessor):
         self.exe_info = found_exes[exe]
         return exe
 
-
     def get_most_recent_file_info(self, exe_date):
         if not isinstance(self.iso_path_reader, XboxPathReader):
             return super().get_most_recent_file_info(exe_date)
         return {}
 
     def _parse_exe(self, exe_filename):
-        if exe_filename.endswith("xex"):
-            return Xbox360IsoProcessor(self.iso_path_reader, self.filename, self.system_type)._parse_exe(exe_filename)
         LOGGER.info("Parsing xbe file headers. xbe name: %s", exe_filename)
         try:
             result = {}
@@ -120,6 +120,17 @@ char_t = ctypes.c_char
 uint8_t  = ctypes.c_byte
 uint16_t = ctypes.c_ushort
 uint32_t = ctypes.c_uint
+
+
+# ImageXEXHeader for "XEX0" format, which only contains very basic information (>=1332)
+class ImageXEXHeader_30(ctypes.BigEndianStructure):
+    _fields_ = [
+        ("Magic", uint32_t),
+        ("SizeOfHeaders", uint32_t),
+        ("LoadAddress", uint32_t),
+        ("Unknown14", uint32_t),
+        ("HeaderDirectoryEntryCount", uint32_t),
+    ]
 
 
 # ImageXEXHeader for "XEX?" format, which doesn't contain a SecurityInfo struct (>=1529)
@@ -342,6 +353,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
     _MAGIC_XEX25 = b"XEX%"  # >=1746
     _MAGIC_XEX2D = b"XEX-"  # >=1640
     _MAGIC_XEX3F = b"XEX?"  # >=1529
+    _MAGIC_XEX30 = b"XEX0"  # >=1332
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -350,6 +362,11 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
         self.optional_headers = {}
         self.optional_header_locations = {}
         self.xex_security_info = None
+
+    def get_disc_type(self):
+        if isinstance(self.iso_path_reader.fp, ConcatenatedFile):
+            return {"disc_type": "xbla"}
+        return super().get_disc_type()
 
     def read_struct(self, f, struct):
         s = struct()
@@ -378,8 +395,13 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
         f.seek(0)
         if xex_magic == self._MAGIC_XEX3F:
             self.xex_header = self.read_struct(f, ImageXEXHeader_3F)
-        else:
+        elif xex_magic == self._MAGIC_XEX30:
+            self.xex_header = self.read_struct(f, ImageXEXHeader_30)
+        elif xex_magic in [self._MAGIC_XEX2D, self._MAGIC_XEX25, self._MAGIC_XEX31, self._MAGIC_XEX32]:
             self.xex_header = self.read_struct(f, ImageXEXHeader)
+        else:
+            LOGGER.warning("Invalid xex file: bad magic.")
+            raise AssertionError("Invalid xex file: bad magic.")
 
         self.optional_header_locations = {}
         if self.xex_header.HeaderDirectoryEntryCount != 0xFFFFFFFF:
@@ -491,7 +513,6 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                 # Verify current block
                 hash = sha1(data)
                 if hash.digest() != bytes(block_header.DataDigest):
-                    LOGGER.warning("Could not decrypt xex")
                     return None
 
                 temp_stream = io.BytesIO(data)
@@ -576,7 +597,14 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
 
             if self.XEX_ORIGINAL_PE_NAME in self.optional_headers:
                 exe_name = self.optional_headers[self.XEX_ORIGINAL_PE_NAME].strip(b"\x00")
-                result["alt_exe_filename"] = exe_name.decode("cp1252", errors="ignore")
+                try:
+                    result["alt_exe_filename"] = exe_name.decode("cp1252")
+                except UnicodeDecodeError:
+                    result["alt_exe_filename"] = exe_name.decode("cp1252", errors="ignore")
+                    if len(result["alt_exe_filename"]) > 255:
+                        result["alt_exe_filename"] = base64.b64encode(
+                            result["alt_exe_filename"][0:255].encode()
+                        ).decode()
 
             if self.xex_security_info:
                 if self.xex_magic != self._MAGIC_XEX2D:
@@ -602,6 +630,7 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
                         result["exe_signing_type"] = self.xex_key_names[i]
                     break
             if not pe:
+                LOGGER.warning("Could not decrypt xex")
                 return result
 
             LOGGER.info("Parsing PE file")
@@ -647,8 +676,11 @@ class Xbox360IsoProcessor(XboxIsoProcessor):
             if len(xdbf_data.read(1)) != 1:
                 return result
             xdbf_data.seek(0)
-            from .utils.xdbf import XDBF
-            xdbf = XDBF(xdbf_data)
+            try:
+                xdbf = XDBF(xdbf_data)
+            except AssertionError:
+                LOGGER.info("XDBF resources not found or invalid")
+                return result
             try:
                 result["header_title"] = xdbf.string_table[1].strings[32768].decode()
             except (IndexError, KeyError):
@@ -676,9 +708,43 @@ class XboxLiveProcessor(Xbox360IsoProcessor):
                     stfs = STFS(filename=None, fd=f)
                     if stfs.content_type not in [0xD0000, 0x80000]:
                         continue
+                    stfs.parse_filetable()
                     iso_path_reader = XboxStfsPathReader(stfs, iso_path_reader.fp)
                     break
         super().__init__(iso_path_reader, *args, **kwargs)
+
+    def get_exe_filename(self):
+        # Check for an XNA game EXE
+        try:
+            gameinfo = self.iso_path_reader.get_file('/GameInfo.bin')
+            with self.iso_path_reader.open_file(gameinfo) as info:
+                header_struct = ">4sI"
+                xna_exe_path = None
+                while header_bytes := info.read(struct.calcsize(header_struct)):
+                    magic, size = struct.unpack(header_struct, header_bytes)
+                    if magic == b'EXEC':
+                        virtual_titleid, module_name, build_description = struct.unpack(">32sx42sx64sx", info.read(size))
+                        module_name = module_name.rstrip(b"\x00").decode()
+                        xna_exe_path = f'/584E07D1/{module_name}'
+                    elif magic == b'COMM':
+                        title_id,  = struct.unpack(">I", info.read(size))
+                        self.exe_info["header_product_number"] = title_id
+                    elif magic == b'TITL':
+                        title, description, unk = struct.unpack(">256s512s512s", info.read(size))
+                        self.exe_info['header_title'] = title.decode("UTF-16be").strip().replace("\x00", "")
+                    else:
+                        self.exe_info = {}
+                        return super().get_exe_filename()
+
+                if xna_exe_path:
+                    xna_exe = self.iso_path_reader.get_file(xna_exe_path)
+                    with self.iso_path_reader.open_file(xna_exe):
+                        self.ignored_paths += [re.compile(f'^{re.escape(xna_exe_path)}$', re.IGNORECASE)]
+                        return xna_exe_path
+        except FileNotFoundError:
+            return super().get_exe_filename()
+
+        return super().get_exe_filename()
 
     def get_disc_type(self):
         return {"disc_type": "xbla"}

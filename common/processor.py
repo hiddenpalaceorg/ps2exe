@@ -83,26 +83,26 @@ class BaseIsoProcessor:
             pass
 
         if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader, PathlabPathReader)):
-            for sys_type, exe in (("xbox360", "/default.xex"), ("xbox", "/default.xbe")):
-                try:
-                    default_xbe = iso_path_reader.get_file(exe)
-                    with iso_path_reader.open_file(default_xbe):
-                        return sys_type
-                except FileNotFoundError:
-                    pass
+            for sys_type, exe_type, expected_header in (("xbox360", ".xex", b"XEX"), ("xbox", ".xbe", b"XBE")):
+                for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=False):
+                    file_path = iso_path_reader.get_file_path(file)
+                    if file_path.lower() == f"/default{exe_type}":
+                        with iso_path_reader.open_file(file) as f:
+                            if f.read(3).startswith(expected_header):
+                                return sys_type
 
-            # could not find default.xbe in root, use first xbe we can find
-            for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
-                file_path = iso_path_reader.get_file_path(file)
-                if file_path.lower().endswith(".xbe"):
-                    return "xbox"
-                elif file_path.lower().endswith(".xex"):
-                    return "xbox360"
-                # Also look for EXE files if they have an xex header
-                elif file_path.lower().endswith(".exe"):
-                    with iso_path_reader.open_file(file) as f:
-                        if f.read(4) in [b"XEX2", b"XEX1", b"XEX%", b"XEX-", b"XEX?"]:
-                            return "xbox360"
+                # could not find default exe in root, use first exe we can find
+                for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=True):
+                    file_path = iso_path_reader.get_file_path(file)
+                    if file_path.lower().endswith(exe_type):
+                        with iso_path_reader.open_file(file) as f:
+                            if f.read(3).startswith(expected_header):
+                                return sys_type
+                    # Also look for EXE files if they have an xex header
+                    elif exe_type == ".xex" and file_path.lower().endswith(".exe"):
+                        with iso_path_reader.open_file(file) as f:
+                            if f.read(4) in [b"XEX2", b"XEX1", b"XEX%", b"XEX-", b"XEX?"]:
+                                return "xbox360"
 
         pvd = iso_path_reader.get_pvd()
         if pvd and pvd.system_identifier.strip() == b'PSP GAME':
