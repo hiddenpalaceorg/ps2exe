@@ -1,5 +1,6 @@
 import argparse
 import csv
+import gc
 import io
 import logging
 import os
@@ -13,6 +14,7 @@ import utils.files
 from common.factory import IsoProcessorFactory
 from common.processor import BaseIsoProcessor
 from common.iso_path_reader.methods.directory import DirectoryPathReader
+from exceptions import SkippableError
 from patches import apply_patches
 from utils.common import is_path_allowed
 
@@ -94,7 +96,7 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
 
             basename = os.path.basename(file_path).encode("cp1252", errors="replace")
             nested_path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(
-                fp, basename.decode("cp1252"), current_path_reader
+                fp, basename.decode("cp1252"), current_path_reader, PROGRESS_MANAGER
             )
             for i in range(0, len(nested_path_readers)):
                 try:
@@ -125,8 +127,12 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
 
             for nested_path_reader in nested_path_readers:
                 LOGGER.info("Found volume type %s", nested_path_reader.volume_type)
-                nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
-                                                                 disable_contents_checksum)
+                try:
+                    nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
+                                                                     disable_contents_checksum)
+                except SkippableError as e:
+                    LOGGER.warning(str(e))
+                    continue
 
                 if nested_info:
                     nested_info["name"] = basename.decode("cp1252")
@@ -162,7 +168,7 @@ def get_iso_info(iso_filename, disable_contents_checksum):
     basename = os.path.basename(iso_filename).encode("cp1252", errors="replace").decode("cp1252")
     LOGGER.info("Reading %s", iso_path.decode("cp1252"))
 
-    path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(fp, basename, parent_container)
+    path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(fp, basename, parent_container, PROGRESS_MANAGER)
     LOGGER.info("Found %d volumes and encountered %d errors", len(path_readers), len(exceptions))
     if exceptions:
         LOGGER.warning("The following exceptions were encountered when searching for containers, iso: %s", iso_filename)
@@ -348,10 +354,11 @@ if __name__ == '__main__':
     file_count = 0
     files = []
     if args.file:
-        if args.file not in existing_files and is_path_allowed(args.file):
-            file_count += 1
-            files.append(args.file)
-            status_bar.update()
+        if args.file not in existing_files:
+            if is_path_allowed(args.file, args.allow_extensions):
+                file_count += 1
+                files.append(args.file)
+                status_bar.update()
     elif args.input_dir:
         max_n = 2000000
 
@@ -369,8 +376,9 @@ if __name__ == '__main__':
                     continue
                 if path in existing_files:
                     continue
-                if not is_path_allowed(path):
+                if not is_path_allowed(path, args.allow_extensions):
                     continue
+
                 file_count += 1
                 files.append(path)
                 status_bar.update()
@@ -380,6 +388,7 @@ if __name__ == '__main__':
 
             if file_count > max_n:
                 break
+
     status_bar.counter_format = PROGRESS_MANAGER.term.bold_underline_bright_white_on_lightslategray(
         "PS2EXE {version} {fill}Current Game: {game_name} ({count}/{games}){fill}{elapsed}"
     )
@@ -401,4 +410,6 @@ if __name__ == '__main__':
                 csv_file.flush()
 
         except Exception:
-            LOGGER.exception("Error reading %s", args.file)
+            LOGGER.exception("Error reading %s", path)
+        finally:
+            gc.collect()

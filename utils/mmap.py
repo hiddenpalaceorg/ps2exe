@@ -87,3 +87,6 @@ class FakeMemoryMap(object):
 
     def close(self):
         self._file.close()
+
+    def write(self, data):
+        return self._file.write(data)

@@ -16,6 +16,9 @@ class BaseFile:
     def __init__(self):
         self.pos = 0
 
+    def seekable(self):
+        return True
+
     def seek(self, pos, whence=os.SEEK_SET):
         LOGGER.debug(f"seek {pos} {whence}")
         if whence == os.SEEK_SET:
@@ -29,9 +32,29 @@ class BaseFile:
         return self.pos
 
     def peek(self, n):
+        if n is None or n < 0:
+            n = self.length() - self.pos
         return self._get_data(n)
 
-    def read(self, n):
+    def readinto(self, b):
+        readsize = self.length() - self.tell()
+        if readsize > 0:
+            mv = memoryview(b)
+            m = mv.cast('B')
+            readsize = min(readsize, len(m))
+            data = self.read(readsize)
+            n = len(data)
+            m[:n] = data
+        else:
+            n = 0
+
+        return n
+
+    def read(self, n=None):
+        if n is None or n < 0:
+            n = self.length() - self.pos
+        if n + self.pos > self.length():
+            n = self.length() - self.pos
         ret = self._get_data(n)
         self.pos += len(ret)
         return ret
@@ -50,7 +73,7 @@ class BaseFile:
 
 
 class AccessBySliceFile(BaseFile):
-    def _get_data(self, n):
+    def _get_data(self, n, discard=False):
         pos = self.tell()
         return self[pos:pos + n]
 
@@ -80,16 +103,15 @@ class MmapWrapper(AccessBySliceFile, BaseFile):
 
 class MmappedFile(MmapWrapper):
     def __init__(self, fp):
-        if isinstance(fp, mmap.mmap):
+        if isinstance(fp, (mmap.mmap, FakeMemoryMap)):
             _mmap = fp
             self._name = None
         else:
             try:
                 self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
-                self.name = fp.name
             except (AttributeError, UnsupportedOperation):
                 self.mmap = FakeMemoryMap(fp)
-                self.name = ""
+            self.name = getattr(fp, "name", "")
 
     def __getattr__(self, item):
         return getattr(self.mmap, item)
@@ -496,7 +518,7 @@ class OffsetFile(MmapWrapper):
         if n:
             ret = self[self.tell():self.tell()+n]
         else:
-            ret = self[self.tell():]
+            ret = self[self.tell():self.end_pos-self.offset]
 
         self.pos += len(ret)
         return ret
@@ -516,6 +538,15 @@ class OffsetFile(MmapWrapper):
             return b''
         return self.mmap[file_pos:file_pos+read_len]
 
+    def write(self, data):
+        try:
+            self.mmap.seek(self.pos)
+            ret = self.mmap.write(data)
+            self.pos += len(data)
+            return ret
+        except ValueError:
+            raise
+
     def length(self):
         return self.end_pos - self.offset
 
@@ -531,8 +562,59 @@ def get_file_size(file):
         file.fileno()
         return os.stat(file.name).st_size
     except (AttributeError, UnsupportedOperation):
+        from utils.archives import ArchiveEntryReader, ArchiveEntryWrapper
+
+        if isinstance(file, ArchiveEntryReader):
+            return file.entry.file_size
+
+        if isinstance(file, ArchiveEntryWrapper):
+            return file.file_size
+
         pos = file.tell()
         file.seek(0, os.SEEK_END)
         size = file.tell()
         file.seek(pos)
         return size
+
+
+def iterate_patterns(fp, pattern, chunk_size=0):
+    if chunk_size < len(pattern):
+        chunk_size = len(pattern)
+
+    initial_position = fp.tell()
+
+    compensation = len(pattern) - 1
+    try:
+        while True:
+            current_position = fp.tell()
+
+            # Prepend the padding from the last chunk, to make sure that we find the pattern,
+            # even if it straddles the chunk boundary.
+            data = fp.read(chunk_size)
+            if data == b"":
+                # We've reached the end of the stream.
+                return
+
+            if len(data) < len(pattern):
+                # The length that we read from the file is the same
+                # length or less than as the pattern we're looking
+                # for, and we didn't find the pattern in there.
+                return
+
+            marker = data.find(pattern)
+            while marker != -1:
+                found_pos = current_position + marker
+                # Reset the file pointer so that calling code cannot
+                # depend on the side effect of this iterator advancing
+                # it.
+                fp.seek(initial_position)
+                yield found_pos
+                # We want to seek past the found position to the next byte,
+                # so we can call find_first again without extra seek
+                # This might seek past the actual end of the file
+                fp.seek(found_pos + len(pattern))
+                marker = data.find(pattern, marker + len(pattern))
+
+            fp.seek(-compensation, os.SEEK_CUR)
+    finally:
+        fp.seek(initial_position)

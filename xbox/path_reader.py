@@ -97,6 +97,9 @@ class XboxStfsPathReader(XboxPathReader):
         f.name = self.get_file_path(file)
         return f
 
+    def get_file_sector(self, file):
+        raise NotImplementedError
+
     def get_file_size(self,file):
         return file.size
 
