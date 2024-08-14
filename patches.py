@@ -327,3 +327,21 @@ def apply_patches():
         except zipfile.BadZipfile:
             pass
     zipfile.ZipInfo._decodeExtra = _decodeExtra
+
+    import gzip
+    def _read_eof(self):
+        # Same as parent but checking for FF padding as well as 00
+        crc32, isize = struct.unpack("<II", self._read_exact(8))
+        if crc32 != self._crc:
+            raise gzip.BadGzipFile("CRC check failed %s != %s" % (hex(crc32),
+                                                             hex(self._crc)))
+        elif isize != (self._stream_size & 0xffffffff):
+            raise gzip.BadGzipFile("Incorrect length of data produced")
+
+        c = b"\x00"
+        while c in [b"\x00", b"\xff"]:
+            c = self._fp.read(1)
+        if c:
+            self._fp.prepend(c)
+
+    gzip._GzipReader._read_eof = _read_eof

@@ -1,9 +1,7 @@
 import fnmatch
 import io
 import logging
-import os
 import re
-import sys
 
 import rarfile
 
@@ -80,7 +78,47 @@ class IsoProcessorFactory:
                     if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
                         LOGGER.warning("Error processing %s: %s", file_name, e.msg)
                     elif getattr(e, "msg", "").startswith("Unrecognized archive format"):
-                        LOGGER.warning("Error processing %s: %s", file_name, e.msg)
+                        if magic_to_try not in [b"\x1F\x8B", b"BZh", b"\xFD7zXZ\x00"]:
+                            LOGGER.warning("Error processing %s: %s", file_name, e.msg)
+                        elif magic_to_try == b"\x1F\x8B":
+                            # gzipped non-archive file. decompress the
+                            # file and check for other types of containers
+                            fp.seek(0)
+                            try:
+                                import gzip
+                                gzfp = gzip.GzipFile(fileobj=fp, mode="rb")
+                                # Test if the file can be ungzipped
+                                gzfp.seek(0, io.SEEK_END)
+                                fp = gzfp
+                                break
+                            except ImportError:
+                                LOGGER.warning("gzip support not available, not able to decompress %s", file_name)
+                            except Exception as e:
+                                if e.__class__.__name__ == "BadGzipFile":
+                                    LOGGER.warning("Gzipped file %s could not be decompressed", file_name)
+                                    gzfp = None
+                                else:
+                                    raise
+                        elif magic_to_try == b"BZh":
+                            # gzipped non-archive file. decompress the
+                            # file and check for other types of containers
+                            fp.seek(0)
+                            try:
+                                import bz2
+                                fp = bz2.BZ2File(filename=fp, mode="rb")
+                                break
+                            except ImportError:
+                                LOGGER.warning("bz2 support not available, not able to decompress %s", file_name)
+                        elif magic_to_try == b"\xFD7zXZ\x00":
+                            # gzipped non-archive file. decompress the
+                            # file and check for other types of containers
+                            fp.seek(0)
+                            try:
+                                import lzma
+                                fp = lzma.LZMAFile(filename=fp, mode="rb")
+                                break
+                            except ImportError:
+                                LOGGER.warning("lzma support not available, not able to decompress %s", file_name)
                     else:
                         exceptions[CompressedPathReader.volume_type] = e
 
