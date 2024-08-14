@@ -124,15 +124,15 @@ class Ps3PathReader(PyCdLibPathReader):
             return
 
         # Check if there exists a 32 byte hexadecimal or 16 byte file in the same dir. That may be the key
-        file_dir = pathlib.Path(self.fp.file).parent.absolute()
-        for i in file_dir.iterdir():
-            if i.stat().st_size == 32:
+        file_dir = self.parent_container.get_file(str(pathlib.Path(self.fp.file).parent))
+        for i in self.parent_container.iso_iterator(file_dir):
+            if self.parent_container.get_file_size(i) == 32:
                 try:
-                    key = bytes.fromhex(i.open("r").read())
+                    key = bytes.fromhex(self.parent_container.open_file(i).read().decode())
                 except ValueError:
                     continue
-            elif i.stat().st_size == 16:
-                key = i.open("rb").read()
+            elif self.parent_container.get_file_size(i) == 16:
+                key = self.parent_container.open_file(i).read()
             else:
                 continue
 

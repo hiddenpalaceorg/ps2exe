@@ -3,12 +3,16 @@ import csv
 import io
 import logging
 import os
+import pathlib
 import sys
+from collections import defaultdict
 
 import enlighten
 
+import utils.files
 from common.factory import IsoProcessorFactory
 from common.processor import BaseIsoProcessor
+from common.iso_path_reader.methods.directory import DirectoryPathReader
 from patches import apply_patches
 from utils.common import is_path_allowed
 
@@ -21,31 +25,19 @@ LOGGER = logging.getLogger(__name__)
 PROGRESS_MANAGER = enlighten.get_manager()
 
 
-def get_iso_info(iso_filename, disable_contents_checksum):
-    iso_path = iso_filename.encode("cp1252", errors="replace")
-    basename = os.path.basename(iso_filename).encode("cp1252", errors="replace")
-    LOGGER.info("Reading %s", iso_path.decode("cp1252"))
-
-    fp = open(iso_filename, "rb")
-    info = {"name": basename.decode("cp1252"), "path": iso_filename}
-
-    if not (iso_path_reader := IsoProcessorFactory.get_iso_path_reader(fp, basename)):
-        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
-        return
-
-    system = BaseIsoProcessor.get_system_type(iso_path_reader)
+def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
+    info = {"name": basename.decode("cp1252"), "path": iso_path}
+    system = BaseIsoProcessor.get_system_type(path_reader)
     info.update({"system": system})
 
-    if not (iso_processor_class := IsoProcessorFactory.get_iso_processor_class(system)):
-        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
-        return
+    iso_processor_class = IsoProcessorFactory.get_iso_processor_class(system)
+    if not iso_processor_class:
+        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_path)
+        return None
 
-    iso_processor = iso_processor_class(iso_path_reader, iso_filename, system, PROGRESS_MANAGER)
-
+    iso_processor = iso_processor_class(path_reader, basename.decode("cp1252"), system, PROGRESS_MANAGER)
     info.update(iso_processor.get_disc_type())
-
     info.update(iso_processor.get_pvd_info())
-
     info.update(iso_processor.hash_exe())
     info.update(iso_processor.get_most_recent_file_info(info.get("exe_date")))
 
@@ -54,9 +46,141 @@ def get_iso_info(iso_filename, disable_contents_checksum):
 
     info.update(iso_processor.get_extra_fields())
 
-    fp.close()
+    return info, iso_processor
 
-    return info
+
+def process_nested_containers(initial_path_reader, base_iso_path, disable_contents_checksum, rows):
+    container_stack = defaultdict(list)
+    container_stack[None].append(initial_path_reader)
+    container_paths = defaultdict(str)
+    container_paths[initial_path_reader] = base_iso_path
+    file_stack = defaultdict(list)
+    processed_containers = defaultdict(list)
+    nested_path_reader = None
+
+    LOGGER.info("Checking for nested containers")
+
+    for file in initial_path_reader.iso_iterator(initial_path_reader.get_root_dir(), recursive=True):
+        file_stack[initial_path_reader].append(file)
+
+    while container_stack:
+        parent_container = next(reversed(container_stack.keys()))
+        try:
+            current_path_reader = container_stack[parent_container].pop()
+        except IndexError:
+            current_path_reader = parent_container
+
+        current_base_path = container_paths[current_path_reader]
+
+        while file_stack[current_path_reader]:
+            nested_path_reader = None
+            file = file_stack[current_path_reader].pop()
+            f = current_path_reader.open_file(file)
+            try:
+                f.__enter__()
+            except AttributeError:
+                pass
+            file_path = current_path_reader.get_file_path(file)
+            if not is_path_allowed(file_path, args.allow_extensions):
+                f.__exit__()
+                continue
+
+            basename = os.path.basename(file_path).encode("cp1252", errors="replace")
+            try:
+                nested_path_reader = IsoProcessorFactory.get_iso_path_reader(
+                    f, basename.decode("cp1252"), current_path_reader
+                )
+                if not nested_path_reader:
+                    f.__exit__()
+                    continue
+            except utils.files.BinWrapperException:
+                f.__exit__()
+                continue
+
+            nested_path = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
+
+            LOGGER.info("Found nested container %s", nested_path)
+
+            nested_info, nested_iso_processor = extract_info(nested_path_reader, basename, file_path,
+                                                             disable_contents_checksum)
+
+            nested_info["name"] = basename.decode("cp1252")
+            nested_info["path"] = nested_path
+            if nested_info:
+                rows.append(nested_info)
+                container_stack[current_path_reader].append(nested_path_reader)
+                processed_containers[current_path_reader].append((nested_iso_processor, f))
+                container_paths[nested_path_reader] = nested_path
+
+            else:
+                try:
+                    f.__exit__()
+                except AttributeError:
+                    pass
+
+            bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+            bar.desc = os.path.basename(basename.decode("cp1252"))
+            bar.refresh()
+            cleanup_bars()
+
+            if nested_info:
+                break
+
+        if nested_path_reader:
+            for file in nested_path_reader.iso_iterator(nested_path_reader.get_root_dir(), recursive=True):
+                file_stack[nested_path_reader].append(file)
+
+        if len(file_stack[current_path_reader]) == 0 and len(container_stack[current_path_reader]) == 0:
+            if current_path_reader:
+                current_path_reader.close()
+            try:
+                f.__exit__()
+            except AttributeError:
+                pass
+            container_stack.pop(current_path_reader)
+            file_stack.pop(current_path_reader)
+
+    return rows
+
+
+def get_iso_info(iso_filename, disable_contents_checksum):
+    iso_path = iso_filename.encode("cp1252", errors="replace")
+    fp = open(iso_filename, "rb")
+    parent_container = DirectoryPathReader(pathlib.Path(fp.name).parent)
+
+    rows = []
+
+    basename = os.path.basename(iso_filename).encode("cp1252", errors="replace").decode("cp1252")
+    LOGGER.info("Reading %s", iso_path.decode("cp1252"))
+
+    iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, basename, parent_container)
+    if not iso_path_reader:
+        LOGGER.exception(f"Could not read ISO, this might be an unsupported format, iso: %s", iso_filename)
+        return rows
+
+    info, iso_processor = extract_info(iso_path_reader, basename.encode("cp1252", errors="replace"), iso_filename,
+                                       disable_contents_checksum)
+    if info:
+        rows.append(info)
+
+    bar = list(PROGRESS_MANAGER.counters.keys())[-1]
+    bar.desc = os.path.basename(path)
+    bar.refresh()
+
+    process_nested_containers(iso_path_reader, iso_filename, disable_contents_checksum, rows)
+
+    iso_processor.close()
+    fp.close()
+    return rows
+
+
+def cleanup_bars():
+    while len(PROGRESS_MANAGER.counters) > 10:
+        oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
+        oldest_bar[0].leave = False
+        if getattr(oldest_bar[0], "_closed", False):
+            oldest_bar[0]._closed = False
+        oldest_bar[0].close()
 
 
 csv_headers = (
@@ -241,21 +365,14 @@ if __name__ == '__main__':
     for path in files:
         status_bar.update(game_name=os.path.basename(path))
 
-        while len(PROGRESS_MANAGER.counters) > 10:
-            oldest_bar = list(PROGRESS_MANAGER.counters.keys())[1:2]
-            oldest_bar[0].leave = False
-            if getattr(oldest_bar[0], "_closed", False):
-                oldest_bar[0]._closed = False
-            oldest_bar[0].close()
-
         if path in existing_files:
             continue
         if not is_path_allowed(path, args.allow_extensions):
             continue
         try:
-            result = get_iso_info(path, args.no_contents_checksum)
-            if result:
-                writer.writerow(result)
+            rows = get_iso_info(path, args.no_contents_checksum)
+            if len(rows):
+                writer.writerows(rows)
                 csv_file.flush()
 
                 bar = list(PROGRESS_MANAGER.counters.keys())[-1]

@@ -39,7 +39,9 @@ class XboxPathReader(ChunkedHashTrait, IsoPathReader):
     def open_file(self, file):
         inode = pycdlib.inode.Inode()
         inode.new(file.size, self.fp, False, file.offset)
-        return pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.volume.sector_size)
+        reader = pycdlib.pycdlibio.PyCdlibIO(inode, self.iso.volume.sector_size)
+        reader.name = self.get_file_path(file)
+        return reader
 
     def get_file_sector(self, file):
         return file.start_sector
@@ -87,10 +89,9 @@ class XboxStfsPathReader(XboxPathReader):
         return hash
 
     def open_file(self, file):
-        return self.iso.read_file(file)
-
-    def get_file_date(self, file):
-        return None
+        f = self.iso.read_file(file)
+        f.name = self.get_file_path(file)
+        return f
 
     def get_file_size(self,file):
         return file.size

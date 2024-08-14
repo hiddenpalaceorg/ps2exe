@@ -18,22 +18,22 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             super().__init__(iso_path_reader, iso_filename, *args)
             return
         self.iso_path_reader = iso_path_reader
-        file_dir = pathlib.Path(iso_filename).parent.absolute()
+        file_dir = self.iso_path_reader.parent_container.get_file(str(pathlib.Path(iso_filename).parent))
         found = False
         iso_filename = basename(iso_filename)
         # Try to find a gdi file in this directory
         rule = re.compile(fnmatch.translate("*.gdi"), re.IGNORECASE)
-        for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
-            i = pathlib.Path(i)
-            if not (tracks := self.parse_gdi(i, iso_filename)):
+        for i in [entry for entry in iso_path_reader.parent_container.iso_iterator(file_dir)
+                  if rule.match(iso_path_reader.parent_container.get_file_path(entry))]:
+            if not (tracks := self.parse_gdi(self.iso_path_reader.parent_container.get_file_path(i), iso_filename)):
                 continue
             if basename(iso_filename) not in [track["file_name"] for track in tracks]:
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
             if not fp:
                 continue
-            gdi_name = i.name.encode("cp1252", errors="replace")
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name)
+            gdi_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
+            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name, *args)
             found = True
             break
 
@@ -43,25 +43,26 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
 
         # No gdi file found, try a cue file
         rule = re.compile(fnmatch.translate("*.cue"), re.IGNORECASE)
-        for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
-            i = pathlib.Path(i)
-            if not (tracks := self.parse_cue(i, iso_filename)):
+        for i in [entry for entry in iso_path_reader.parent_container.iso_iterator(file_dir)
+                  if rule.match(iso_path_reader.parent_container.get_file_path(entry))]:
+            if not (tracks := self.parse_cue(self.iso_path_reader.parent_container.get_file_path(i), iso_filename)):
                 continue
             if not any(track["file_name"] != basename(iso_filename) for track in tracks):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
             if not fp:
                 continue
-            cue_name = i.name.encode("cp1252", errors="replace")
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, cue_name)
+            cue_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
+            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, cue_name, *args)
             break
 
         super().__init__(iso_path_reader, iso_filename, *args)
 
-    def parse_gdi(self, gdi_file, iso_filename):
-        with gdi_file.open() as f:
+    def parse_gdi(self, gdi_path, iso_filename):
+        gdi_file = self.iso_path_reader.parent_container.get_file(gdi_path)
+        with self.iso_path_reader.parent_container.open_file(gdi_file) as f:
             try:
-                text = f.read()
+                text = f.read().decode()
             except UnicodeDecodeError:
                 return
             lines = text.splitlines()
@@ -100,21 +101,28 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         if len(tracks) > 3:
             data_tracks.append(tracks.pop())
 
+        gdi_path = self.iso_path_reader.parent_container.get_file_path(gdi_file)
+        gdi_dir = pathlib.Path(gdi_path).parent
+        try:
+            track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / data_tracks[0]["file_name"]))
+        except FileNotFoundError:
+            return
+
         # Duplicate track 3 as offset 0 to fool the iso parser to see it as a normal iso with the PVD at 0x8000
         offsets = [0]
+        files = [BinWrapper(
+            MmappedFile(self.iso_path_reader.parent_container.open_file(track_file)),
+            sector_size=data_tracks[0]["sector_size"],
+            sector_offset=16 if data_tracks[0]["sector_size"] == 2352 else 0,
+            virtual_sector_size=2048
+        )]
         try:
-            files = [BinWrapper(
-                MmappedFile(open(gdi_file.parent / data_tracks[0]["file_name"], "rb")),
-                sector_size=data_tracks[0]["sector_size"],
-                sector_offset=16 if data_tracks[0]["sector_size"] == 2352 else 0,
-                virtual_sector_size=2048
-            )]
             for track in data_tracks:
-
+                track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / track["file_name"]))
                 offsets.append(int(track["sector"]) * 2048)
                 files.append(
                     BinWrapper(
-                        open(gdi_file.parent / track["file_name"], "rb"),
+                        self.iso_path_reader.parent_container.open_file(track_file),
                         sector_size=track["sector_size"],
                         sector_offset=16 if track["sector_size"] == 2352 else 0,
                         virtual_sector_size=2048
@@ -125,9 +133,11 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
 
         return ConcatenatedFile(files, offsets)
 
-    def parse_cue(self, cue_file, iso_filename):
-        with cue_file.open() as f:
-            text = f.read()
+    def parse_cue(self, cue_path, iso_filename):
+        cue_file = self.iso_path_reader.parent_container.get_file(cue_path)
+        with self.iso_path_reader.parent_container.open_file(cue_file) as f:
+            cue_dir = str(pathlib.Path(cue_path).parent)
+            text = f.read().decode()
             lines = text.splitlines()
 
             tracks = []
@@ -142,7 +152,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
                 if match := re.match(r"FILE \"?(?P<file_name>[^\"\n]+)\"?", line):
                     if track:
                         if track["index"] != 2:
-                            sector += int((cue_file.parent / track["file_name"]).stat().st_size / track["sector_size"])
+                            file = self.iso_path_reader.parent_container.get_file(str(pathlib.Path(cue_dir) / track["file_name"]))
+                            sector += int(self.iso_path_reader.parent_container.get_file_size(file) / track["sector_size"])
                         tracks.append(track)
                     track = match.groupdict()
                     if track["file_name"] == iso_filename:

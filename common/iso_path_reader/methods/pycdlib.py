@@ -16,8 +16,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
-    def __init__(self, iso, fp, udf=False):
-        super().__init__(iso, fp)
+    def __init__(self, iso, fp, *args, udf=False, **kwargs):
+        super().__init__(iso, fp, *args, **kwargs)
         self.udf = udf
 
     def get_root_dir(self):
@@ -38,14 +38,14 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 if recursive:
                     if include_dirs:
                         yield file
-                    yield from self.iso_iterator(file, recursive)
+                    yield from self.iso_iterator(file, recursive, include_dirs)
                 continue
 
             yield file
 
     def get_file_path(self, file):
         try:
-            return self.iso.full_path_from_dirrecord(file).replace(";1", "")
+            return self.iso.full_path_from_dirrecord(file).replace(";1", "").rstrip(".")
         except UnicodeDecodeError:
             path = []
             while file.parent:
@@ -117,6 +117,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 inode.parse(file.extent_location(), file.data_length, self.fp,
                           self.iso.logical_block_size)
                 f = file_io_cls(inode, self.iso.logical_block_size)
+                f.name = self.get_file_path(file)
                 return f
 
             if len(file.inode.linked_records) > 1 and file.inode.data_length != file.data_length:
@@ -156,6 +157,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             f = ConcatenatedFile(readers, offsets)
         else:
             f = file_io_cls(file.inode, self.iso.logical_block_size)
+        f.name = self.get_file_path(file)
         return f
 
     def get_pvd(self):

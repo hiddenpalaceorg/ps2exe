@@ -2,9 +2,10 @@ from dates import datetime_from_iso_date
 
 
 class IsoPathReader:
-    def __init__(self, iso, fp):
+    def __init__(self, iso, fp, parent_container):
         self.iso = iso
         self.fp = fp
+        self.parent_container = parent_container
 
     def get_root_dir(self):
         raise NotImplementedError
@@ -59,3 +60,6 @@ class IsoPathReader:
             info[field] = datetime_from_iso_date(getattr(pvd, field))
 
         return info
+
+    def close(self):
+        self.fp.close()

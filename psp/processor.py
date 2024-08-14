@@ -1,10 +1,10 @@
+import fnmatch
 import logging
-import mmap
+import pathlib
 import re
-from os.path import basename
 
 from post_psx.processor import PostPsxIsoProcessor
-from utils.files import ConcatenatedFile
+from utils.files import ConcatenatedFile, BinWrapper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -14,34 +14,47 @@ class PspIsoProcessor(PostPsxIsoProcessor):
     update_folder = re.compile(".*/PSP_GAME/SYSDIR/UPDATE/$", re.IGNORECASE)
     sfo_path = "/PSP_GAME/PARAM.SFO"
 
-    def __init__(self, iso_path_reader, *args):
-        sub_imgs = {}
+    def __init__(self, iso_path_reader, iso_filename, system, progress_manager):
         self.disc_type = "umd"
-        for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=False):
-            file_basename = basename(iso_path_reader.get_file_path(file))
-            if file_basename.startswith("USER_L") and file_basename.endswith(".IMG"):
-                with iso_path_reader.open_file(file) as fp:
-                    buf = mmap.mmap(-1, fp.length())
-                    fp.readinto(buf)
-                    sub_imgs[file_basename] = buf
+        parent_container = iso_path_reader.parent_container
+        iso_dir = parent_container.get_file(str(pathlib.Path(iso_filename).parent))
+        rule = re.compile(fnmatch.translate("*USER_L*.IMG"), re.IGNORECASE)
+        sub_imgs = [
+            parent_container.get_file_path(file)
+            for file in parent_container.iso_iterator(iso_dir)
+            if rule.match(parent_container.get_file_path(file))
+        ]
 
-        if sub_imgs:
+        if len(sub_imgs) > 1:
             self.disc_type = "dvdr"
 
             offsets = [0]
-            sub_imgs = sorted(sub_imgs.items())
+            sub_imgs = sorted(sub_imgs)
             files = []
-            for _, sub_img in sub_imgs:
-                offsets.append(len(sub_img))
-                files.append(sub_img)
+            for sub_img in sub_imgs:
+                file = parent_container.get_file(sub_img)
+                offsets.append(parent_container.get_file_size(file))
+                f = parent_container.open_file(file)
+                if hasattr(f, "__enter__"):
+                    f.__enter__()
+                files.append(
+                    BinWrapper(
+                        f,
+                        sector_size=2048,
+                        sector_offset=0,
+                        virtual_sector_size=2048
+                    )
+                )
             offsets.pop()
 
             fp = ConcatenatedFile(files, offsets)
 
             from common.factory import IsoProcessorFactory
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, '')
+            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(
+                fp, iso_filename, iso_path_reader.parent_container, progress_manager
+            )
 
-        super().__init__(iso_path_reader, *args)
+        super().__init__(iso_path_reader, iso_filename, system, progress_manager)
 
     def get_disc_type(self):
         return {"disc_type": self.disc_type}

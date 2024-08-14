@@ -1,6 +1,8 @@
+import fnmatch
 import io
 import logging
 import os
+import re
 import struct
 import sys
 from pathlib import Path
@@ -71,11 +73,11 @@ LOGGER = logging.getLogger(__name__)
 
 class IsoProcessorFactory:
     @staticmethod
-    def get_iso_path_reader(fp, file_name):
-        file_ext = os.path.splitext(file_name)[1].decode()
+    def get_iso_path_reader(fp, file_name, parent_container):
+        file_ext = os.path.splitext(file_name)[1]
         if file_ext.lower() in [".7z", ".rar", ".zip"]:
             with libarchive.file_reader(fp.name) as archive:
-                return CompressedPathReader(archive, fp)
+                return CompressedPathReader(archive, fp, parent_container)
 
         fp.seek(0)
         if fp.read(4) == b"LIVE":
@@ -85,33 +87,47 @@ class IsoProcessorFactory:
                 offsets = []
                 files = []
                 current_size = 0
-                data_files = Path(f"{fp.name}.data").rglob("Data*")
-                for file in data_files:
-                    offsets.append(current_size)
-                    file = BinWrapper(
-                        OffsetFile(
-                           MmappedFile(file.open("rb")),
-                           offset=0x1000,
-                           end_pos=file.stat().st_size
-                        ),
-                        sector_size=0xCD000,
-                        sector_offset=0x1000,
-                    )
-                    files.append(file)
-                    current_size += file.length()
-                if len(files) == 1:
-                    fp = files[0]
-                else:
-                    fp = ConcatenatedFile(files, offsets)
+                rule = re.compile(fnmatch.translate(r"*Data[0-9]*"), re.IGNORECASE)
+                data_dir = None
+                for dir in parent_container.iso_iterator(parent_container.get_root_dir(), recursive=True,
+                                                         include_dirs=True):
+                    if parent_container.get_file_path(dir).lower().endswith(file_name.lower() + ".data"):
+                        data_dir = dir
+                        break
+                if data_dir:
+                    for data_file in parent_container.iso_iterator(data_dir):
+                        if not rule.match(parent_container.get_file_path(data_file)):
+                            continue
+                        offsets.append(current_size)
+                        f = parent_container.open_file(data_file)
+                        try:
+                            f.__enter__()
+                        except AttributeError:
+                            pass
+                        file = BinWrapper(
+                            OffsetFile(
+                               MmappedFile(f),
+                               offset=0x1000,
+                               end_pos=parent_container.get_file_size(data_file)
+                            ),
+                            sector_size=0xCD000,
+                            sector_offset=0x1000,
+                        )
+                        files.append(file)
+                        current_size += file.length()
+                    if len(files) == 1:
+                        fp = files[0]
+                    else:
+                        fp = ConcatenatedFile(files, offsets)
 
-                fp.seek(0)
-                if fp.peek(20) == b"MICROSOFT*XBOX*MEDIA":
-                    reader = XDvdFs(fp, 0, -stfs.god_offset)
-                    return XboxPathReader(reader, fp)
+                    fp.seek(0)
+                    if fp.peek(20) == b"MICROSOFT*XBOX*MEDIA":
+                        reader = XDvdFs(fp, 0, -stfs.god_offset)
+                        return XboxPathReader(reader, fp, parent_container)
             else:
                 try:
                     stfs.parse_filetable()
-                    return XboxStfsPathReader(stfs, fp)
+                    return XboxStfsPathReader(stfs, fp, parent_container)
                 except AssertionError:
                     pass
 
@@ -121,16 +137,16 @@ class IsoProcessorFactory:
             wrapper = fp
 
         wrapper.seek(0)
-        if wrapper.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
+        if wrapper.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01" and file_name != "Disc label":
             reader = OperaFs(wrapper)
             reader.initialize()
-            return P3doPathReader(reader, wrapper)
+            return P3doPathReader(reader, wrapper, parent_container)
 
         wrapper.seek(0x1C)
         if wrapper.read(4) == b"\xC2\x33\x9F\x3D":
             try:
                 iso = GamecubeISO.from_iso(wrapper)
-                return GamecubePathReader(iso, fp)
+                return GamecubePathReader(iso, fp, parent_container)
             except:
                 pass
 
@@ -138,14 +154,15 @@ class IsoProcessorFactory:
         if wrapper.read(64) == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
                 b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
             iso = GamecubeISO.from_iso(wrapper)
-            return GamecubePathReader(iso, fp)
+            return GamecubePathReader(iso, fp, parent_container)
 
         wrapper.seek(0x18)
         if wrapper.read(4) == b"\x5D\x1C\x9E\xA3":
             try:
                 disc = WiiDisc(wrapper)
-                iso = WiiISO.from_disc(wrapper.name, disc)
-                return WiiPathReader(iso, fp)
+                iso = WiiISO.from_disc(file_name, disc)
+                if iso:
+                    return WiiPathReader(iso, wrapper, parent_container)
             except ValueError:
                 pass
 
@@ -156,7 +173,7 @@ class IsoProcessorFactory:
                 try:
                     volume = Volume()
                     volume.read(wrapper)
-                    return HfsPathReader(volume, fp)
+                    return HfsPathReader(volume, fp, parent_container)
                 except (ValueError, struct.error):
                     pass
 
@@ -165,14 +182,14 @@ class IsoProcessorFactory:
             iso = PyCdlibUdf()
             try:
                 iso.open_fp(wrapper)
-                return Ps3PathReader(iso, wrapper, udf=True)
+                return Ps3PathReader(iso, wrapper, parent_container, udf=True)
             except:
                 if iso.udf_teas:
                     raise
                 try:
                     iso = pycdlib.PyCdlib()
                     iso.open_fp(wrapper)
-                    return Ps3PathReader(iso, wrapper, udf=False)
+                    return Ps3PathReader(iso, wrapper, parent_container, udf=False)
                 except:
                     raise
 
@@ -181,14 +198,14 @@ class IsoProcessorFactory:
             iso = PyCdlibUdf()
             try:
                 iso.open_fp(wrapper)
-                return Ps3PathReader(iso, wrapper, udf=True)
+                return Ps3PathReader(iso, wrapper, parent_container, udf=True)
             except:
                 if iso.udf_teas:
                     raise
                 try:
                     iso = pycdlib.PyCdlib()
                     iso.open_fp(wrapper)
-                    return Ps3PathReader(iso, wrapper, udf=False)
+                    return Ps3PathReader(iso, wrapper, parent_container, udf=False)
                 except:
                     pass
 
@@ -196,37 +213,37 @@ class IsoProcessorFactory:
         if wrapper.read(5) == b"CD-I ":
             cdi = Disc(wrapper.mmap, headers=True)
             cdi.read()
-            return CdiPathReader(cdi, wrapper.mmap)
+            return CdiPathReader(cdi, wrapper.mmap, parent_container)
 
         # Xbox and 360 ISO
         if wrapper.length() > 65556:
             wrapper.seek(0x10000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0x10000)
-                return XboxPathReader(reader, wrapper)
+                return XboxPathReader(reader, wrapper, parent_container)
         if wrapper.length() > 34144276:
             wrapper.seek(0x2090000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0x2090000)
-                return XboxPathReader(reader, wrapper)
+                return XboxPathReader(reader, wrapper, parent_container)
         if wrapper.length() > 265945108:
             wrapper.seek(0xFDA0000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0xFDA0000)
-                return XboxPathReader(reader, wrapper)
+                return XboxPathReader(reader, wrapper, parent_container)
         # Redump-style dual layer DVD
         if wrapper.length() > 405864468:
             wrapper.seek(0x18310000)
             if wrapper.peek(20) == b"MICROSOFT*XBOX*MEDIA":
                 reader = XDvdFs(wrapper, 0x18310000)
-                return XboxPathReader(reader, wrapper)
+                return XboxPathReader(reader, wrapper, parent_container)
 
         wrapper.seek(0)
 
         iso = pycdlib.PyCdlib()
         try:
             iso.open_fp(wrapper)
-            return PyCdLibPathReader(iso, wrapper)
+            return PyCdLibPathReader(iso, wrapper, parent_container)
         except Exception:
             # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
             if not hasattr(iso, "pvd") and not hasattr(iso, "pvds"):
@@ -236,7 +253,7 @@ class IsoProcessorFactory:
                 try:
                     iso.get_record(iso_path="/test_path_that_does_not_exist")
                 except PyCdlibInvalidInput:
-                    return PyCdLibPathReader(iso, wrapper)
+                    return PyCdLibPathReader(iso, wrapper, parent_container)
                 except:
                     pass
             if not iso.pvds and not iso._has_udf:
@@ -247,10 +264,10 @@ class IsoProcessorFactory:
         if iso._has_udf:
             iso = PyCdlibUdf()
             iso.open_fp(wrapper)
-            return PyCdLibPathReader(iso, wrapper, udf=True)
+            return PyCdLibPathReader(iso, wrapper, parent_container, udf=True)
         else:
             iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
-            return PathlabPathReader(iso_accessor, wrapper, pvd=iso.pvd)
+            return PathlabPathReader(iso_accessor, wrapper, parent_container, pvd=iso.pvd)
 
 
     @staticmethod
