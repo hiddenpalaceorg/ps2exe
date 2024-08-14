@@ -18,6 +18,9 @@ LOGGER = logging.getLogger(__name__)
 
 class BaseIsoProcessor:
     ignored_paths = []
+    _hash_bar_fmt = '    Hashing {file_name} {desc_pad}{percentage:3.0f}%|{bar}| ' \
+                    '{count:!.2k}{unit} / {total:!.2k}{unit} ' \
+                    '[{elapsed}<{eta}, {rate:!.2k}{unit}/s]'
 
     def get_disc_type(self):
         return {"disc_type": "unknown"}
@@ -200,14 +203,11 @@ class BaseIsoProcessor:
         file_hashes_excluding_ignored = {}
         root = self.iso_path_reader.get_root_dir()
         file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
-        hash_format = '    Hashing {file_name} {desc_pad}{percentage:3.0f}%|{bar}| ' \
-                      '{count:!.2k}{unit} / {total:!.2k}{unit} ' \
-                      '[{elapsed}<{eta}, {rate:!.2k}{unit}/s]'
 
         with self.progress_manager.counter(total=len(file_list), desc="Getting file hashes", unit='files') as pbar:
             with self.progress_manager.counter(total=0.0,
                                                file_name="", unit='B',
-                                               leave=False, bar_format=hash_format) as hash_bar:
+                                               leave=False, bar_format=self._hash_bar_fmt) as hash_bar:
                 for file in file_list:
                     file_path = self.iso_path_reader.get_file_path(file)
                     hash_bar.update(incr=0, file_name=format_bar_desc(file_path, 25))
@@ -274,13 +274,24 @@ class BaseIsoProcessor:
         most_recent_file = self.get_most_recent_file()
         if not most_recent_file:
             return {}
+        most_recent_path = self.iso_path_reader.get_file_path(most_recent_file)
         most_recent_file_date = self.iso_path_reader.get_file_date(most_recent_file)
+        if most_recent_file:
+            LOGGER.info("Most recent file: %s, date: %s", most_recent_path, most_recent_file_date)
+        else:
+            LOGGER.info("Most recent file: %s", most_recent_path)
 
         if exe_date and most_recent_file_date <= exe_date:
             return {}
 
-        most_recent_path = self.iso_path_reader.get_file_path(most_recent_file)
-        most_recent_file_hash = self.iso_path_reader.get_file_hash(most_recent_file, hashlib.md5)
+        with self.progress_manager.counter(total=0.0,
+                                           file_name="", unit='B',
+                                           leave=False, bar_format=self._hash_bar_fmt) as hash_bar:
+            hash_bar.update(incr=0, file_name=format_bar_desc(most_recent_path, 25))
+            hash_bar.total = float(self.iso_path_reader.get_file_size(most_recent_file))
+            hash_bar.count = 0.0
+            hash_wrapper = HashProgressWrapper(hash_bar, hashlib.md5)
+            most_recent_file_hash = self.iso_path_reader.get_file_hash(most_recent_file, hash_wrapper)
 
         return {
             "most_recent_file": most_recent_path.replace(";1", ""),
