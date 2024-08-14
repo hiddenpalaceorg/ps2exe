@@ -121,6 +121,24 @@ class Ps3PathReader(PyCdLibPathReader):
             LOGGER.info("Found decrypted disc, no key required")
             return
 
+        # Check if there exists a 32 byte hexadecimal or 16 byte file in the same dir. That may be the key
+        file_dir = pathlib.Path(self.fp.file).parent.absolute()
+        for i in file_dir.iterdir():
+            if i.stat().st_size == 32:
+                try:
+                    key = bytes.fromhex(i.open("r").read())
+                except ValueError:
+                    continue
+            elif i.stat().st_size == 16:
+                key = i.open("rb").read()
+            else:
+                continue
+
+            block_dec = f.decrypt_block(block,key)
+            if block_dec[:7] in expected_magic:
+                LOGGER.info("Found key: %s", key.hex())
+                return key
+
         # Check if the disc decrypted with a debug key
         debug_key = '67c0758cf4996fef7e88f90cc6959d66'
         block_dec = f.decrypt_block(block, bytes.fromhex(debug_key))
