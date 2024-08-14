@@ -335,9 +335,6 @@ class PyCdlibUdf(PyCdlib):
                 udf_file_entry.track_file_ident_desc(file_ident)
 
                 if next_entry is None:
-                    if file_ident.is_dir():
-                        raise pycdlibexception.PyCdlibInvalidISO('Empty UDF File Entry for directories are not allowed')
-
                     # If the next_entry is None, then we just skip the
                     # rest of the code dealing with the entry and the
                     # Inode.
