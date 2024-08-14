@@ -36,6 +36,14 @@ def is_path_allowed(path, allowed_extensions=None):
         "sha1",
         "md5",
         "r\d\d",
+        "par2",
+        "pdf",
+        "tif",
+        "avi",
+        "dctmp",
+        "state",
+        "subcode",
+        "fulltoc",
     }
     disallowed_extensions = "|".join(disallowed_extensions - set(allowed_extensions))
     ignored_filenames = {
