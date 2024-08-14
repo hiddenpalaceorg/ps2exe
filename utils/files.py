@@ -2,6 +2,7 @@ import logging
 import mmap
 import os
 
+from utils.common import MSF
 from utils.unscambler import unscramble_data, lookup_table
 
 LOGGER = logging.getLogger(__name__)
@@ -184,6 +185,11 @@ class BinWrapper(AccessBySliceFile):
             self.sector_size = sector_size
             self.sector_offset = sector_offset
 
+        self.starting_sector = self.virtual_offset = 0
+        if self.sector_size == 2352:
+            self.starting_sector = self.get_first_sector()
+            self.virtual_offset = self.starting_sector * 2048
+
         LOGGER.debug(f"{self.sector_size=} {self.sector_offset=}")
 
     def close(self):
@@ -205,6 +211,8 @@ class BinWrapper(AccessBySliceFile):
             self.pos = self.length() + pos
         else:
             raise BinWrapperException("Unsupported")
+        if self.pos < self.virtual_offset:
+            self.pos += self.virtual_offset
 
     def tell(self):
         if self.sector_offset == 0:
@@ -218,6 +226,8 @@ class BinWrapper(AccessBySliceFile):
 
         while length > 0:
             sector = pos // 2048
+            if sector >= self.starting_sector:
+                sector -= self.starting_sector
             pos_in_sector = pos % 2048
             sector_read_length = min(length, 2048 - pos_in_sector)
             read_pos = sector * self.sector_size + self.sector_offset + pos % 2048
@@ -359,7 +369,7 @@ class BinWrapper(AccessBySliceFile):
             LOGGER.debug(ident)
             if ident in magics:
                 self.sector_size = 2352
-                self.sector_offset = 2368
+                self.sector_offset = 16
                 return
 
         # Xbox (360) discs
@@ -397,6 +407,17 @@ class BinWrapper(AccessBySliceFile):
                 return
 
         raise BinWrapperException("Cannot detect sector size, is this a disc image?")
+
+    def get_first_sector(self):
+        sector_header = b"\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00"
+        self.mmap.seek(0)
+        data = self.mmap.read(12)
+        if data != sector_header:
+            LOGGER.warning("Could not determine starting LBA for file")
+            return 0
+        msf_raw = self.mmap.read(3)
+        msf = MSF(msf_raw)
+        return msf.to_sector()
 
 
 class ScrambledFile(MmapWrapper):
