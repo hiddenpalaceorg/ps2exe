@@ -6,7 +6,11 @@ from utils.unscambler import unscramble_data, lookup_table
 
 LOGGER = logging.getLogger(__name__)
 
+
 class BaseFile:
+    def __init__(self):
+        self.pos = 0
+
     def seek(self, pos, whence=os.SEEK_SET):
         LOGGER.debug(f"seek {pos} {whence}")
         if whence == os.SEEK_SET:
@@ -19,9 +23,6 @@ class BaseFile:
     def tell(self):
         return self.pos
 
-    def length(self):
-        return len(self)
-
     def peek(self, n):
         return self._get_data(n)
 
@@ -30,32 +31,57 @@ class BaseFile:
         self.pos += n
         return ret
 
-    def _get_data(self, n):
-        pos = self.tell()
-        return self[pos:pos + n]
-
-    def ranges(self):
+    def close(self):
         raise NotImplementedError
 
-    def __getitem__(self, key):
+    def length(self):
+        return len(self)
+
+    def _get_data(self, n):
         raise NotImplementedError
 
     def __len__(self):
         raise NotImplementedError
 
 
-class MmappedFile(BaseFile):
-    def __init__(self, fp):
-        self.post_read_func = None
-        if isinstance(fp, mmap.mmap):
-            self.mmap = fp
-            self.name = None
-        else:
-            self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
-            self.name = fp.name
+class AccessBySliceFile(BaseFile):
+    def _get_data(self, n):
+        pos = self.tell()
+        return self[pos:pos + n]
 
-    def ranges(self):
-        yield 0, 0, len(self)
+    def __getitem__(self, key):
+        raise NotImplementedError
+
+
+class MmapWrapper(AccessBySliceFile, BaseFile):
+    def __init__(self, mmap):
+        super().__init__()
+        self.mmap = mmap
+
+    @property
+    def name(self):
+        return getattr(self.mmap, "name", None)
+
+    def __len__(self):
+        return len(self.mmap)
+
+
+class MmappedFile(MmapWrapper):
+    def __init__(self, fp):
+        if isinstance(fp, mmap.mmap):
+            _mmap = fp
+            self._name = None
+        else:
+            _mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
+            self._name = fp.name
+        super().__init__(_mmap)
+
+    @property
+    def name(self):
+        return self._name
+
+    def __getattr__(self, item):
+        return getattr(self.mmap, item)
 
     def __getitem__(self, key):
         return self.mmap.__getitem__(key)
@@ -63,17 +89,20 @@ class MmappedFile(BaseFile):
     def close(self):
         self.mmap.close()
 
+    def length(self):
+        return len(self.mmap)
+
     def __len__(self):
         return self.mmap.__len__()
 
 
-class ConcatenatedFile(BaseFile):
+class ConcatenatedFile(AccessBySliceFile):
     def __init__(self, fps, offsets):
+        super().__init__()
         self.files = []
         self.lengths = []
         self.offsets = offsets[:]
         self.offsets.sort()
-        self.pos = 0
 
         for fp in fps:
             if not isinstance(fp, BaseFile):
@@ -132,17 +161,19 @@ class BinWrapperException(Exception):
     pass
 
 
-class BinWrapper(BaseFile):
-    def __init__(self, fp, sector_size = None, sector_offset = None):
+class BinWrapper(AccessBySliceFile):
+    def __init__(self, fp, sector_size=None, sector_offset=None):
+        super().__init__()
         self.file = fp.name
 
-        self.is_scrambled, data_offset = ScrambledFile.test_scrambled(fp)
-        if self.is_scrambled:
-            self.mmap = ScrambledFile(fp, data_offset)
-        elif not isinstance(fp, MmappedFile):
+        if not isinstance(fp, MmapWrapper):
             self.mmap = MmappedFile(fp)
         else:
             self.mmap = fp
+
+        self.is_scrambled, data_offset = ScrambledFile.test_scrambled(fp)
+        if self.is_scrambled:
+            self.mmap = ScrambledFile(self.mmap, data_offset)
 
         if not LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug = lambda x: x
@@ -368,10 +399,10 @@ class BinWrapper(BaseFile):
         raise BinWrapperException("Cannot detect sector size, is this a disc image?")
 
 
-class ScrambledFile(MmappedFile):
-    def __init__(self, fp, offset):
+class ScrambledFile(MmapWrapper):
+    def __init__(self, mmap, offset):
         self.offset = offset
-        super().__init__(fp)
+        super().__init__(mmap)
 
     def seek(self, pos, whence=os.SEEK_SET):
         return super().seek(pos+self.offset, whence)
@@ -393,7 +424,7 @@ class ScrambledFile(MmappedFile):
         else:
             actual_pos = item
             item += self.offset
-        return unscramble_data(super().__getitem__(item), actual_pos)
+        return unscramble_data(self.mmap.__getitem__(item), actual_pos)
 
     @staticmethod
     def test_scrambled(fp):
@@ -413,3 +444,57 @@ class ScrambledFile(MmappedFile):
                 return (True, 0)
 
         return False, None
+
+
+class OffsetFile(MmapWrapper):
+    def __init__(self, mmap, offset, end_pos):
+        super().__init__(mmap)
+        self.offset = offset
+        self.end_pos = end_pos
+
+    def seek(self, pos, whence=os.SEEK_SET):
+        if whence == os.SEEK_CUR:
+            pos = self.pos - self.offset + pos
+        elif whence == os.SEEK_END:
+            pos = len(self) + pos
+        if pos >= self.length():
+            pos = self.length()
+        return super().seek(pos+self.offset, os.SEEK_SET)
+
+    def tell(self):
+        return super().tell() - self.offset
+
+    def read(self, n=None):
+        if n:
+            ret = self[self.tell():self.tell()+n]
+        else:
+            ret = self[self.tell():]
+
+        self.pos += len(ret)
+        return ret
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            read_pos = item.start
+            read_len = item.stop - item.start
+        else:
+            read_pos = item
+            read_len = 1
+        self.seek(read_pos)
+        file_pos = super().tell()
+        if file_pos + read_len > self.end_pos:
+            read_len = self.end_pos - file_pos
+        if self.tell() == self.length():
+            return b''
+        return self.mmap[file_pos:file_pos+read_len]
+
+    def length(self):
+        return self.end_pos - self.offset
+
+    def __len__(self):
+        return self.length()
+
+    def close(self):
+        pass
+
+
