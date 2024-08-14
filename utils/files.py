@@ -433,3 +433,57 @@ class ScrambledFile(MmappedFile):
                 return (True, 0)
 
         return False, None
+
+
+class OffsetFile(BaseFile):
+    def __init__(self, mmap, offset, end_pos):
+        self.offset = offset
+        self.end_pos = end_pos
+        self.mmap = mmap
+
+    def seek(self, pos, whence=os.SEEK_SET):
+        if whence == os.SEEK_CUR:
+            pos = self.pos - self.offset + pos
+        elif whence == os.SEEK_END:
+            pos = len(self) + pos
+        if pos >= self.length():
+            pos = self.length()
+        return super().seek(pos+self.offset, os.SEEK_SET)
+
+    def tell(self):
+        return super().tell() - self.offset
+
+    def read(self, n=None):
+        if n:
+            ret = self[self.tell():self.tell()+n]
+        else:
+            ret = self[self.tell():]
+
+        self.pos += len(ret)
+        return ret
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            read_pos = item.start
+            read_len = item.stop - item.start
+        else:
+            read_pos = item
+            read_len = 1
+        self.seek(read_pos)
+        file_pos = super().tell()
+        if file_pos + read_len > self.end_pos:
+            read_len = self.end_pos - file_pos
+        if self.tell() == self.length():
+            return b''
+        return self.mmap[file_pos:file_pos+read_len]
+
+    def length(self):
+        return self.end_pos - self.offset
+
+    def __len__(self):
+        return self.length()
+
+    def close(self):
+        pass
+
+
