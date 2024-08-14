@@ -7,6 +7,8 @@ from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 
 class P3doPathReader(ChunkedHashTrait, IsoPathReader):
+    volume_type = "operafs"
+
     def get_root_dir(self):
         return self.iso.superblock.root.root_copies[0]
 

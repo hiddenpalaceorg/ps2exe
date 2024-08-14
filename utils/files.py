@@ -319,31 +319,6 @@ class BinWrapper(AccessBySliceFile):
             self.virtual_sector_size = 2048
             return
 
-        # Gamecube disc
-        self.mmap.seek(0x1C)
-        ident = self.mmap.read(4)
-        if ident == b"\xC2\x33\x9F\x3D":
-            self.sector_size = 2048
-            self.sector_offset = 0
-            return
-
-        # early Gamecube demo disc
-        self.mmap.seek(0)
-        ident = self.mmap.read(64)
-        if ident == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
-                    b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
-            self.sector_size = 2048
-            self.sector_offset = 0
-            return
-
-        # Wii disc
-        self.mmap.seek(0x18)
-        ident = self.mmap.read(4)
-        if ident == b"\x5D\x1C\x9E\xA3":
-            self.sector_size = 2048
-            self.sector_offset = 0
-            return
-
         # Apple formatted disc
         self.mmap.seek(0x430)
         ident = self.mmap.read(9)
@@ -421,40 +396,6 @@ class BinWrapper(AccessBySliceFile):
                 self.sector_size = 2352
                 self.sector_offset = 16
                 self.virtual_sector_size = 2048
-                return
-
-        # Xbox (360) discs
-        if self.mmap.length() > 65556:
-            self.mmap.seek(0x10000)
-            ident = self.mmap.read(20)
-            if ident == b"MICROSOFT*XBOX*MEDIA":
-                self.sector_size = 2048
-                self.sector_offset = 0
-                return
-
-        if self.mmap.length() > 34144276:
-            self.mmap.seek(0x2090000)
-            ident = self.mmap.read(20)
-            if ident == b"MICROSOFT*XBOX*MEDIA":
-                self.sector_size = 2048
-                self.sector_offset = 0
-                return
-
-        if self.mmap.length() > 265945108:
-            self.mmap.seek(0xFDA0000)
-            ident = self.mmap.read(20)
-            if ident == b"MICROSOFT*XBOX*MEDIA":
-                self.sector_size = 2048
-                self.sector_offset = 0
-                return
-
-        # Redump-style dual layer DVD
-        if self.mmap.length() > 405864468:
-            self.mmap.seek(0x18310000)
-            ident = self.mmap.read(20)
-            if ident == b"MICROSOFT*XBOX*MEDIA":
-                self.sector_size = 2048
-                self.sector_offset = 0
                 return
 
         raise BinWrapperException("Cannot detect sector size, is this a disc image?")

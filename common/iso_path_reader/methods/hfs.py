@@ -8,6 +8,8 @@ from dates import datetime_from_hfs_date
 
 
 class HfsPathReader(ChunkedHashTrait, IsoPathReader):
+    volume_type = "hfs"
+
     def get_root_dir(self):
         return self.iso
 

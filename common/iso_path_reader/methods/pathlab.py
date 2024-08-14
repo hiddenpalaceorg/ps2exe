@@ -3,6 +3,8 @@ from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 
 
 class PathlabPathReader(ChunkedHashTrait, IsoPathReader):
+    volume_type = "iso9660_fallback"
+
     def __init__(self, *args, pvd, **kwargs):
         self.pvd = pvd
         super().__init__(*args, **kwargs)

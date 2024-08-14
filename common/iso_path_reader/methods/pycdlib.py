@@ -16,19 +16,28 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
-    def __init__(self, iso, fp, *args, udf=False, **kwargs):
+    def __init__(self, iso, fp, *args, volume_type, **kwargs):
         super().__init__(iso, fp, *args, **kwargs)
-        self.udf = udf
+        self.volume_type = volume_type
+
+    @property
+    def pycdlib_volume_type(self):
+        if self.volume_type == "iso9660":
+            return "iso"
+        elif self.volume_type == "rock_ridge":
+            return "rr"
+        elif self.volume_type == "joliet":
+            return "joliet"
+        elif self. volume_type == "udf":
+            return "udf"
+        return self.volume_type
 
     def get_root_dir(self):
-        if self.udf:
-            return self.iso.get_record(udf_path="/")
-        else:
-            return self.iso.get_record(iso_path="/")
+        return self.iso.get_record(**{f"{self.pycdlib_volume_type}_path":"/"})
 
     def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
-        for file in _yield_children(base_dir, rr=False) if not self.udf else base_dir.fi_descs:
-            if self.udf:
+        for file in _yield_children(base_dir, rr=self.volume_type=="rock_ridge") if not self.volume_type == "udf" else base_dir.fi_descs:
+            if self.volume_type == "udf":
                 file = file.file_entry
 
             if not file or file.is_dot() or file.is_dotdot():
@@ -45,7 +54,9 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
 
     def get_file_path(self, file):
         try:
-            return self.iso.full_path_from_dirrecord(file).replace(";1", "").rstrip(".")
+            return self.iso.full_path_from_dirrecord(
+                file, rockridge=self.volume_type == "rock_ridge"
+            ).replace(";1", "").rstrip(".")
         except UnicodeDecodeError:
             path = []
             while file.parent:
@@ -58,7 +69,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             return "/" + "/".join(reversed(path))
 
     def get_file_date(self, file):
-        return datetime_from_iso_date(file.date if not self.udf else file.mod_time)
+        return datetime_from_iso_date(file.date if not self.volume_type == "udf" else file.mod_time)
 
     def get_file_size(self, file):
         size = 0
@@ -87,19 +98,11 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         if path[0] != "/":
             path = "/" + path
         try:
-            if self.udf:
-                return self.iso.get_record(udf_path=path)
-            else:
-                return self.iso.get_record(iso_path=path)
-        except PyCdlibInvalidInput as e:
+            return self.iso.get_record(**{f"{self.pycdlib_volume_type}_path": path})
+        except (PyCdlibInvalidInput, IndexError) as e:
             try:
-                if self.udf:
-                    return self.iso.get_record(udf_path=path + ";1")
-                else:
-                    return self.iso.get_record(iso_path=path + ";1")
-            except PyCdlibInvalidInput:
-                if path.upper() != path:
-                    return self.get_file(path.upper())
+                return self.iso.get_record(**{f"{self.pycdlib_volume_type}_path":path + ";1"})
+            except (PyCdlibInvalidInput, IndexError):
                 try:
                     for file in self.iso_iterator(self.get_root_dir(), recursive=True):
                         if path.lower() == self.get_file_path(file).lower():
@@ -130,7 +133,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             if hasattr(file, "data_length") and file.inode.data_length < file.data_length:
                 file.inode.data_length = file.data_length
 
-        if self.udf and len(file.alloc_descs) > 1:
+        if self.volume_type == "udf" and len(file.alloc_descs) > 1:
             part_start = self.iso.udf_main_descs.partitions[0].part_start_location
             readers = []
             offsets = [0]
@@ -161,10 +164,12 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         return f
 
     def get_pvd(self):
+        if self.volume_type == "joliet":
+            return self.iso.joliet_vd
         return self.iso.pvd
 
     def get_pvd_info(self):
-        if not self.udf:
+        if not self.volume_type == "udf":
             return super().get_pvd_info()
 
         pvd = self.iso.udf_main_descs.pvds[0]

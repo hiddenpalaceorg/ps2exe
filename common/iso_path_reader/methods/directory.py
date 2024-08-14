@@ -1,18 +1,15 @@
 import logging
 import os.path
 
-import pycdlib.pycdlibio
-from pycdlib.pycdlib import _yield_children
-from pycdlib.pycdlibexception import PyCdlibInvalidInput
-
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
-from dates import datetime_from_iso_date
 
 LOGGER = logging.getLogger(__name__)
 
 
 class DirectoryPathReader(ChunkedHashTrait, IsoPathReader):
+    volume_type = "directory"
+
     def __init__(self, iso):
         super().__init__(iso, None, None)
 
@@ -51,3 +48,6 @@ class DirectoryPathReader(ChunkedHashTrait, IsoPathReader):
 
     def get_pvd_info(self):
         return {}
+
+    def close(self):
+        return

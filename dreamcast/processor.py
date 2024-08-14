@@ -33,7 +33,10 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if not fp:
                 continue
             gdi_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, gdi_name, *args)
+            iso_path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(fp, gdi_name, *args)
+            if not iso_path_readers:
+                break
+            iso_path_reader = iso_path_readers[0]
             found = True
             break
 
@@ -53,7 +56,10 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             if not fp:
                 continue
             cue_name = basename(iso_path_reader.parent_container.get_file_path(i)).encode("cp1252", errors="replace")
-            iso_path_reader = IsoProcessorFactory.get_iso_path_reader(fp, cue_name, *args)
+            iso_path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(fp, cue_name, *args)
+            if not iso_path_readers:
+                break
+            iso_path_reader = iso_path_readers[0]
             break
 
         super().__init__(iso_path_reader, iso_filename, *args)
