@@ -5,6 +5,8 @@ import os
 import re
 import sys
 
+import rarfile
+
 from common import pycdlib
 from pyisotools.iso import GamecubeISO
 
@@ -34,6 +36,7 @@ from ps3.processor import Ps3IsoProcessor
 from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from p3do.operafs import OperaFs
+from utils.archives import ArchiveWrapper
 from utils.files import BinWrapper, ConcatenatedFile, OffsetFile, MmappedFile, BinWrapperException
 from wii.path_reader import WiiPathReader
 from wii.processor import WiiIsoProcessor
@@ -45,41 +48,41 @@ from xbox.processor import XboxIsoProcessor, Xbox360IsoProcessor, XboxLiveProces
 from xbox.stfs.stfs import STFS
 from xbox.xdvdfs.xdvdfs import XDvdFs
 
-try:
-    import libarchive
-except OSError:
-    if os.name == "nt":
-        os.environ["LIBARCHIVE"] = "./libarchive.dll"
-    import libarchive
-except TypeError:
-    libarchive_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "libarchive")
-    if os.name == "nt":
-        if sys.maxsize > 2**32:
-            libarchive_path = os.path.join(libarchive_path, "win64", "libarchive.dll")
-        else:
-            libarchive_path = os.path.join(libarchive_path, "win32", "libarchive.dll")
-    elif sys.platform == "linux":
-        libarchive_path = os.path.join(libarchive_path, "linux", "libarchive.so")
-    elif sys.platform == "darwin":
-        libarchive_path = os.path.join(libarchive_path, "macosx", "libarchive.dylib")
-
-    os.environ["LIBARCHIVE"] = libarchive_path
-    import libarchive
-
 LOGGER = logging.getLogger(__name__)
 
 
 class IsoProcessorFactory:
     @staticmethod
-    def get_iso_path_readers(fp, file_name, parent_container):
+    def get_iso_path_readers(fp, file_name, parent_container, pbar):
         path_readers = []
         exceptions = {}
         is_ps3 = False
 
-        file_ext = os.path.splitext(file_name)[1]
-        if file_ext.lower() in [".7z", ".rar", ".zip"]:
-            with libarchive.file_reader(fp.name) as archive:
-                return [CompressedPathReader(archive, fp, parent_container)], []
+        fp.seek(0)
+        magic = fp.read(16)
+        compressed_magic_values = [
+            b"PK\x03\x04",
+            b"7z\xBC\xAF\x27\x1C",
+            b"\x1F\x8B",
+            b"ustar",
+            b"BZh",
+            b"\xFD7zXZ\x00",
+            b"Rar\x21\x1A\x07",
+            b"\x2E/PaxHeaders/\x2E"
+        ]
+        for magic_to_try in compressed_magic_values:
+            if magic.startswith(magic_to_try):
+                try:
+                    return [CompressedPathReader(ArchiveWrapper(fp, parent_container, pbar), fp, parent_container)], []
+                except rarfile.NeedFirstVolume:
+                    return [], []
+                except Exception as e:
+                    if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
+                        LOGGER.warning("Error processing %s: %s", file_name, e.msg)
+                    elif getattr(e, "msg", "").startswith("Unrecognized archive format"):
+                        LOGGER.warning("Error processing %s: %s", file_name, e.msg)
+                    else:
+                        exceptions[CompressedPathReader.volume_type] = e
 
         fp.seek(0)
         if fp.read(4) == b"LIVE":

@@ -1,5 +1,7 @@
 import pyisotools.iso
 
+import utils.archives
+
 
 def apply_patches():
     import pycdlib.dates
@@ -51,6 +53,15 @@ def apply_patches():
             pass
         return ret
     pycdlib.dr.DirectoryRecord._add_child = _add_child
+
+    # Hack to track file position on pycdlibio objects when calling readinto
+    import pycdlib.pycdlibio
+    orig_readinto = pycdlib.pycdlibio.PyCdlibIO.readinto
+    def readinto(self, b):
+        readsize = orig_readinto(self, b)
+        self._offset += readsize
+        return readsize
+    pycdlib.pycdlibio.PyCdlibIO.readinto = readinto
 
     def read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ascii") -> str:
         """ Reads a null terminated string from the specified address """
@@ -251,3 +262,68 @@ def apply_patches():
 
         _link_aliases(drCrDate, cnids)
     machfs.main.Volume.read = read
+
+    import rarfile
+    import os
+    orig_open_unrar = rarfile.CommonParser._open_unrar
+    def _open_unrar(self, rarfile, inf, pwd=None, tmpfile=None, force_file=False):
+        if not tmpfile or force_file:
+            inf.filename = inf.filename.replace("\\", os.path.sep)
+        return orig_open_unrar(self, rarfile, inf, pwd=pwd, tmpfile=tmpfile, force_file=force_file)
+    rarfile.CommonParser._open_unrar = _open_unrar
+
+    orig_check = rarfile.RarExtFile._check
+    def _check(self):
+        try:
+            orig_check(self)
+        except rarfile.BadRarFile as e:
+            if self._remain != 0:
+                raise
+            from utils.archives import LOGGER
+            LOGGER.exception(e)
+    rarfile.RarExtFile._check = _check
+
+    from libarchive.exception import ArchiveError
+    import libarchive.ffi
+    orig_check_int = libarchive.ffi.check_int
+    def check_int(retcode, func, args):
+        try:
+            return orig_check_int(retcode, func, args)
+        except ArchiveError as e:
+            if e.errno == 0:
+                return libarchive.ffi.ARCHIVE_EOF
+            if getattr(libarchive, "current_file_path", None):
+                e.msg += f" file: {libarchive.current_file_path}"
+            errors_to_allow = [
+                "ZIP compressed data is wrong size",
+                "ZIP decompression failed",
+                "Decompression failed",
+                "ZIP bad CRC",
+                "Truncated input file",
+            ]
+            for error in errors_to_allow:
+                if e.msg.startswith(error):
+                    libarchive.ffi.logger.warning(e.msg)
+                    return libarchive.ffi.ARCHIVE_WARN
+            raise
+    libarchive.ffi.read_data.errcheck = check_int
+
+    def check_int_header(retcode, func, args):
+        try:
+            return check_int(retcode, func, args)
+        except ArchiveError as e:
+            if e.msg.startswith("Damaged 7-Zip archive"):
+                libarchive.ffi.logger.warning(e.msg)
+                return libarchive.ffi.ARCHIVE_WARN
+            raise
+
+    libarchive.ffi.read_next_header2.errcheck = check_int_header
+
+    import zipfile
+    orig_decodeExtra = zipfile.ZipInfo._decodeExtra
+    def _decodeExtra(self):
+        try:
+            orig_decodeExtra(self)
+        except zipfile.BadZipfile:
+            pass
+    zipfile.ZipInfo._decodeExtra = _decodeExtra

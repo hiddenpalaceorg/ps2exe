@@ -41,39 +41,40 @@ class BaseIsoProcessor:
         if isinstance(iso_path_reader, XboxStfsPathReader):
             return "xbla"
 
-        fp = iso_path_reader.fp
-        fp.seek(0)
-        if fp.read(15) == b"SEGA SEGASATURN":
-            return "saturn"
+        if not isinstance(iso_path_reader, CompressedPathReader):
+            fp = iso_path_reader.fp
+            fp.seek(0)
+            if fp.read(15) == b"SEGA SEGASATURN":
+                return "saturn"
 
-        fp.seek(0)
-        if fp.read(14) == b"SEGADISCSYSTEM":
-            return "megacd"
+            fp.seek(0)
+            if fp.read(14) == b"SEGADISCSYSTEM":
+                return "megacd"
 
-        fp.seek(0)
-        if fp.read(15) == b"SEGA SEGAKATANA":
-            return "dreamcast"
+            fp.seek(0)
+            if fp.read(15) == b"SEGA SEGAKATANA":
+                return "dreamcast"
 
-        fp.seek(0)
-        if fp.read(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
-            return "3do"
+            fp.seek(0)
+            if fp.read(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01":
+                return "3do"
 
-        fp.seek(0x1C)
-        if fp.read(4) == b"\xC2\x33\x9F\x3D":
-            return "gamecube"
+            fp.seek(0x1C)
+            if fp.read(4) == b"\xC2\x33\x9F\x3D":
+                return "gamecube"
 
-        fp.seek(0)
-        if fp.read(64) == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
-                          b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
-            return "gamecube"
+            fp.seek(0)
+            if fp.read(64) == b"\x30\x30\x00\x45\x30\x31" + b"\x00" * 26 + \
+                              b"\x4E\x44\x44\x45\x4D\x4F" + b"\x00" * 26:
+                return "gamecube"
 
-        fp.seek(0x18)
-        if fp.read(4) == b"\x5D\x1C\x9E\xA3":
-            return "wii"
+            fp.seek(0x18)
+            if fp.read(4) == b"\x5D\x1C\x9E\xA3":
+                return "wii"
 
-        fp.seek(0x8001)
-        if fp.read(5) == b'CD-I ':
-            return "cdi"
+            fp.seek(0x8001)
+            if fp.read(5) == b'CD-I ':
+                return "cdi"
 
         if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader, PathlabPathReader)):
             for sys_type, exe_type, expected_header in (("xbox360", ".xex", b"XEX"), ("xbox", ".xbe", b"XBE")):

@@ -28,7 +28,9 @@ class PcIsoProcessor(BaseIsoProcessor):
         if not found_exes:
             return
 
-        exe = max(found_exes.items(), key=lambda x: x[1]["exe_date"])[0]
+        exe = max(found_exes.items(), key=lambda x: getattr(
+            x[1], "exe_date", getattr(x[1], "alt_exe_date", datetime.datetime.min)
+        ))[0]
         LOGGER.info("Found latest exe: %s", exe)
         self.exe_info = found_exes[exe]
         return exe
