@@ -308,7 +308,7 @@ class PyCdlibUdf(PyCdlib):
                 desc_tag.parse(data[offset:], current_extent - self.root_relative_location)
                 if desc_tag.tag_ident != 257:
                     raise pycdlibexception.PyCdlibInvalidISO('UDF File Identifier Tag identifier not 257')
-                file_ident = udfmod.UDFFileIdentifierDescriptor()
+                file_ident = UDFFileIdentifierDescriptor()
                 offset += file_ident.parse(data[offset:],
                                            current_extent,
                                            desc_tag,
@@ -643,3 +643,57 @@ class UDFTimestamp(udfmod.UDFTimestamp):
 
         self._initialized = True
 udfmod.UDFTimestamp = UDFTimestamp
+
+
+class UDFFileIdentifierDescriptor(udfmod.UDFFileIdentifierDescriptor):
+    def parse(self, data, extent, desc_tag, parent):
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError('UDF File Identifier Descriptor already initialized')
+
+        (tag_unused, file_version_num, self.file_characteristics,
+         self.len_fi, icb, self.len_impl_use) = struct.unpack_from(self.FMT, data, 0)
+
+        self.desc_tag = desc_tag
+
+        if file_version_num != 1:
+            raise pycdlibexception.PyCdlibInvalidISO('File Identifier Descriptor file version number not 1')
+
+        if self.file_characteristics & 0x2:
+            self.isdir = True
+
+        if self.file_characteristics & 0x8:
+            self.isparent = True
+
+        self.icb = udfmod.UDFLongAD()
+        self.icb.parse(icb)
+
+        start = struct.calcsize(self.FMT)
+        end = start + self.len_impl_use
+        self.impl_use = data[start:end]
+
+        start = end
+        end = start + self.len_fi
+        # The very first byte of the File Identifier describes whether this is
+        # an 8-bit or 16-bit encoded string; this corresponds to whether we
+        # encode with 'latin-1' or with 'utf-16_be'.  We save that off because
+        # we have to write the correct thing out when we record.
+        if not self.isparent:
+            encoding = bytes(bytearray([data[start]]))
+            if encoding == b'\x08':
+                self.encoding = 'latin-1'
+            elif encoding == b'\x10':
+                self.encoding = 'utf-16_be'
+            else:
+                self.encoding = 'latin-1'
+
+            start += 1
+
+            self.fi = data[start:end]
+
+        self.orig_extent_loc = extent
+
+        self.parent = parent
+
+        self._initialized = True
+
+        return end + UDFFileIdentifierDescriptor.pad(end)
