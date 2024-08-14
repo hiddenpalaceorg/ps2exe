@@ -14,6 +14,9 @@ LOGGER = logging.getLogger(__name__)
 class DreamcastIsoProcessor(BaseIsoProcessor):
     def __init__(self, iso_path_reader, iso_filename, *args):
         from common.factory import IsoProcessorFactory
+        if iso_path_reader.fp.starting_sector == 0:
+            super().__init__(iso_path_reader, iso_filename, *args)
+            return
         file_dir = pathlib.Path(iso_filename).parent.absolute()
         found = False
         # Try to find a gdi file in this directory
@@ -37,7 +40,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         for i in [os.path.join(file_dir, name) for name in os.listdir(file_dir) if rule.match(name)]:
             i = pathlib.Path(i)
             tracks = self.parse_cue(i)
-            if tracks[0]["file_name"] != basename(iso_filename):
+            if not any(track["file_name"] != basename(iso_filename) for track in tracks):
                 continue
             fp = self.get_fp_from_gdi(i, tracks)
             gdi_name = i.name.encode("cp1252", errors="replace")
