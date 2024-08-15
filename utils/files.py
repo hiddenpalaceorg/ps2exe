@@ -104,8 +104,8 @@ class MmapWrapper(AccessBySliceFile, BaseFile):
 class MmappedFile(MmapWrapper):
     def __init__(self, fp):
         if isinstance(fp, (mmap.mmap, FakeMemoryMap)):
-            _mmap = fp
-            self._name = None
+            self.mmap = fp
+            self.name = None
         else:
             try:
                 self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
