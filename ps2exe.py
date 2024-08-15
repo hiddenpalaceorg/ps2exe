@@ -60,14 +60,15 @@ def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
 
 
 def process_nested_containers(initial_path_readers, base_iso_path, disable_contents_checksum, rows):
-    current_base_path = base_iso_path
     file_stack = defaultdict(list)
+    file_paths = {initial_path_readers[0].fp: base_iso_path}
     file_stack[initial_path_readers[0].fp] = initial_path_readers
 
     LOGGER.info("Checking for nested containers")
 
     while file_stack:
         current_fp = next(reversed(file_stack))
+        current_base_path = file_paths[current_fp]
         nested_info = []
 
         if len(file_stack[current_fp]) == 0:
@@ -121,7 +122,7 @@ def process_nested_containers(initial_path_readers, base_iso_path, disable_conte
                 fp.__exit__()
                 continue
             nested_path = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
-            current_base_path = nested_path
+            file_paths[fp] = nested_path
 
             LOGGER.info("Found nested container %s", nested_path)
 
