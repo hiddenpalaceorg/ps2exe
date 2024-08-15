@@ -17,8 +17,8 @@ LOGGER = logging.getLogger(__name__)
 
 class BaseIsoProcessor:
     globally_ignored_paths = [
-        re.compile(".*\.nfo$", re.IGNORECASE),
-        re.compile(".*\.diz$", re.IGNORECASE),
+        re.compile(r".*\.nfo$", re.IGNORECASE),
+        re.compile(r".*\.diz$", re.IGNORECASE),
     ]
     ignored_paths = []
     _hash_bar_fmt = '    Hashing {file_name} {desc_pad}{percentage:3.0f}%|{bar}| ' \
