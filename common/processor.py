@@ -8,7 +8,6 @@ import xxhash
 
 from cdi.path_reader import CdiPathReader
 from common.iso_path_reader.methods.compressed import CompressedPathReader
-from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
 from utils.common import format_bar_desc
 from utils.hash_progress_wrapper import HashProgressWrapper
@@ -76,7 +75,7 @@ class BaseIsoProcessor:
             if fp.read(5) == b'CD-I ':
                 return "cdi"
 
-        if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader, PathlabPathReader)):
+        if isinstance(iso_path_reader, (XboxPathReader, CompressedPathReader, PyCdLibPathReader)):
             for sys_type, exe_type, expected_header in (("xbox360", ".xex", b"XEX"), ("xbox", ".xbe", b"XBE")):
                 for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), recursive=False):
                     file_path = iso_path_reader.get_file_path(file)

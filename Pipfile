@@ -7,7 +7,6 @@ verify_ssl = true
 
 [packages]
 pycdlib = "*"
-pathlab = "*"
 xxhash = "*"
 numpy = "*"
 libarchive-c = "*"
@@ -24,4 +23,4 @@ inflate64 = "*"
 bitarray = "*"
 
 [requires]
-python_version = "3.8"
+python_version = ">=3.8"

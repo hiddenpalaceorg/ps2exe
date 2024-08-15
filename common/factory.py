@@ -11,14 +11,12 @@ from pyisotools.iso import GamecubeISO
 from cdi.path_reader import CdiPathReader
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.iso_path_reader.methods.hfs import HfsPathReader
-from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
 from common.processor import GenericIsoProcessor
 from common.udf.pycdlib_udf import PyCdlibUdf
 from dreamcast.processor import DreamcastIsoProcessor
 from gamecube.path_reader import GamecubePathReader
 from gamecube.processor import GamecubeIsoProcessor
-from iso_accessor import IsoAccessor
 from machfs import Volume, Folder, File
 
 from cdi.processor import CdiIsoProcessor
@@ -296,6 +294,8 @@ class IsoProcessorFactory:
         try:
             iso.open_fp(wrapper)
         except Exception as e:
+            exceptions["iso9660"] = e
+
             # pycdlib may fail on reading the directory contents of an iso, but it should still correctly parse the PVD
             if not hasattr(iso, "pvd") and hasattr(iso, "pvds") and iso.pvds:
                 iso.pvd = iso.pvds[0]
@@ -326,12 +326,8 @@ class IsoProcessorFactory:
             iso.open_fp(wrapper)
             path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="udf"))
 
-        if not iso._initialized and not iso._has_udf:
-            try:
-                iso_accessor = IsoAccessor(wrapper, ignore_susp=True)
-                path_readers.append(PathlabPathReader(iso_accessor, wrapper, parent_container, pvd=iso.pvd))
-            except Exception as e:
-                exceptions[PathlabPathReader.volume_type] = e
+        if (iso._initialized or iso._has_udf) and "iso9660" in exceptions:
+            exceptions.pop("iso9660")
 
         return path_readers, exceptions
 
