@@ -14,7 +14,7 @@ libarchive-c = "*"
 pefile = "*"
 pycryptodome = "*"
 enlighten = "*"
-pyisotools = {file = "https://github.com/hiddenpalaceorg/pyisotools/archive/refs/heads/main.zip"}
+pyisotools = {file = "https://github.com/hiddenpalaceorg/pyisotools/archive/a9373ba22c8c5ce3c1af684f7e74a103e09aa3ac.zip"}
 methodtools = "*"
 machfs = "*"
 rarfile = ">=4.2"
