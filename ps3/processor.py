@@ -11,13 +11,13 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Ps3IsoProcessor(PostPsxIsoProcessor):
-    update_folder = re.compile(".*PS3_UPDATE$", re.IGNORECASE)
+    update_folder = re.compile(r".*PS3_UPDATE$", re.IGNORECASE)
     sfo_path = "/PS3_GAME/PARAM.SFO"
 
     @property
     def ignored_paths(self):
         paths = self.exe_patterns + [self.update_folder]
-        paths.append(re.compile("(?!^\/PS3_GAME\/USRDIR\/)", re.IGNORECASE))
+        paths.append(re.compile(r"(?!^\/PS3_GAME\/USRDIR\/)", re.IGNORECASE))
         return paths
 
     def get_disc_type(self):

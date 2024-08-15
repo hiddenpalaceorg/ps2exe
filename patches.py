@@ -321,9 +321,9 @@ def apply_patches():
 
     import zipfile
     orig_decodeExtra = zipfile.ZipInfo._decodeExtra
-    def _decodeExtra(self):
+    def _decodeExtra(*args):
         try:
-            orig_decodeExtra(self)
+            orig_decodeExtra(*args)
         except zipfile.BadZipfile:
             pass
     zipfile.ZipInfo._decodeExtra = _decodeExtra
