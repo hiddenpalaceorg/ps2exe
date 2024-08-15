@@ -378,10 +378,13 @@ class ArchiveWrapper(DecompressionCounterMixin):
 
                 if self.ctx.filelist:
                     flags = struct.unpack("<H", local_header[0x06:0x08])[0]
-                    if flags & 0x800:
-                        filename = filename_raw.decode('utf-8')
-                    else:
-                        filename = filename_raw.decode('cp437')
+                    try:
+                        if flags & 0x800:
+                            filename = filename_raw.decode('utf-8')
+                        else:
+                            filename = filename_raw.decode('cp437')
+                    except UnicodeDecodeError:
+                        continue
                     zip_entry = None
                     for name_to_try in [filename, filename.replace("/", "\\"), filename.replace("\\", "/")]:
                         try:
@@ -678,6 +681,10 @@ class ZipFileReader(CompressedFileAsFileIoReader):
                     entry.orig_filename = entry.orig_filename.replace("\\", "//")
                 else:
                     raise
+                return self.archive.open(entry, "r")
+            elif str(e).startswith("Overlapped entries"):
+                entry._end_offset = None
+                LOGGER.warning(str(e) + " file: %s", self.name)
                 return self.archive.open(entry, "r")
             LOGGER.warning(str(e) + " file: %s", self.name)
 
