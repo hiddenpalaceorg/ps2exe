@@ -15,7 +15,7 @@ class InMemoryRolloverTempFile(BaseFile):
         self.mmap = None
         self.mmap_size = 0
         if max_size:
-            self.mmap = mmap.mmap(-1, max_size, access=mmap.ACCESS_READ | mmap.ACCESS_WRITE)
+            self.mmap = mmap.mmap(-1, max_size, access=mmap.ACCESS_WRITE)
             self.mmap_size = len(self.mmap)
         self.temp_file = None
 
@@ -75,3 +75,14 @@ class InMemoryRolloverTempFile(BaseFile):
             pass
         if self.temp_file:
             self.temp_file.close()
+
+    def finalize(self, size):
+        if size < self.mmap_size:
+            # Test if we can resize an mmap on this OS first
+            try:
+                m = mmap.mmap(-1, 2, access=mmap.ACCESS_WRITE)
+                m.resize(1)
+            except OSError:
+                return
+            self.mmap.resize(size)
+            self.mmap_size = size

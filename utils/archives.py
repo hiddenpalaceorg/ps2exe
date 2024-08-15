@@ -220,6 +220,9 @@ class ArchiveWrapper:
         self.counter.update(incr=0, file_name="")
         self.counter.close()
         self.counter = None
+        if self.entries:
+            last_entry = next(reversed(self.entries))
+            self.uncompressed.finalize(self.entries[last_entry].end_pos)
         gc.collect()
 
     def recover_decompressor(self, libarchive_exception):
