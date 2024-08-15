@@ -12,7 +12,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Ps3IsoProcessor(PostPsxIsoProcessor):
-    update_folder = re.compile(".*PS3_UPDATE$", re.IGNORECASE)
+    update_folder = re.compile(r".*PS3_UPDATE$", re.IGNORECASE)
 
     # Least to most severe
     decryption_statuses = ("decrypted", "eboot only", "encrypted")

@@ -10,9 +10,9 @@ LOGGER = logging.getLogger(__name__)
 
 class PostPsxIsoProcessor(BaseIsoProcessor):
     exe_patterns = [
-        re.compile(".*/EBOOT\.BIN$", re.IGNORECASE),
-        re.compile(".*\.self$", re.IGNORECASE),
-        re.compile(".*\.sprx$", re.IGNORECASE)
+        re.compile(r".*/EBOOT\.BIN$", re.IGNORECASE),
+        re.compile(r".*\.self$", re.IGNORECASE),
+        re.compile(r".*\.sprx$", re.IGNORECASE)
     ]
     SFO_HEADER_BYTES = 20
 

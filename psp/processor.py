@@ -12,7 +12,7 @@ LOGGER = logging.getLogger(__name__)
 
 class PspIsoProcessor(PostPsxIsoProcessor):
 
-    update_folder = re.compile(".*/PSP_GAME/SYSDIR/UPDATE/$", re.IGNORECASE)
+    update_folder = re.compile(r".*/PSP_GAME/SYSDIR/UPDATE/$", re.IGNORECASE)
 
     def __init__(self, iso_path_reader, iso_filename, system, progress_manager):
         if isinstance(iso_path_reader, NPDRMPathReader):

@@ -25,7 +25,7 @@ LOGGER = logging.getLogger(__name__)
 
 class XboxIsoProcessor(BaseIsoProcessor):
     ignored_paths = [
-        re.compile(".*\.xbe$", re.IGNORECASE)
+        re.compile(r".*\.xbe$", re.IGNORECASE)
     ]
 
     def __init__(self, *args, **kwargs):
@@ -326,13 +326,13 @@ class XEX2ResourceInfo(ctypes.BigEndianStructure):
 
 class Xbox360IsoProcessor(XboxIsoProcessor):
     ignored_paths = [
-        re.compile(".*\$SystemUpdate\/.*", re.IGNORECASE),
-        re.compile(".*nxeart$", re.IGNORECASE),
-        re.compile(".*AvatarAssetPack$", re.IGNORECASE),
-        re.compile(".*\.xex$", re.IGNORECASE),
-        re.compile(".*readme.html$", re.IGNORECASE),
-        re.compile(".*AvatarAssetPack$", re.IGNORECASE),
-        re.compile(".*AvatarAwards$", re.IGNORECASE),
+        re.compile(r".*\$SystemUpdate\/.*", re.IGNORECASE),
+        re.compile(r".*nxeart$", re.IGNORECASE),
+        re.compile(r".*AvatarAssetPack$", re.IGNORECASE),
+        re.compile(r".*\.xex$", re.IGNORECASE),
+        re.compile(r".*readme.html$", re.IGNORECASE),
+        re.compile(r".*AvatarAssetPack$", re.IGNORECASE),
+        re.compile(r".*AvatarAwards$", re.IGNORECASE),
     ]
 
     XEX2_HEADER_RESOURCE_INFO = 0x2FF
