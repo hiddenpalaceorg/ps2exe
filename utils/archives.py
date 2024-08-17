@@ -370,7 +370,10 @@ class ArchiveWrapper:
                             self.ctx.filelist.pop(self.ctx.filelist.index(zip_entry))
                             self.ctx.NameToInfo.pop(zip_entry.filename)
                         else:
-                            self.fp.seek(struct.unpack("<L", local_header[0x12:0x16])[0], 1)
+                            compress_size = struct.unpack("<L", local_header[0x12:0x16])[0]
+                            if not compress_size:
+                                compress_size = zip_entry.compress_size
+                            self.fp.seek(compress_size, 1)
                             continue
                     else:
                         num_entries += 1
