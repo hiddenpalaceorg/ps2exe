@@ -502,57 +502,53 @@ class OffsetFile(MmapWrapper):
         self.end_pos = end_pos
         self.mmap = mmap
         self.name = file_name or self.mmap.name
+        self._length = self.end_pos - self.offset  # Pre-calculate length
 
     def seek(self, pos, whence=os.SEEK_SET):
         if whence == os.SEEK_CUR:
-            pos = self.pos - self.offset + pos
+            pos += self.pos - self.offset
         elif whence == os.SEEK_END:
-            pos = len(self) + pos
-        if pos >= self.length():
-            pos = self.length()
-        return super().seek(pos+self.offset, os.SEEK_SET)
+            pos += self._length
+        pos = max(0, min(pos, self._length))
+        return super().seek(pos + self.offset, os.SEEK_SET)
 
     def tell(self):
         return super().tell() - self.offset
 
     def read(self, n=None):
-        if n:
-            ret = self[self.tell():self.tell()+n]
-        else:
-            ret = self[self.tell():self.end_pos-self.offset]
-
+        current_pos = self.tell()
+        if n is None:
+            n = self._length - current_pos
+        if current_pos == self._length:
+            return b""
+        n = min(n, self._length - current_pos)
+        ret = self.mmap[current_pos + self.offset:current_pos + self.offset + n]
         self.pos += len(ret)
         return ret
 
     def __getitem__(self, item):
         if isinstance(item, slice):
-            read_pos = item.start
-            read_len = item.stop - item.start
+            start = item.start or 0
+            stop = item.stop or self._length
+            start = max(0, min(start, self._length))
+            stop = max(0, min(stop, self._length))
+            return self.mmap[start + self.offset:stop + self.offset]
         else:
-            read_pos = item
-            read_len = 1
-        self.seek(read_pos)
-        file_pos = super().tell()
-        if file_pos + read_len > self.end_pos:
-            read_len = self.end_pos - file_pos
-        if self.tell() == self.length():
-            return b''
-        return self.mmap[file_pos:file_pos+read_len]
+            if 0 <= item < self._length:
+                return self.mmap[item + self.offset]
+            raise IndexError("OffsetFile index out of range")
 
     def write(self, data):
-        try:
-            self.mmap.seek(self.pos)
-            ret = self.mmap.write(data)
-            self.pos += len(data)
-            return ret
-        except ValueError:
-            raise
+        write_len = min(len(data), self._length - (self.pos - self.offset))
+        if write_len > 0:
+            self.mmap[self.tell() + self.offset:self.tell() + self.offset + write_len] = data[:write_len]
+            self.pos += write_len
+        return write_len
 
     def length(self):
-        return self.end_pos - self.offset
+        return self._length
 
-    def __len__(self):
-        return self.length()
+    __len__ = length
 
     def close(self):
         pass

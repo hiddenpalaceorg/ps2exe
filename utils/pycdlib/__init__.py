@@ -18,6 +18,7 @@ from pycdlib.pycdlib import _interchange_level_from_directory, _interchange_leve
 
 _logger = logging.getLogger(__name__)
 
+
 class PyCdlib(_PyCdlib):
     is_hs = False
 
@@ -349,6 +350,7 @@ class PyCdlib(_PyCdlib):
 
     def _get_iso_size(self):
         return float("inf")
+
 
 # Volume descriptor parsers with HS filesystem support
 class PrimaryOrSupplementaryVD(_PrimaryOrSupplementaryVD):
@@ -727,12 +729,12 @@ class DirectoryRecord(pycdlib.dr.DirectoryRecord):
                 is_first_dir_record_of_root = False
 
                 if self.parent.is_root:
+                    bytes_to_skip = 0
                     if self.file_ident == b'\x00':
                         is_first_dir_record_of_root = True
-                        bytes_to_skip = 0
-                    else:
+                    elif self.parent.children[0].rock_ridge:
                         bytes_to_skip = self.parent.children[0].rock_ridge.bytes_to_skip
-                else:
+                elif self.parent.rock_ridge:
                     bytes_to_skip = self.parent.rock_ridge.bytes_to_skip
 
                 self.rock_ridge.parse(record[record_offset:],

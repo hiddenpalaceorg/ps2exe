@@ -196,6 +196,7 @@ class ArchiveWrapper:
             return
 
         entry = None
+        last_entry = next(reversed(self.entries), None)
         for entry in self.reader:
             if isinstance(entry, (rarfile.RarInfo, zipfile.ZipInfo)):
                 file_path = entry.filename
@@ -215,7 +216,11 @@ class ArchiveWrapper:
             if isinstance(file_path, bytes):
                 file_path = file_path.decode(errors='replace')
 
-            entry_fp = OffsetFile(self.uncompressed, self.uncompressed.tell(), self.uncompressed.tell() + file_size, file_path)
+            if last_entry:
+                entry_fp = OffsetFile(self.uncompressed, self.entries[last_entry].end_pos,
+                                      self.entries[last_entry].end_pos + file_size, file_path)
+            else:
+                entry_fp = OffsetFile(self.uncompressed, 0, file_size, file_path)
             entry_wrapper = ArchiveEntryWrapper(self, entry, entry_fp, self.reader, pbar=self.counter)
             self.entries[file_path] = entry_wrapper
             self.counter.update(incr=0, file_name=format_bar_desc(entry_wrapper.file_name, 30))
@@ -227,6 +232,7 @@ class ArchiveWrapper:
                 raise
             self.entries[file_path] = CompletedEntryWrapper(entry_wrapper)
             del entry_wrapper
+            last_entry = file_path
         self.ctx.__exit__(None, None, None)
         self.ctx = None
         entry = None
