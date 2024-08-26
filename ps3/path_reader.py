@@ -1,70 +1,44 @@
 import collections
 import functools
-import io
 import logging
-import math
-import os
 import pathlib
 import sqlite3
 import struct
 
 from Crypto.Cipher import AES
-from pycdlib.pycdlibio import PyCdlibIO
 
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
+from utils.pycdlib.decrypted_file_io import DecryptedFileIO
 
 LOGGER = logging.getLogger(__name__)
 
 
-class DecryptedFileReader(PyCdlibIO):
+class DecryptedFileReader(DecryptedFileIO):
     def __init__(self, ino, logical_block_size, disc_key):
         super().__init__(ino, logical_block_size)
         self.disc_key = disc_key
 
-    def read(self, size=None):
-        if self._offset >= self._length:
-            return super().read(size)
+    def decrypt_blocks(self, blocks):
+        if not self.disc_key:
+            return blocks
 
-        read_size = min(size or (self._length - self._offset), self._length - self._offset)
-        orig_pos = self._fp.tell()
-        orig_offset = self._offset
-        read_offset = self._fp.tell() % 2048
-        if read_offset != 0:
-            self._offset -= read_offset
-            self._fp.seek(-read_offset, os.SEEK_CUR)
-        num_chunks = math.ceil((read_size + read_offset) / 2048)
-        if read_offset + read_size > 2048 * num_chunks:
-            num_chunks += 1
-        decrypted = io.BytesIO()
-        bytes_read = 0
-        for chunk in range(num_chunks):
-            block = super().read(min(size, 2048))
-            if not block:
-                break
-            bytes_read += len(block)
-            # Read the remainder of the sector
-            if len(block) != 2048:
-                block += self._fp.read(2048 - len(block))
-            decrypted.write(self.decrypt_block(block, self.disc_key))
+        decrypted = bytearray()
+        start_pos = (self._fp.tell() // 2048) - (len(blocks) // 2048)
 
-        self._offset = orig_offset + read_size
-        self._fp.seek(orig_pos + read_size)
-        decrypted.seek(read_offset)
-        return decrypted.read(read_size)
+        for i in range(0, len(blocks), 2048):
+            block = blocks[i:i+2048]
+            pos = start_pos + (i // 2048)
+            iv = bytearray(b'\x00' * 16)
 
-    def decrypt_block(self, block, disc_key):
-        if not disc_key:
-            return block
+            for j in range(16):
+                iv[16 - j - 1] = (pos & 0xFF)
+                pos >>= 8
 
-        pos = (self._fp.tell() // 2048) - 1
-        iv = bytearray(b'\x00' * 16)
+            cipher = AES.new(self.disc_key, AES.MODE_CBC, bytes(iv))
+            decrypted.extend(cipher.decrypt(block))
 
-        for j in range(16):
-            iv[16 - j - 1] = (pos & 0xFF)
-            pos >>= 8
+        return bytes(decrypted)
 
-        cipher = AES.new(disc_key, AES.MODE_CBC, bytes(iv))
-        return cipher.decrypt(block)
 
 class Ps3PathReader(PyCdLibPathReader):
     def __init__(self, iso, fp, *args, **kwargs):
@@ -136,14 +110,16 @@ class Ps3PathReader(PyCdLibPathReader):
             else:
                 continue
 
-            block_dec = f.decrypt_block(block,key)
+            f.disc_key = key
+            block_dec = f.decrypt_blocks(block)
             if block_dec[:7] in expected_magic:
                 LOGGER.info("Found key: %s", key.hex())
                 return key
 
         # Check if the disc decrypted with a debug key
         debug_key = '67c0758cf4996fef7e88f90cc6959d66'
-        block_dec = f.decrypt_block(block, bytes.fromhex(debug_key))
+        f.disc_key = bytes.fromhex(debug_key)
+        block_dec = f.decrypt_blocks(block)
         if block_dec[:7] in expected_magic:
             LOGGER.info("Found key: %s", debug_key)
             return bytes.fromhex(debug_key)
@@ -158,7 +134,8 @@ class Ps3PathReader(PyCdLibPathReader):
         c = db.cursor()
         keys = c.execute('SELECT * FROM keys WHERE size = ?', [str(self.fp.length())]).fetchall()
         for key in keys:
-            block_dec = f.decrypt_block(block, key[-1])
+            f.disc_key = key[-1]
+            block_dec = f.decrypt_blocks(block)
             if block_dec[:7] in expected_magic:
                 LOGGER.info("Found key: %s", key[-1].hex())
                 return key[-1]

@@ -67,6 +67,17 @@ class InMemoryRolloverTempFile(BaseFile):
         self.seek(read_pos)
         return self._get_data(read_len)
 
+    def __setitem__(self, item, value):
+        if isinstance(item, slice):
+            write_pos = item.start
+        else:
+            write_pos = item
+
+        original_pos = self.tell()
+        self.seek(write_pos)
+        self.write(value)
+        self.seek(original_pos)
+
     def close(self):
         try:
             if self.mmap:
