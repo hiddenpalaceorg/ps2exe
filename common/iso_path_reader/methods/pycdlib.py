@@ -44,9 +44,9 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 continue
 
             if file.is_dir():
+                if include_dirs:
+                    yield file
                 if recursive:
-                    if include_dirs:
-                        yield file
                     yield from self.iso_iterator(file, recursive, include_dirs)
                 continue
 
