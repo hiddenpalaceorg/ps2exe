@@ -5,7 +5,9 @@ import re
 
 import rarfile
 
-from common import pycdlib
+from post_psx.npdrm.path_reader import NPDRMPathReader
+from post_psx.npdrm.pkg import Pkg
+from utils import pycdlib
 from pyisotools.iso import GamecubeISO
 
 from cdi.path_reader import CdiPathReader
@@ -36,7 +38,7 @@ from megacd.processor import MegaCDIsoProcessor
 from p3do.operafs import OperaFs
 from utils.archives import ArchiveWrapper
 from utils.installshield import InstallShieldCabWrapper, InstallShieldEmptyCabinet, InstallShieldNotFirstVolume
-from utils.files import BinWrapper, ConcatenatedFile, OffsetFile, MmappedFile, BinWrapperException
+from utils.files import BinWrapper, ConcatenatedFile, OffsetFile, MmappedFile, BinWrapperException, get_file_size
 from wii.path_reader import WiiPathReader
 from wii.processor import WiiIsoProcessor
 from wii.utils.partition import Partition
@@ -142,7 +144,7 @@ class IsoProcessorFactory:
                 return [], {InstallShieldPathReader.volume_type: e}
 
         fp.seek(0)
-        if fp.read(4) == b"LIVE":
+        if fp.read(4) == b"LIVE" and get_file_size(fp) >= 0x971A:
             stfs = STFS(filename=None, fd=fp)
             if stfs.content_type == 0x7000:
                 # Not an XBLA archive, actually a GOD game. Process like a concatenated ISO
@@ -206,6 +208,16 @@ class IsoProcessorFactory:
                     wrapper = fp
         else:
             wrapper = fp
+
+        wrapper.seek(0)
+        if wrapper.peek(4) == b"\x7FPKG":
+            try:
+                reader = Pkg(wrapper)
+                reader.parse_header()
+                reader.parse_metadata()
+                path_readers.append(NPDRMPathReader(reader, wrapper, parent_container))
+            except Exception as e:
+                exceptions[NPDRMPathReader.volume_type] = e
 
         wrapper.seek(0)
         if wrapper.peek(7) == b"\x01\x5A\x5A\x5A\x5A\x5A\x01" and file_name != "Disc label":
