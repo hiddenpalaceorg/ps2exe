@@ -461,6 +461,7 @@ dependencies = [
     { name = "rarfile", version = "4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "rarfile", version = "4.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "stream-inflate" },
+    { name = "xor-cipher" },
     { name = "xxhash" },
 ]
 
@@ -481,6 +482,7 @@ requires-dist = [
     { name = "pyisotools", url = "https://github.com/hiddenpalaceorg/pyisotools/archive/a9373ba22c8c5ce3c1af684f7e74a103e09aa3ac.zip" },
     { name = "rarfile", specifier = "~=4.2" },
     { name = "stream-inflate" },
+    { name = "xor-cipher" },
     { name = "xxhash", specifier = "~=3.7.0" },
 ]
 
@@ -785,6 +787,58 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8e/f1/d0a4c936ba77eb1050da6ea5e7cd80aa36add343d9e5f7f9cf79a206c5b8/wirerope-1.0.0.tar.gz", hash = "sha256:7da8bb6feeff9dd939bd7141ef0dc392674e43ba662e20909d6729db81a7c8d0", size = 10930, upload-time = "2025-01-16T11:01:25.427Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/42/2d/3557ee32d8268b04ce8aada3212b0d49f2ddcf86dc200f3999a772262dc5/wirerope-1.0.0-py2.py3-none-any.whl", hash = "sha256:59346555c7b5dbd1c683a4e123f8bed30ca99df646f6867ea6439ceabf43c2f6", size = 9166, upload-time = "2025-01-16T11:01:23.507Z" },
+]
+
+[[package]]
+name = "xor-cipher"
+version = "5.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "xor-cipher-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0b/9b/17d98efe09b78b64953eecd07418d7ca4746d3e9b21227f456dc6eafe7ce/xor_cipher-5.0.2.tar.gz", hash = "sha256:44df295f4894a802f6470baff67930032d563c2fc41f50a6c074aae1f822cee4", size = 14700, upload-time = "2025-06-13T12:46:50.675Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/80/70/baf806be7d8340badfa20c474f0e017a26b1d142dfb2f4ec79cd9619a5ca/xor_cipher-5.0.2-py3-none-any.whl", hash = "sha256:a295ea8aecb2b48169308af6ad6b31ce772c8a95015e68fbe57dc7caef48d868", size = 5941, upload-time = "2025-06-13T12:46:49.484Z" },
+]
+
+[[package]]
+name = "xor-cipher-core"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/61/4ce5c0f95c9e7b67624e87307ba8679abcb5514107bfad2a519d7761f7d6/xor_cipher_core-1.2.0.tar.gz", hash = "sha256:29da9c408f3c26b9a2a7070a28d1ba352d2e8dda66c4bd74c093709e21ecdd9d", size = 13833, upload-time = "2025-06-13T12:28:12.767Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/05/22b844a9e1fd0ea8c9c277119076dab69ceff33afd91db784a8c0666e7dd/xor_cipher_core-1.2.0-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:32a9700fcc9fbf477a5116bbbf82f3434e64c55a90b8cc2bb65cecd2b3b2e5b8", size = 184677, upload-time = "2025-06-13T12:26:32.802Z" },
+    { url = "https://files.pythonhosted.org/packages/83/13/5ce96a6e96333a2b25ac1497343ff8cdf2d4f28b4be1fd68d3032d37224b/xor_cipher_core-1.2.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:4e8bb4fda3cf71435320d62e7bd2f7d70c61224cbfbfaf259caf561297f05358", size = 179542, upload-time = "2025-06-13T12:26:34.29Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/93/1a95d9de4693fc70a67b7050cf1209f5f77658d7c23a4f541fdb670b3c28/xor_cipher_core-1.2.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3c5e40accbc59886ecc48040aac98fb86abb5d0918afeb8b58c07679ca57c618", size = 193775, upload-time = "2025-06-13T12:26:35.692Z" },
+    { url = "https://files.pythonhosted.org/packages/50/3e/87851bf5b030cec4687e40c69ea613ec5a5a2c0b15e5ce384e75fa6ca23d/xor_cipher_core-1.2.0-cp310-cp310-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:7a6e17a830d23b18b9a57ef854af348f5bf49bf450ee528bfd80b196d9a02235", size = 198597, upload-time = "2025-06-13T12:26:36.915Z" },
+    { url = "https://files.pythonhosted.org/packages/39/72/85b7e4dd41b0dda4712fb58223b7f8ce6f75cc749850b825f81d48823964/xor_cipher_core-1.2.0-cp310-cp310-manylinux_2_17_ppc64.manylinux2014_ppc64.whl", hash = "sha256:735439c84bd74957201c7c4eaabaa4f181afcecb6abb468083f114f10b1a7d8e", size = 320521, upload-time = "2025-06-13T12:26:38.677Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/5f/764bc1a4522022cc162125ae91044cbabce27338bbc7e522ada187ee4cee/xor_cipher_core-1.2.0-cp310-cp310-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:497b7f1a4b5d71b50e6e9b820850bd1dfa3b4ae64fb8c166551ded80114f7110", size = 320828, upload-time = "2025-06-13T12:26:40.017Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/a7/2cbf9ec9611e3908c34cb956b3bd7bd3758e72fcc14814facb38ee61f551/xor_cipher_core-1.2.0-cp310-cp310-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:0d836ae9ac2dc7e8162ae12f180f9c0ad83fd84f14c93dd84c02f6bc30effdc3", size = 231600, upload-time = "2025-06-13T12:26:41.144Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/0b/531e67c37b93e17b914ffb9c57b0ea0019900a6075ca7501e25061055dd1/xor_cipher_core-1.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a823519f70416eb14a70d8476d9c7f264df17cbf2df4c7ed4e4c707c1bc2ad12", size = 201589, upload-time = "2025-06-13T12:26:42.258Z" },
+    { url = "https://files.pythonhosted.org/packages/70/f2/6e895c777a6fd1f4a09cd1b3f7423dd1ccbb2e3b8dc0b9d3e22d6679a051/xor_cipher_core-1.2.0-cp310-cp310-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:bbc95f8ce9f330ac1dd0a14e42c71dda671bb9a5fc9a0b7dea644eea5e68d5e7", size = 219020, upload-time = "2025-06-13T12:26:43.383Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/76/4662e961514615b8fdb05aaac43b4b93597163a6c8f54faaa7d450b8ba10/xor_cipher_core-1.2.0-cp310-cp310-musllinux_1_2_aarch64.whl", hash = "sha256:4d16a1187e1f38f4feebd11beec779381ea73174c5487e560c329084a24998f9", size = 373644, upload-time = "2025-06-13T12:26:44.533Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/5a/c815b4ec502faf9a509792f2447a0f3438666babb20fcce142cbc587cd8f/xor_cipher_core-1.2.0-cp310-cp310-musllinux_1_2_armv7l.whl", hash = "sha256:8d1f3a9ed0914f171e204b2aed86873b18d8f587d7b9bae9d5e53c985c5ea2b8", size = 462090, upload-time = "2025-06-13T12:26:45.66Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/a1/0677efd112a03d2ca4bb8e3006d744780ce50e6b1f711f82532d8fa26855/xor_cipher_core-1.2.0-cp310-cp310-musllinux_1_2_i686.whl", hash = "sha256:d7a7b5019d8d3a2c0151ec33ca592515fecdc4436341de248fe18ac4835d5b62", size = 401548, upload-time = "2025-06-13T12:26:47.119Z" },
+    { url = "https://files.pythonhosted.org/packages/76/f1/a745cd9483d33b2c4bebed23af8a0fbdcdadca53b6a2a0158d217f820cd9/xor_cipher_core-1.2.0-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:cd6f01f2394d7bb9af9d30536a82fe62b7b1dac9974ea192a57e6f3590ee578d", size = 373092, upload-time = "2025-06-13T12:26:48.712Z" },
+    { url = "https://files.pythonhosted.org/packages/62/06/0527611f8e2039825c12417bef44c98666c40ce2e4de83b06f35abcff998/xor_cipher_core-1.2.0-cp310-cp310-win32.whl", hash = "sha256:92f6f788fb4946262d24ebe6e53a001838a44378afac2e650a2d3f790b2df102", size = 98976, upload-time = "2025-06-13T12:26:49.797Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/10/67da1900dae5d1862a0608aae04c5bdd768201320d88ce069b622dbce44b/xor_cipher_core-1.2.0-cp310-cp310-win_amd64.whl", hash = "sha256:63ef8cd5af7ca670395c8bb5801736d1323d2dc7c8bbe2e65c5444ca4b8a7aad", size = 103438, upload-time = "2025-06-13T12:26:51.135Z" },
+    { url = "https://files.pythonhosted.org/packages/53/9f/e7d7d0b10914973515cc6799c4bfe7d1db7c5256a609ad17666a024e3dcd/xor_cipher_core-1.2.0-cp310-cp310-win_arm64.whl", hash = "sha256:7f00a6ff73d266cffb3d41093a919308dd8fb65e1077ce1475ede246d361c3dc", size = 100928, upload-time = "2025-06-13T12:26:52.117Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/06/e2e0493cbc5ff40edf2e26f42ffa9975fcdf269db4da7d56e1be0295a7d6/xor_cipher_core-1.2.0-cp39-cp39-macosx_10_12_x86_64.whl", hash = "sha256:68b4993d74ed8401fb9611e51ba01aea3b511a323b25c9af3afd9c63bb5d9464", size = 185140, upload-time = "2025-06-13T12:27:52.66Z" },
+    { url = "https://files.pythonhosted.org/packages/80/42/aed83551e3c070b1b4662780b3c83679be4d481f3c89b5416e1f2dc61c57/xor_cipher_core-1.2.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:dbf344431542f1104b8254fcef5756c50ad35adb3d9985605660ac9efccbf950", size = 179947, upload-time = "2025-06-13T12:27:54.288Z" },
+    { url = "https://files.pythonhosted.org/packages/80/47/46d51785bac52496669a7b3e7e3899fb85cd491cab6ad17540e42e92b781/xor_cipher_core-1.2.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c0907825edaa3dc3c2ef60f4faa2cfde1495967038f5ac2bf5c4c99e1f066ab1", size = 194146, upload-time = "2025-06-13T12:27:55.412Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/77/42753f1ff190ffbc766005f71fd829d7b095740e238e5215c6fc0435743c/xor_cipher_core-1.2.0-cp39-cp39-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:f5797d083559e0ab5fff86813ced390d8ba7115d6795713bb0c08deade152895", size = 198990, upload-time = "2025-06-13T12:27:56.559Z" },
+    { url = "https://files.pythonhosted.org/packages/de/45/3bd6de444189c660a39b8037a7c9d91d3f3b9b8dceac32cd263908f94f6e/xor_cipher_core-1.2.0-cp39-cp39-manylinux_2_17_ppc64.manylinux2014_ppc64.whl", hash = "sha256:ea7bfb8d90693e34b0a201ab08918ced47e68b0450e0b69ede5bb0439140bff5", size = 323007, upload-time = "2025-06-13T12:27:57.638Z" },
+    { url = "https://files.pythonhosted.org/packages/51/94/e491b1c7fb130c56ccdc00cc2867456a0ffbc27752fcea8b18b535515b76/xor_cipher_core-1.2.0-cp39-cp39-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:792c833a4a88baf94a5ef10102c7c2e988e9b0bfc9b0b4ca9104f6a3bfa1d15c", size = 325233, upload-time = "2025-06-13T12:27:58.767Z" },
+    { url = "https://files.pythonhosted.org/packages/21/35/6b320b431e2fd5a430814d51da5da9ce582a191d01cdf5c717f35c6fab89/xor_cipher_core-1.2.0-cp39-cp39-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:8cf32c9f6a9c24242cdca9f4f5525d6acab5e9ed9cf997e697787222cf9029d8", size = 231911, upload-time = "2025-06-13T12:28:00.058Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/17/46d9888265baf228b5358e25a5d93185700fa3aecbed8de3510777b7f1a4/xor_cipher_core-1.2.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5131a76cd842542f181e0c718a450899ebffd3b2958c06cfc86685c64e356748", size = 201872, upload-time = "2025-06-13T12:28:01.223Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/6f/8e0b5f88d68bce026f548c5c7f98a9dd8d82b6241c478ac689a9e8c017fd/xor_cipher_core-1.2.0-cp39-cp39-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:690444fca4d5c4267442c5cbb953dcc208a0a9bff92af175388b4f0b5829ec01", size = 219478, upload-time = "2025-06-13T12:28:02.79Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/b0/4f79ed3d852b857210bdddde1180eb0ca3bca02f64aaa0efada232210a06/xor_cipher_core-1.2.0-cp39-cp39-musllinux_1_2_aarch64.whl", hash = "sha256:02e9b37940a1800704fc197c6a1321bb641eed239b8524ca6151661bb11af925", size = 373912, upload-time = "2025-06-13T12:28:04.241Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/44/cffb89ea9ea2f56a3e670c44ad3ccd996878d8189ccba8f7a66950eede38/xor_cipher_core-1.2.0-cp39-cp39-musllinux_1_2_armv7l.whl", hash = "sha256:1885549a7fc333d390a53e2b8e1a8d5d0724c303eb97c41d7c27d5b54160f8a5", size = 462630, upload-time = "2025-06-13T12:28:05.563Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/a8/3452f21720cd57ddab435659c63590d4cad4f87eaf3330c56d98c16d33f2/xor_cipher_core-1.2.0-cp39-cp39-musllinux_1_2_i686.whl", hash = "sha256:c2cc1fc2ff4c248c94978cd952e4afd4c0b653f15c2622a3e046dc5dccceff7f", size = 402162, upload-time = "2025-06-13T12:28:06.846Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/35/fcd9c80235035a8aa752e5627e4f0303d0e7156986872be5ee654bbdd319/xor_cipher_core-1.2.0-cp39-cp39-musllinux_1_2_x86_64.whl", hash = "sha256:60a191dc2f4502e33eb2ca0d013b503ffce97cebf47913cca914e2097cf3c480", size = 373425, upload-time = "2025-06-13T12:28:08.456Z" },
+    { url = "https://files.pythonhosted.org/packages/62/7a/8628e7d8c9eed5bcdea8c0cfb7ece51c0ea7e037f668968f3d8cc395c294/xor_cipher_core-1.2.0-cp39-cp39-win32.whl", hash = "sha256:8a998bf9b81c106645bfd71317a73415baba2a93a92f6f9acf1776547c6b44e3", size = 99383, upload-time = "2025-06-13T12:28:09.696Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/59/3d1d4cdf37bd22884369cad0e760b0cd41904d461a5ad170a1325c3852b9/xor_cipher_core-1.2.0-cp39-cp39-win_amd64.whl", hash = "sha256:bfd185a6289448ca68d5fe3b42780562396382bd6ad8fae159cf704696262203", size = 104096, upload-time = "2025-06-13T12:28:10.744Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/4c/189595fbc6474e3c5b177d977d86ac5f5078c9870c0bd7c553bdff9b141d/xor_cipher_core-1.2.0-cp39-cp39-win_arm64.whl", hash = "sha256:2684e81d525e57e8677f6c527b37fae54da13032c7c4797c89c2b0b03d29cdf9", size = 101518, upload-time = "2025-06-13T12:28:11.771Z" },
 ]
 
 [[package]]
