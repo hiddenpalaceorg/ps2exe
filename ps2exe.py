@@ -63,7 +63,11 @@ def process_containers_recursive(iso_filename, disable_contents_checksum):
     iso_path = iso_filename.encode("cp1252", errors="replace")
     LOGGER.info("Reading %s", iso_path.decode("cp1252"))
 
-    stack = [([root_path_reader], iso_filename, iter([(root_path_reader, root_path_reader.get_file(iso_filename))]))]
+    stack = [
+        ([root_path_reader],
+         iso_filename,
+         iter([(root_path_reader, root_path_reader.get_file(iso_filename))]))
+    ]
 
     rows = []
 
@@ -123,7 +127,10 @@ def process_containers_recursive(iso_filename, disable_contents_checksum):
                     pass
                 continue
 
-            nested_path = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
+            if file_path != iso_filename:
+                nested_path = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
+            else:
+                nested_path = iso_filename
             if path_reader != root_path_reader:
                 LOGGER.info("Found nested container %s", nested_path)
 
