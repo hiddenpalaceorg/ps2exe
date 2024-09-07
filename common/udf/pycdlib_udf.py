@@ -420,7 +420,11 @@ class PyCdlibUdf(PyCdlib):
             return None
 
         desc_tag = udfmod.UDFTag()
-        desc_tag.parse(icbdata, icb.log_block_num)
+        try:
+            desc_tag.parse(icbdata, icb.log_block_num)
+        except pycdlibexception.PyCdlibInternalError as e:
+            if str(e) == 'Not enough bytes to compute CRC':
+                return None
         if desc_tag.tag_ident == 261:
             file_entry = udfmod.UDFFileEntry()
             file_entry.parse(icbdata, abs_file_entry_extent, parent, desc_tag)
