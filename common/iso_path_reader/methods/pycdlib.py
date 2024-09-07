@@ -98,10 +98,10 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
         if path[0] != "/":
             path = "/" + path
         try:
-            return self.iso.get_record(**{f"{self.pycdlib_volume_type}_path": path})
+            f = self.iso.get_record(**{f"{self.pycdlib_volume_type}_path": path})
         except (PyCdlibInvalidInput, IndexError) as e:
             try:
-                return self.iso.get_record(**{f"{self.pycdlib_volume_type}_path":path + ";1"})
+                f = self.iso.get_record(**{f"{self.pycdlib_volume_type}_path":path + ";1"})
             except (PyCdlibInvalidInput, IndexError):
                 try:
                     for file in self.iso_iterator(self.get_root_dir(), recursive=True):
@@ -110,6 +110,9 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 except Exception:
                     pass
                 raise FileNotFoundError(e)
+        if not f:
+            raise FileNotFoundError
+        return f
 
     def open_file(self, file, file_io_cls=pycdlib.pycdlibio.PyCdlibIO):
         # Hack: If multiple files reference the same LBA but with different
