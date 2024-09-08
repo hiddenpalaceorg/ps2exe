@@ -309,6 +309,9 @@ def apply_patches():
     libarchive.ffi.read_data.errcheck = check_int
 
     def check_int_header(retcode, func, args):
+        if retcode == libarchive.ffi.ARCHIVE_WARN and \
+           libarchive.ffi._error_string(args[0]) == "Missing type keyword in mtree specification":
+            retcode = libarchive.ffi.ARCHIVE_FATAL
         try:
             return check_int(retcode, func, args)
         except ArchiveError as e:

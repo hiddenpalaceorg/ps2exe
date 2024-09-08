@@ -95,6 +95,21 @@ class ArchiveWrapper:
                 self.block_size = 65536
         except (OSError, AttributeError):
             self.block_size = 65536
+        try:
+            with libarchive.stream_reader(file, block_size=self.block_size) as f:
+                next(iter(f))
+        except libarchive.ArchiveError as e:
+            mtree_errors = [
+                "Missing type keyword in mtree specification",
+                "Can't parse line"
+            ]
+            if any(err for err in mtree_errors if str(e).startswith(err)):
+                # Test mtree file type to work around libarchive bug #507
+                raise libarchive.ArchiveError("Unrecognized archive format")
+        except StopIteration:
+            # Don't process archives that report zero files
+            raise libarchive.ArchiveError("Unrecognized archive format")
+        file.seek(0)
         self.ctx = libarchive.stream_reader(file, block_size=self.block_size)
 
         # 80% of free physical memory
