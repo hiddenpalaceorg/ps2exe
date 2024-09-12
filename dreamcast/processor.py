@@ -115,25 +115,27 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             return
 
         # Duplicate track 3 as offset 0 to fool the iso parser to see it as a normal iso with the PVD at 0x8000
-        offsets = [0]
-        files = [BinWrapper(
+        track = BinWrapper(
             MmappedFile(self.iso_path_reader.parent_container.open_file(track_file)),
             sector_size=data_tracks[0]["sector_size"],
             sector_offset=16 if data_tracks[0]["sector_size"] == 2352 else 0,
             virtual_sector_size=2048
-        )]
+        )
+        track.starting_sector = 0
+        offsets = [0]
+        files = [track]
         try:
             for track in data_tracks:
                 track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / track["file_name"]))
                 offsets.append(int(track["sector"]) * 2048)
-                files.append(
-                    BinWrapper(
-                        self.iso_path_reader.parent_container.open_file(track_file),
+                track = BinWrapper(
+                        MmappedFile(self.iso_path_reader.parent_container.open_file(track_file)),
                         sector_size=track["sector_size"],
                         sector_offset=16 if track["sector_size"] == 2352 else 0,
                         virtual_sector_size=2048
                     )
-                )
+                track.starting_sector = 0
+                files.append(track)
         except FileNotFoundError:
             return
 
