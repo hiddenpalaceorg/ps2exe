@@ -90,7 +90,7 @@ class XboxStfsPathReader(XboxPathReader):
         f = self.open_file(file)
         while chunk := f.read(65536):
             hash.update(chunk)
-        return hash
+        return hash, 0
 
     def open_file(self, file):
         f = self.iso.read_file(file)

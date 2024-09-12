@@ -51,8 +51,8 @@ def get_iso_dir(iso_filename):
         md5_hash = ''
         sha1_hash = ''
         if not path_reader.is_directory(file):
-            md5_hash = path_reader.get_file_hash(file, hashlib.md5).hexdigest()
-            sha1_hash = path_reader.get_file_hash(file, hashlib.sha1).hexdigest()
+            md5_hash = path_reader.get_file_hash(file, hashlib.md5)[0].hexdigest()
+            sha1_hash = path_reader.get_file_hash(file, hashlib.sha1)[0].hexdigest()
 
         lines.append(", ".join(list(filter(None, [
             str(path_reader.get_file_sector(file)),

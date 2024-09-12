@@ -27,7 +27,7 @@ class GamecubeIsoProcessor(BaseIsoProcessor):
             exe = self.iso_path_reader.iso.dol
             exe._fileoffset = self.iso_path_reader.iso.bootheader.dolOffset
             exe.name = exe_filename
-            md5 = self.iso_path_reader.get_file_hash(exe, algo=hashlib.md5).hexdigest()
+            md5 = self.iso_path_reader.get_file_hash(exe, algo=hashlib.md5)[0].hexdigest()
             sections_with_dates = []
             dol_dates = []
             for section in self.iso_path_reader.iso.dol.sections:

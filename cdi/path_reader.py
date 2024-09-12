@@ -74,7 +74,7 @@ class CdiPathReader(IsoPathReader):
             except IndexError:
                 if lbn == file.first_lbn:
                     LOGGER.warning("File %s out of iso range", self.get_file_path(file))
-                    return
+                    return None, file.size
                 LOGGER.warning("File %s partially out of iso range. Read %d bytes out of %d bytes",
                                self.get_file_path(file), file.size - size_left, self.get_file_size(file))
                 break
@@ -82,7 +82,7 @@ class CdiPathReader(IsoPathReader):
             hash.update(file_data)
             lbn += 1
             size_left -= block.data_size
-        return hash
+        return hash, size_left
 
     def get_file_sector(self, file):
         return file.first_lbn

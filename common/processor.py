@@ -177,7 +177,7 @@ class BaseIsoProcessor:
 
         try:
             exe = self.iso_path_reader.get_file(exe_filename)
-            md5 = self.iso_path_reader.get_file_hash(exe, algo=hashlib.md5).hexdigest()
+            md5 = self.iso_path_reader.get_file_hash(exe, algo=hashlib.md5)[0].hexdigest()
             LOGGER.info("md5 %s", md5)
             datetime = self.iso_path_reader.get_file_date(exe)
         except:
@@ -194,6 +194,7 @@ class BaseIsoProcessor:
     def get_file_hashes(self, hash_type=xxhash.xxh64):
         file_hashes = {}
         file_hashes_excluding_ignored = {}
+        incomplete_files = []
         root = self.iso_path_reader.get_root_dir()
         ignored_paths = self.ignored_paths + self.globally_ignored_paths
         file_list = list(self.iso_path_reader.iso_iterator(root, recursive=True))
@@ -208,16 +209,19 @@ class BaseIsoProcessor:
                     hash_bar.total = float(self.iso_path_reader.get_file_size(file))
                     hash_bar.count = 0.0
                     hash_wrapper = HashProgressWrapper(hash_bar, hash_type)
-                    if file_hash := self.iso_path_reader.get_file_hash(file, hash_wrapper):
+                    file_hash, unread_bytes = self.iso_path_reader.get_file_hash(file, hash_wrapper)
+                    if file_hash:
                         file_hashes[file_path] = file_hash.digest()
                         if not any(regex.match(file_path) for regex in ignored_paths):
                             file_hashes_excluding_ignored[file_path] = file_hash.digest()
+                    if unread_bytes:
+                        incomplete_files.append(file_path)
                     pbar.update()
-        return file_hashes, file_hashes_excluding_ignored
+        return file_hashes, file_hashes_excluding_ignored, incomplete_files
 
     def get_all_files_hash(self):
         LOGGER.info("Getting hash of all files")
-        file_hashes, file_hashes_excluding_ignored = self.get_file_hashes()
+        file_hashes, file_hashes_excluding_ignored, incomplete_files = self.get_file_hashes()
 
         all_hashes = hashlib.md5()
         hashes_excluding_ignored = hashlib.md5()
@@ -239,11 +243,11 @@ class BaseIsoProcessor:
         for file, file_hash in sorted(file_hashes_excluding_ignored.items(), key=lambda item: item[1]):
             hashes_excluding_ignored.update(file_hash)
 
-
         hashes["new_all_files_hash"] = all_hashes.hexdigest()
         hashes["new_alt_all_files_hash"] = ""
         if hashes_excluding_ignored.hexdigest() != all_hashes.hexdigest():
             hashes["new_alt_all_files_hash"] = hashes_excluding_ignored.hexdigest()
+        hashes["incomplete_files"] = len(incomplete_files)
         return hashes
 
     def get_most_recent_file(self):
@@ -289,7 +293,7 @@ class BaseIsoProcessor:
             hash_bar.total = float(self.iso_path_reader.get_file_size(most_recent_file))
             hash_bar.count = 0.0
             hash_wrapper = HashProgressWrapper(hash_bar, hashlib.md5)
-            most_recent_file_hash = self.iso_path_reader.get_file_hash(most_recent_file, hash_wrapper)
+            most_recent_file_hash, _ = self.iso_path_reader.get_file_hash(most_recent_file, hash_wrapper)
 
         if most_recent_file_hash:
             most_recent_file_hash = most_recent_file_hash.hexdigest()

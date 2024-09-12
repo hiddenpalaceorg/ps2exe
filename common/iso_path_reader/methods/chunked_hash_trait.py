@@ -28,11 +28,11 @@ class ChunkedHashTrait:
             if bytes_read != self.get_file_size(file):
                 LOGGER.warning("File %s partially out of iso range. Read %d bytes out of %d bytes",
                                self.get_file_path(file), bytes_read, self.get_file_size(file))
-            return hash
+            return hash, self.get_file_size(file) - bytes_read
         elif self.get_file_size(file):
             LOGGER.warning("File %s out of iso range", self.get_file_path(file))
-            return
+            return None, self.get_file_size(file)
 
-        return hash
+        return hash, 0
 
 

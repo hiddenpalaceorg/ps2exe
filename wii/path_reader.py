@@ -30,15 +30,16 @@ class WiiPathReader(GamecubePathReader):
             self.iso.partition.seek(file._fileoffset)
         except ValueError:
             LOGGER.warning("File %s out of iso range", self.get_file_path(file))
-            return
+            return None, file.size
 
         while size_left > 0:
             chunk_size = min(65536, size_left)
             try:
                 chunk = self.iso.partition.read(chunk_size)
             except ValueError:
-                LOGGER.warning("File %s cannot fully be read, possibly corrupt iso", file.path)
-                return
+                LOGGER.warning("File %s partially out of iso range. Read %d bytes out of %d bytes",
+                               self.get_file_path(file), file.size - size_left, self.get_file_size(file))
+                break
             hash.update(chunk)
             size_left -= chunk_size
-        return hash
+        return hash, size_left

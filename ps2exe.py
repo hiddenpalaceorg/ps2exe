@@ -223,6 +223,7 @@ csv_headers = (
     "new_alt_all_files_hash",
     "volume_type",
     "parent_volume_type",
+    "incomplete_files"
 )
 
 if __name__ == '__main__':

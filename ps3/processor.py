@@ -27,7 +27,7 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
         return "/PS3_GAME/USRDIR/EBOOT.BIN"
 
     def get_file_hashes(self, hash_type=xxhash.xxh64):
-        file_hashes, alt_file_hashes = super().get_file_hashes(hash_type)
+        file_hashes, alt_file_hashes, incomplete_files = super().get_file_hashes(hash_type)
         root = self.iso_path_reader.get_root_dir()
         for file in self.iso_path_reader.iso_iterator(root, recursive=True):
             file_path = self.iso_path_reader.get_file_path(file)
@@ -39,7 +39,7 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
                     decryptor.load_metadata()
                     elf = decryptor.get_decrypted_elf()
                     alt_file_hashes[file_path] = hash_type(elf.read()).digest()
-        return file_hashes, alt_file_hashes
+        return file_hashes, alt_file_hashes, incomplete_files
 
     def _parse_exe(self, filename):
         result = {}
