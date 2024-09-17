@@ -22,6 +22,7 @@ psutil = "*"
 stream-inflate = "*"
 inflate64 = "*"
 bitarray = "*"
+xor-cipher = "*"
 
 [requires]
 python_version = "3.8"

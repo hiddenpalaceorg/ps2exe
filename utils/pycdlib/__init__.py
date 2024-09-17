@@ -18,6 +18,7 @@ from pycdlib.pycdlib import _interchange_level_from_directory, _interchange_leve
 
 _logger = logging.getLogger(__name__)
 
+
 class PyCdlib(_PyCdlib):
     is_hs = False
 
@@ -332,6 +333,7 @@ class PyCdlib(_PyCdlib):
 
     def _get_iso_size(self):
         return float("inf")
+
 
 # Volume descriptor parsers with HS filesystem support
 class PrimaryOrSupplementaryVD(_PrimaryOrSupplementaryVD):
