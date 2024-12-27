@@ -1,7 +1,7 @@
 import io
 import struct
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
@@ -105,18 +105,18 @@ class SegmentCertHeader(Struct):
 
 @dataclass
 class Attributes(Struct):
-    key: bytearray = bytearray(0x10)
-    iv: bytearray = bytearray(0x10)
+    key: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv: bytearray = field(default_factory=lambda: bytearray(0x10))
 
     struct = struct.Struct(">16s16s")
 
 
 @dataclass
 class EncryptionRootHeader(Struct):
-    key: bytearray = bytearray(0x10)
-    key_pad: bytearray = bytearray(0x10)
-    iv: bytearray = bytearray(0x10)
-    iv_pad: bytearray = bytearray(0x10)
+    key: bytearray = field(default_factory=lambda: bytearray(0x10))
+    key_pad: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv_pad: bytearray = field(default_factory=lambda: bytearray(0x10))
 
     struct = struct.Struct(">16s16s16s16s")
 

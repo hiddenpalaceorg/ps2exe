@@ -3,7 +3,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import List
 
-from ps3.self_parser import Struct
+from utils.structs import Struct
 
 
 @dataclass
@@ -49,6 +49,16 @@ class PKGExtHeader(Struct):
         return self.magic == b"\x7Fext"
 
 
+class PKGDirectory:
+    def __init__(self, entry):
+        self.entry = entry
+        self.entries = []
+        self.directories = {}
+
+    def entries(self):
+        yield from self.entries
+
+
 @dataclass
 class PKGEntry(Struct):
     name_offset: int  # File name offset
@@ -59,6 +69,7 @@ class PKGEntry(Struct):
     pad: int  # Padding (zeros)
     name_decoded: str = ""
     key: bytes = b""
+    directory: PKGDirectory = None
 
     struct = struct.Struct(">IIQQII")
 
