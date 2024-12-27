@@ -4,6 +4,7 @@ import re
 
 import xxhash
 
+from post_psx.npdrm.path_reader import NPDRMPathReader
 from post_psx.processor import PostPsxIsoProcessor
 from ps3.self_parser import SELFDecrypter
 
@@ -12,19 +13,37 @@ LOGGER = logging.getLogger(__name__)
 
 class Ps3IsoProcessor(PostPsxIsoProcessor):
     update_folder = re.compile(".*PS3_UPDATE$", re.IGNORECASE)
-    sfo_path = "/PS3_GAME/PARAM.SFO"
+
+    def __init__(self, iso_path_reader, filename, system_type, progress_manager):
+        super().__init__(iso_path_reader, filename, system_type, progress_manager)
+        self.base_dir = ""
+        for file in self.iso_path_reader.iso_iterator(self.iso_path_reader.get_root_dir(), include_dirs=True):
+            if self.iso_path_reader.is_directory(file):
+                if self.iso_path_reader.get_file_path(file).strip("/") == "PS3_GAME":
+                    self.base_dir = "/PS3_GAME"
+                    break
+
+    @property
+    def sfo_path(self):
+        return f"{self.base_dir}/PARAM.SFO"
 
     @property
     def ignored_paths(self):
         paths = self.exe_patterns + [self.update_folder]
-        paths.append(re.compile("(?!^\/PS3_GAME\/USRDIR\/)", re.IGNORECASE))
+        paths.append(re.compile(f"(?!^{self.base_dir}/?USRDIR/)", re.IGNORECASE))
         return paths
 
     def get_disc_type(self):
+        if isinstance(self.iso_path_reader, NPDRMPathReader):
+            return {"disc_type": "hdd"}
         return {"disc_type": "bd-r"}
 
     def get_exe_filename(self):
-        return "/PS3_GAME/USRDIR/EBOOT.BIN"
+        try:
+            self.iso_path_reader.get_file(f"{self.base_dir}/USRDIR/EBOOT.BIN")
+            return f"{self.base_dir}/USRDIR/EBOOT.BIN"
+        except FileNotFoundError:
+            return None
 
     def get_file_hashes(self, hash_type=xxhash.xxh64):
         file_hashes, alt_file_hashes, incomplete_files = super().get_file_hashes(hash_type)
@@ -59,13 +78,23 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
         return result
 
     def get_extra_fields(self):
-        params = self.parse_param_sfo()
-        fields = {
-            "sfo_category": params.get("CATEGORY"),
-            "sfo_disc_id": params.get("TITLE_ID"),
-            "sfo_disc_version": params.get("DISC_VERSION"),
-            "sfo_parental_level": params.get("PARENTAL_LEVEL"),
-            "sfo_psp_system_version": params.get("PS3_SYSTEM_VER"),
-            "sfo_title": params.get("TITLE"),
-        }
-        return {**fields,  **self._parse_exe(self.get_exe_filename())}
+        fields = {}
+        try:
+            params = self.parse_param_sfo()
+            fields = {
+                "sfo_category": params.get("CATEGORY"),
+                "sfo_disc_id": params.get("TITLE_ID"),
+                "sfo_disc_version": params.get("DISC_VERSION"),
+                "sfo_parental_level": params.get("PARENTAL_LEVEL"),
+                "sfo_psp_system_version": params.get("PS3_SYSTEM_VER"),
+                "sfo_title": params.get("TITLE"),
+            }
+        except FileNotFoundError:
+            LOGGER.warning("No param.sfo found.")
+
+        try:
+            if self.get_exe_filename():
+                return {**fields,  **self._parse_exe(self.get_exe_filename())}
+        except FileNotFoundError:
+            return fields
+        return fields

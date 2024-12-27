@@ -3,16 +3,13 @@ import logging
 import os
 import pathlib
 
-from Crypto.Cipher import AES
-from Crypto.Util import Counter
-
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
+from post_psx.npdrm.pkg import Pkg
 from post_psx.utils.edat import EdatFile
 from utils import pycdlib
 from utils.files import OffsetFile
 from utils.pycdlib.decrypted_file_io import DecryptedFileIO
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +34,7 @@ class DecryptedFileReader(DecryptedFileIO):
 class NPDRMPathReader(ChunkedHashTrait, IsoPathReader):
     volume_type = "npdrm"
 
-    def __init__(self, iso, fp, parent_container):
+    def __init__(self, iso: Pkg, fp, parent_container):
         super().__init__(iso, fp, parent_container)
         pkg_header = self.iso.pkg_header
         self.fp = OffsetFile(self.fp, pkg_header.data_offset, pkg_header.data_offset + pkg_header.data_size)
@@ -79,20 +76,28 @@ class NPDRMPathReader(ChunkedHashTrait, IsoPathReader):
             return f.decrypt_block(0, key) != -1
 
     def get_root_dir(self):
-        return None
+        return next(self.iso.entries()).directory
 
     def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
-        # always recursive
-        for file in self.iso.entries():
-            if self.is_directory(file) and not include_dirs:
+        for entry in base_dir.entries:
+            if self.is_directory(entry) and not include_dirs:
                 continue
-            yield file
+            yield entry
+
+        if not recursive:
+            return
+        for dir in base_dir.directories.values():
+            yield from self.iso_iterator(dir, recursive)
+
 
     def get_file(self, path):
-        try:
-            return next(file for file in self.iso.entries() if file.name_decoded == path)
-        except StopIteration:
-            raise FileNotFoundError
+        normalized_path = path.strip('/')
+
+        for file in self.iso_iterator(self.get_root_dir(), recursive=True):
+            if file.name_decoded == normalized_path:
+                return file
+
+        raise FileNotFoundError()
 
     def get_file_date(self, file):
         return None
@@ -143,3 +148,24 @@ class NPDRMPathReader(ChunkedHashTrait, IsoPathReader):
 
     def get_pvd_info(self):
         return {}
+
+    @property
+    def system_type(self):
+        if self.iso.pkg_header.pkg_platform == self.iso.PKG_PLATFORM_TYPE_PS3:
+            return "ps3"
+
+        title_id = self.iso.pkg_header.title_id
+        psp_title_ids = [b"UL", b"UC", b"G", b"H", b"W", b"Y"]
+        ps3_title_ids = [b"BL", b"BC"]
+        if title_id[0:2] in ps3_title_ids:
+            return "ps3"
+        elif any(title_id.startswith(tid) for tid in psp_title_ids):
+            return "psp"
+        elif title_id[0:3] == b"PCS":
+            return "vita"
+
+        if self.iso.pkg_ext_header:
+            if self.iso.pkg_ext_header.pkg_key_id == 0x1:
+                return "psp"
+            elif self.iso.pkg_ext_header.pkg_key_id == 0xC0000002:
+                return "vita"

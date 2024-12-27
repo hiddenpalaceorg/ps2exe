@@ -1,9 +1,30 @@
+import dataclasses
 import struct
 
 from dataclasses import dataclass, field
 from typing import List
 
-from ps3.self_parser import Struct
+
+class StructMeta(type):
+    def __init__(cls, name, bases, d):
+        if dataclasses.is_dataclass(d):
+            raise ValueError("Class {} is not a dataclass".format(name))
+        if 'struct' not in d:
+            raise ValueError("Class {} doesn't define struct".format(name))
+        type.__init__(cls, name, bases, d)
+
+
+class Struct:
+    __metaclass__ = StructMeta
+    struct = None
+    size = 0
+
+    def pack(self):
+        return self.struct.pack(*dataclasses.astuple(self))
+
+    @classmethod
+    def unpack(cls, data):
+        return cls(*cls.struct.unpack(data))
 
 
 @dataclass
@@ -49,6 +70,16 @@ class PKGExtHeader(Struct):
         return self.magic == b"\x7Fext"
 
 
+class PKGDirectory:
+    def __init__(self, entry):
+        self.entry = entry
+        self.entries = []
+        self.directories = {}
+
+    def entries(self):
+        yield from self.entries
+
+
 @dataclass
 class PKGEntry(Struct):
     name_offset: int  # File name offset
@@ -59,6 +90,7 @@ class PKGEntry(Struct):
     pad: int  # Padding (zeros)
     name_decoded: str = ""
     key: bytes = b""
+    directory: PKGDirectory = None
 
     struct = struct.Struct(">IIQQII")
 

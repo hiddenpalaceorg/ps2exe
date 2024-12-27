@@ -1,33 +1,12 @@
-import dataclasses
 import io
 import struct
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 
-
-class StructMeta(type):
-    def __init__(cls, name, bases, d):
-        if dataclasses.is_dataclass(d):
-            raise ValueError("Class {} is not a dataclass".format(name))
-        if 'struct' not in d:
-            raise ValueError("Class {} doesn't define struct".format(name))
-        type.__init__(cls, name, bases, d)
-
-
-class Struct:
-    __metaclass__ = StructMeta
-    struct = None
-    size = 0
-
-    def pack(self):
-        return self.struct.pack(*dataclasses.astuple(self))
-
-    @classmethod
-    def unpack(cls, data):
-        return cls(*cls.struct.unpack(data))
+from post_psx.types import Struct
 
 
 @dataclass
@@ -126,18 +105,18 @@ class SegmentCertHeader(Struct):
 
 @dataclass
 class Attributes(Struct):
-    key: bytearray = bytearray(0x10)
-    iv: bytearray = bytearray(0x10)
+    key: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv: bytearray = field(default_factory=lambda: bytearray(0x10))
 
     struct = struct.Struct(">16s16s")
 
 
 @dataclass
 class EncryptionRootHeader(Struct):
-    key: bytearray = bytearray(0x10)
-    key_pad: bytearray = bytearray(0x10)
-    iv: bytearray = bytearray(0x10)
-    iv_pad: bytearray = bytearray(0x10)
+    key: bytearray = field(default_factory=lambda: bytearray(0x10))
+    key_pad: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv_pad: bytearray = field(default_factory=lambda: bytearray(0x10))
 
     struct = struct.Struct(">16s16s16s16s")
 
