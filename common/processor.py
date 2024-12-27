@@ -10,11 +10,13 @@ from cdi.path_reader import CdiPathReader
 from common.iso_path_reader.methods.compressed import CompressedPathReader
 from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
+from post_psx.npdrm.path_reader import NPDRMPathReader
 from utils.common import format_bar_desc
 from utils.hash_progress_wrapper import HashProgressWrapper
 from xbox.path_reader import XboxPathReader, XboxStfsPathReader
 
 LOGGER = logging.getLogger(__name__)
+
 
 class BaseIsoProcessor:
     globally_ignored_paths = [
@@ -40,6 +42,11 @@ class BaseIsoProcessor:
 
         if isinstance(iso_path_reader, XboxStfsPathReader):
             return "xbla"
+
+        if isinstance(iso_path_reader, NPDRMPathReader):
+            system_type = iso_path_reader.system_type
+            if system_type:
+                return system_type
 
         if not isinstance(iso_path_reader, CompressedPathReader):
             fp = iso_path_reader.fp
@@ -148,7 +155,6 @@ class BaseIsoProcessor:
                 with iso_path_reader.open_file(file) as f:
                     if f.read(2) == b"MZ":
                         return "pc"
-
 
     def __init__(self, iso_path_reader, filename, system_type, progress_manager):
         self.iso_path_reader = iso_path_reader
@@ -312,6 +318,7 @@ class BaseIsoProcessor:
 
     def close(self):
         self.iso_path_reader.close()
+
 
 class GenericIsoProcessor(BaseIsoProcessor):
     def hash_exe(self):
