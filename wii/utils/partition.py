@@ -175,3 +175,6 @@ class Partition(object):
         iv = title_id + 8 * b"\x00"
         aes = AES.new(master_key, AES.MODE_CBC, iv)
         return aes.decrypt(key)
+
+    def tell(self):
+        return self.pos
