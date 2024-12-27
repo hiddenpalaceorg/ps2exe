@@ -3,16 +3,13 @@ import logging
 import os
 import pathlib
 
-from Crypto.Cipher import AES
-from Crypto.Util import Counter
-
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
+from post_psx.npdrm.pkg import Pkg
 from post_psx.utils.edat import EdatFile
 from utils import pycdlib
 from utils.files import OffsetFile
 from utils.pycdlib.decrypted_file_io import DecryptedFileIO
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +34,17 @@ class DecryptedFileReader(DecryptedFileIO):
 class NPDRMPathReader(ChunkedHashTrait, IsoPathReader):
     volume_type = "npdrm"
 
-    def __init__(self, iso, fp, parent_container):
+    # Offset of the title id within a content id, past the region code and its dash
+    CONTENT_ID_TITLE_ID = 7
+    PS3_TITLE_IDS = (b"BL", b"BC")
+    VITA_TITLE_IDS = (b"PCS",)
+    PSP_TITLE_IDS = (b"UL", b"UC")
+    # 4th letter of an NP title id, eg NPUZ00229 (minis), NPHG00005 (psp game)
+    PSP_NP_CATEGORIES = (b"G", b"H", b"W", b"Y", b"Z")
+    PKG_KEY_ID_PSP = 0x1
+    PKG_KEY_ID_VITA = 0xC0000002
+
+    def __init__(self, iso: Pkg, fp, parent_container):
         super().__init__(iso, fp, parent_container)
         pkg_header = self.iso.pkg_header
         self.fp = OffsetFile(self.fp, pkg_header.data_offset, pkg_header.data_offset + pkg_header.data_size)
@@ -79,20 +86,28 @@ class NPDRMPathReader(ChunkedHashTrait, IsoPathReader):
             return f.decrypt_block(0, key) != -1
 
     def get_root_dir(self):
-        return None
+        return next(self.iso.entries()).directory
 
     def iso_iterator(self, base_dir, recursive=False, include_dirs=False):
-        # always recursive
-        for file in self.iso.entries():
-            if self.is_directory(file) and not include_dirs:
+        for entry in base_dir.entries:
+            if self.is_directory(entry) and not include_dirs:
                 continue
-            yield file
+            yield entry
+
+        if not recursive:
+            return
+        for dir in base_dir.directories.values():
+            yield from self.iso_iterator(dir, recursive)
+
 
     def get_file(self, path):
-        try:
-            return next(file for file in self.iso.entries() if file.name_decoded == path)
-        except StopIteration:
-            raise FileNotFoundError
+        normalized_path = path.strip('/')
+
+        for file in self.iso_iterator(self.get_root_dir(), recursive=True):
+            if file.name_decoded == normalized_path:
+                return file
+
+        raise FileNotFoundError()
 
     def get_file_date(self, file):
         return None
@@ -143,3 +158,43 @@ class NPDRMPathReader(ChunkedHashTrait, IsoPathReader):
 
     def get_pvd_info(self):
         return {}
+
+    @property
+    def title_id(self):
+        """The title id on its own, eg NPUZ00229 or PCSE00972.
+
+        pkg_header.title_id is the whole 36 byte content id
+        (UP4169-NPUZ00229_00-BUNNYDODGEMINIUS), so prefix tests have to be applied to the
+        title id inside it, not to the region code it starts with.
+        """
+        title_id = self.iso.metadata.title_id or self.iso.pkg_header.title_id[self.CONTENT_ID_TITLE_ID:]
+        return title_id.split(b"_")[0].rstrip(b"\x00")
+
+    @property
+    def system_type(self):
+        if self.iso.pkg_header.pkg_platform == self.iso.PKG_PLATFORM_TYPE_PS3:
+            return "ps3"
+
+        if self.iso.metadata.content_type in self.iso.VITA_CONTENT_TYPES:
+            return "vita"
+
+        title_id = self.title_id
+        if title_id.startswith(self.PS3_TITLE_IDS):
+            return "ps3"
+        elif title_id.startswith(self.VITA_TITLE_IDS):
+            return "vita"
+        elif title_id.startswith(self.PSP_TITLE_IDS):
+            return "psp"
+        elif title_id.startswith(b"NP") and title_id[3:4] in self.PSP_NP_CATEGORIES:
+            return "psp"
+
+        if self.iso.pkg_ext_header:
+            if self.iso.pkg_ext_header.pkg_key_id == self.PKG_KEY_ID_PSP:
+                return "psp"
+            elif self.iso.pkg_ext_header.pkg_key_id == self.PKG_KEY_ID_VITA:
+                return "vita"
+
+        LOGGER.warning("Could not tell what system %s is for (title id %s, content type 0x%x, "
+                       "key id 0x%x)", self.iso.pkg_header.title_id, self.title_id,
+                       self.iso.metadata.content_type,
+                       self.iso.pkg_ext_header.pkg_key_id if self.iso.pkg_ext_header else 0)
