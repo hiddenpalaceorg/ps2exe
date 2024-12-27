@@ -6,7 +6,7 @@ from Crypto.Hash import SHA1
 from Crypto.Util import Counter, strxor
 from Crypto.Util.number import long_to_bytes
 
-from post_psx.types import PKGMetaData, PKGHeader, PKGExtHeader, PKGEntry
+from post_psx.types import PKGMetaData, PKGHeader, PKGExtHeader, PKGEntry, PKGDirectory
 from utils.files import get_file_size
 from xor_cipher import cyclic_xor
 
@@ -111,6 +111,7 @@ class Pkg:
             LOGGER.error("PKG type not supported")
             return False
 
+        self.pkg_ext_header = None
         if self.pkg_header.pkg_platform == self.PKG_PLATFORM_TYPE_PSP_PSVITA:
             # Parse extended header for PSP/Vita packages
             self.fp.seek(PKGHeader.struct.size)
@@ -218,27 +219,41 @@ class Pkg:
             self.aes_context = DebugCTR(self.pkg_header.digest, block_num)
 
     def entries(self):
-        if len(self._entries) == self.pkg_header.file_count:
-            yield from iter(self._entries.values())
+        if not self._entries:
+            self._root = PKGDirectory(None)
 
-        for block in range(0, self.pkg_header.file_count * 2, 2):
-            self.init_cipher(block, self.pkg_key)
-            self.fp.seek(self.pkg_header.data_offset + (16 * block))
-            enc = self.fp.read(32)
-            entry_data = self.decrypt(enc)
-            entry = PKGEntry.unpack(entry_data)
+            for block in range(0, self.pkg_header.file_count * 2, 2):
+                self.init_cipher(block, self.pkg_key)
+                self.fp.seek(self.pkg_header.data_offset + (16 * block))
+                enc = self.fp.read(32)
+                entry_data = self.decrypt(enc)
+                entry = PKGEntry.unpack(entry_data)
 
-            name_block_start = entry.name_offset // 16
-            self.fp.seek(self.pkg_header.data_offset + (16 * name_block_start))
-            if entry.type & self.PKG_FILE_ENTRY_PSP:
-                entry.key = self.PSP_AES_KEY
-            else:
-                entry.key = self.PS3_AES_KEY
-            self.init_cipher(name_block_start, entry.key)
-            name = self.decrypt(self.fp.read(entry.name_size))
-            entry.name_decoded = name.rstrip(b"\x00").decode("utf-8", errors="replace")
-            self._entries[entry.name_decoded] = entry
-            yield entry
+                name_block_start = entry.name_offset // 16
+                self.fp.seek(self.pkg_header.data_offset + (16 * name_block_start))
+                if entry.type & self.PKG_FILE_ENTRY_PSP:
+                    entry.key = self.PSP_AES_KEY
+                else:
+                    entry.key = self.PS3_AES_KEY
+                self.init_cipher(name_block_start, entry.key)
+                name = self.decrypt(self.fp.read(entry.name_size))
+                entry.name_decoded = name.rstrip(b"\x00").decode("utf-8", errors="replace")
+
+                path_parts = entry.name_decoded.split('/')
+                current_dir = self._root
+                for part in path_parts[:-1]:
+                    if not hasattr(current_dir, 'directories'):
+                        current_dir.directories = {}
+                    if part not in current_dir.directories:
+                        current_dir.directories[part] = PKGDirectory(entry)
+                    current_dir = current_dir.directories[part]
+
+                if not hasattr(current_dir, 'entries'):
+                    current_dir.entries = []
+                current_dir.entries.append(entry)
+                entry.directory = current_dir
+
+        yield from self._root.entries
 
     def decrypt(self, blocks):
         return self.aes_context.encrypt(blocks)
