@@ -321,6 +321,26 @@ class IsoProcessorFactory:
             if iso.joliet_vd:
                 path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="joliet"))
 
+            if wrapper.starting_sector == 0 and wrapper.length() > 45000 * iso.logical_block_size:
+                hd_addr = 45000 * iso.logical_block_size
+                wrapper.seek(hd_addr)
+                if wrapper.read(15) == b"SEGA SEGAKATANA":
+                    iso_hd = pycdlib.PyCdlib()
+                    wrapper_hd = OffsetFile(
+                        wrapper,
+                        offset=hd_addr,
+                        end_pos=wrapper.length()
+                    )
+                    hd_fp = BinWrapper(ConcatenatedFile(
+                        [wrapper_hd, wrapper_hd], [0, hd_addr]
+                    ))
+                    try:
+                        iso_hd.open_fp(hd_fp)
+                        path_readers[-1].volume_type = "iso9660 (LD)"
+                        path_readers.append(path_reader_class(iso_hd, hd_fp, parent_container, volume_type="iso9660 (HD)"))
+                    except Exception as e:
+                        exceptions["iso9660 (HD)"] = e
+
         if iso._has_udf:
             iso = PyCdlibUdf()
             iso.open_fp(wrapper)

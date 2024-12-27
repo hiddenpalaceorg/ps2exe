@@ -22,13 +22,13 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
 
     @property
     def pycdlib_volume_type(self):
-        if self.volume_type == "iso9660":
+        if "iso9660" in self.volume_type:
             return "iso"
-        elif self.volume_type == "rock_ridge":
+        elif "rock_ridge" in self.volume_type:
             return "rr"
-        elif self.volume_type == "joliet":
+        elif "joliet" in self.volume_type:
             return "joliet"
-        elif self. volume_type == "udf":
+        elif "udf" in self. volume_type:
             return "udf"
         return self.volume_type
 

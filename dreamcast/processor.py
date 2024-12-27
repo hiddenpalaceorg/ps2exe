@@ -139,7 +139,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         except FileNotFoundError:
             return
 
-        return ConcatenatedFile(files, offsets)
+        return BinWrapper(ConcatenatedFile(files, offsets))
 
     def parse_cue(self, cue_path, iso_filename):
         cue_file = self.iso_path_reader.parent_container.get_file(cue_path)
@@ -161,7 +161,10 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
                     if track:
                         if track["index"] != 2:
                             file = self.iso_path_reader.parent_container.get_file(str(pathlib.Path(cue_dir) / track["file_name"]))
-                            sector += int(self.iso_path_reader.parent_container.get_file_size(file) / track["sector_size"])
+                            try:
+                                sector += int(self.iso_path_reader.parent_container.get_file_size(file) / track["sector_size"])
+                            except FileNotFoundError:
+                                pass
                         tracks.append(track)
                     track = match.groupdict()
                     if track["file_name"] == iso_filename:
