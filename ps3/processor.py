@@ -22,6 +22,9 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
                 if self.iso_path_reader.get_file_path(file).strip("/") == "PS3_GAME":
                     self.base_dir = "/PS3_GAME"
                     break
+        self.eboot_key = None
+        if iso_path_reader.volume_type == 'npdrm':
+            self.eboot_key = iso_path_reader.edat_key
 
     @property
     def sfo_path(self):
@@ -53,7 +56,7 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
 
             if any(regex.match(file_path) for regex in self.exe_patterns):
                 with self.iso_path_reader.open_file(file) as f:
-                    decryptor = SELFDecrypter(f)
+                    decryptor = SELFDecrypter(f, self.eboot_key)
                     decryptor.load_headers()
                     decryptor.load_metadata()
                     elf = decryptor.get_decrypted_elf()
@@ -63,7 +66,7 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
     def _parse_exe(self, filename):
         result = {}
         with self.iso_path_reader.open_file(self.iso_path_reader.get_file(filename)) as f:
-            decryptor = SELFDecrypter(f)
+            decryptor = SELFDecrypter(f, self.eboot_key)
             decryptor.load_headers()
             result["exe_signing_type"] = "debug" if decryptor.sce_hdr.attribute & 0x8000 == 0x8000 else "retail"
             result["exe_num_symbols"] = 0

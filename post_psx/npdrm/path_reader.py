@@ -7,6 +7,7 @@ from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 from post_psx.npdrm.pkg import Pkg
 from post_psx.utils.edat import EdatFile
+from ps3.self_parser import SELFDecrypter
 from utils import pycdlib
 from utils.files import OffsetFile
 from utils.pycdlib.decrypted_file_io import DecryptedFileIO
@@ -41,11 +42,6 @@ class NPDRMPathReader(ChunkedHashTrait, IsoPathReader):
         self.edat_key = self.get_edat_key()
 
     def get_edat_key(self):
-        edat_file = next((file for file in self.iso_iterator(self.get_root_dir(), recursive=True) if
-                          self.get_file_path(file).lower().endswith(".edat")), None)
-        if not edat_file:
-            return
-
         edat_key = None
         file_dir = pathlib.Path(self.fp.name).parent
         try:
@@ -59,13 +55,29 @@ class NPDRMPathReader(ChunkedHashTrait, IsoPathReader):
         except UnicodeDecodeError:
             pass
 
-        if edat_key:
-            if self.test_key(edat_key, edat_file):
-                return edat_key
-        else:
-            test_edat_key = bytes.fromhex("0" * 32)
-            if self.test_key(test_edat_key, edat_file):
-                return test_edat_key
+        edat_file = next((file for file in self.iso_iterator(self.get_root_dir(), recursive=True) if
+                          self.get_file_path(file).lower().endswith(".edat")), None)
+        if edat_file:
+            if edat_key:
+                if self.test_key(edat_key, edat_file):
+                    return edat_key
+            else:
+                test_edat_key = bytes.fromhex("0" * 32)
+                if self.test_key(test_edat_key, edat_file):
+                    return test_edat_key
+        elif edat_key:
+            eboot_file = next((file for file in self.iso_iterator(self.get_root_dir(), recursive=True) if
+                               self.get_file_path(file).lower().endswith("eboot.bin")), None)
+            if eboot_file:
+                inode = pycdlib.inode.Inode()
+                inode.parse(eboot_file.file_offset // 16, eboot_file.file_size, self.fp, 16)
+                with DecryptedFileReader(inode, 16, self.iso, eboot_file) as f:
+                    decryptor = SELFDecrypter(f, edat_key)
+                    decryptor.load_headers()
+                    if decryptor.get_npd_header():
+                        decryptor.load_metadata()
+                        if decryptor.data_keys:
+                            return edat_key
 
     def test_key(self, key, file):
         file_path = self.get_file_path(file)
