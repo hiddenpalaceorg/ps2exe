@@ -5,6 +5,7 @@ from Crypto.Cipher import AES
 from Crypto.Hash import CMAC, SHA1, HMAC
 
 from post_psx.types import NPDHeader, EDATHeader
+from post_psx.utils import lz
 
 
 class EdatFile(io.RawIOBase):
@@ -316,12 +317,10 @@ class EdatFile(io.RawIOBase):
                 return -1
 
         # Handle decompression if needed
-        size_left = self.edat_header.file_size
         if should_decompress:
-            res = decompress(dec_data, self.edat_header.block_size)
-            size_left -= res
+            res = lz.LZDecompressor(dec_data.getvalue()).decompress(self.edat_header.block_size)
 
-            if size_left == 0 and res < 0:
+            if not res:
                 return -1
 
             return res
