@@ -14,6 +14,9 @@ LOGGER = logging.getLogger(__name__)
 class Ps3IsoProcessor(PostPsxIsoProcessor):
     update_folder = re.compile(".*PS3_UPDATE$", re.IGNORECASE)
 
+    # Least to most severe
+    decryption_statuses = ("decrypted", "eboot only", "encrypted")
+
     def __init__(self, iso_path_reader, filename, system_type, progress_manager):
         super().__init__(iso_path_reader, filename, system_type, progress_manager)
         self.base_dir = ""
@@ -22,9 +25,10 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
                 if self.iso_path_reader.get_file_path(file).strip("/") == "PS3_GAME":
                     self.base_dir = "/PS3_GAME"
                     break
-        self.eboot_key = None
+        self.self_key = None
         if iso_path_reader.volume_type == 'npdrm':
-            self.eboot_key = iso_path_reader.edat_key
+            self.self_key = iso_path_reader.self_key
+        self.decryption_status = "decrypted"
 
     @property
     def sfo_path(self):
@@ -35,6 +39,15 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
         paths = self.exe_patterns + [self.update_folder]
         paths.append(re.compile(f"(?!^{self.base_dir}/?USRDIR/)", re.IGNORECASE))
         return paths
+
+    @property
+    def combined_decryption_status(self):
+        statuses = (self.decryption_status, getattr(self.iso_path_reader, "decryption_status", None))
+        return max(
+            (status for status in statuses if status in self.decryption_statuses),
+            key=self.decryption_statuses.index,
+            default=None,
+        )
 
     def get_disc_type(self):
         if isinstance(self.iso_path_reader, NPDRMPathReader):
@@ -56,9 +69,11 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
 
             if any(regex.match(file_path) for regex in self.exe_patterns):
                 with self.iso_path_reader.open_file(file) as f:
-                    decryptor = SELFDecrypter(f, self.eboot_key)
+                    decryptor = SELFDecrypter(f, self.self_key)
                     decryptor.load_headers()
-                    decryptor.load_metadata()
+                    if not decryptor.load_metadata():
+                        LOGGER.warning("Could not decrypt executable %s", file_path)
+                        self.decryption_status = "encrypted"
                     elf = decryptor.get_decrypted_elf()
                     alt_file_hashes[file_path] = hash_type(elf.read()).digest()
         return file_hashes, alt_file_hashes, incomplete_files
@@ -66,14 +81,16 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
     def _parse_exe(self, filename):
         result = {}
         with self.iso_path_reader.open_file(self.iso_path_reader.get_file(filename)) as f:
-            decryptor = SELFDecrypter(f, self.eboot_key)
+            decryptor = SELFDecrypter(f, self.self_key)
             decryptor.load_headers()
             result["exe_signing_type"] = "debug" if decryptor.sce_hdr.attribute & 0x8000 == 0x8000 else "retail"
             result["exe_num_symbols"] = 0
             for section in decryptor.segment_headers:
                 if section.sh_type == 2:
                     result["exe_num_symbols"] = section.sh_size // 24
-            decryptor.load_metadata()
+            if not decryptor.load_metadata():
+                LOGGER.warning("Could not decrypt executable %s", filename)
+                self.decryption_status = "encrypted"
             elf = decryptor.get_decrypted_elf()
             md5 = hashlib.md5(elf.read())
             result["alt_md5"] = md5.hexdigest()
@@ -94,6 +111,8 @@ class Ps3IsoProcessor(PostPsxIsoProcessor):
             }
         except FileNotFoundError:
             LOGGER.warning("No param.sfo found.")
+
+        fields["decryption_status"] = self.combined_decryption_status
 
         try:
             if self.get_exe_filename():
