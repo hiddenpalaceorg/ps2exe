@@ -3,6 +3,7 @@ import logging
 import multiprocessing
 import os
 import pathlib
+import sqlite3
 
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
@@ -157,6 +158,16 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
                     )
 
                     if result:
+                        # Store the key in the DB
+                        if self.db:
+                            try:
+                                title_id = self.iso.pkg_header.title_id.decode("utf-8")
+                                c = self.db.cursor()
+                                c.execute('INSERT INTO dev_klics VALUES (?, ?, NULL)', [result, title_id])
+                                self.db.commit()
+                            except (sqlite3.Error, UnicodeDecodeError) as e:
+                                # The key is still good even if we can't remember it
+                                LOGGER.warning("Could not store klic in key db: %s", e)
                         if eboot_decryptor.self_key and eboot_decryptor.self_key != result:
                             LOGGER.info("Found EDAT key: %s", result.hex())
                             LOGGER.info("Found SELF key: %s", eboot_decryptor.self_key.hex())
@@ -169,12 +180,13 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
 
     def _get_potential_keys(self):
         """Get a list of potential keys to try."""
-        keys_to_try = [bytes.fromhex("F69F9C3711ADA2EC0AB663B3FE7002B0")]
+        keys_to_try = []
         file_dir = pathlib.Path(
             self.parent_container.get_file_path(
                 self.parent_container.get_file(str(pathlib.Path(self.fp.name).parent))
             ))
 
+        title_id = None
         try:
             title_id = self.iso.pkg_header.title_id.decode("utf-8")
             # Check for a RAP file in the directory
@@ -189,21 +201,24 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
 
         # Check the key db if it exists
         if self.db:
-            c = self.db.cursor()
-            # Try to find a rap file with a title
-            rap = c.execute('SELECT * FROM raps WHERE title_id = ?', [title_id]).fetchone()
-            if rap and len(rap[0]) == 16:
-                keys_to_try.append(EdatFile.rap_to_rif(rap[0]))
+            try:
+                c = self.db.cursor()
+                # Try to find a rap file with a title
+                if title_id:
+                    rap = c.execute('SELECT * FROM raps WHERE title_id = ?', [title_id]).fetchone()
+                    if rap and len(rap[0]) == 16:
+                        keys_to_try.append(EdatFile.rap_to_rif(rap[0]))
 
-            # Try to find a match. If no matches, just load the entire klics list
-            keys = c.execute('SELECT * FROM dev_klics WHERE title_id = ?', [title_id]).fetchall()
-            if keys:
+                # Try to find a match. If no matches, just load the entire klics list
+                keys = []
+                if title_id:
+                    keys = c.execute('SELECT * FROM dev_klics WHERE title_id = ?', [title_id]).fetchall()
+                if not keys:
+                    keys = c.execute('SELECT * FROM dev_klics').fetchall()
                 for key in keys:
                     keys_to_try.append(key[0])
-            else:
-                keys = c.execute('SELECT * FROM dev_klics').fetchall()
-                for key in keys:
-                    keys_to_try.append(key[0])
+            except sqlite3.Error as e:
+                LOGGER.warning("Could not read key db: %s", e)
 
         # Add standard keys
         keys_to_try.append(bytes(EdatFile.NP_KLIC_FREE))
