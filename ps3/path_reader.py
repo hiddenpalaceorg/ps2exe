@@ -2,12 +2,12 @@ import collections
 import functools
 import logging
 import pathlib
-import sqlite3
 import struct
 
 from Crypto.Cipher import AES
 
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
+from post_psx.path_reader import PostPsxPathReader
 from utils.pycdlib.decrypted_file_io import DecryptedFileIO
 
 LOGGER = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class DecryptedFileReader(DecryptedFileIO):
         return bytes(decrypted)
 
 
-class Ps3PathReader(PyCdLibPathReader):
+class Ps3PathReader(PostPsxPathReader, PyCdLibPathReader):
     def __init__(self, iso, fp, *args, **kwargs):
         super().__init__(iso, fp, *args, **kwargs)
         self.fp.seek(0)
@@ -48,6 +48,7 @@ class Ps3PathReader(PyCdLibPathReader):
         self.regions = self.get_regions()
         self.disc_key = None
         self.disc_key = self.get_disc_key()
+        self.decryption_status = "decrypted"
 
     def get_regions(self):
         Region = collections.namedtuple("Region", "start end encrypted")
@@ -125,13 +126,11 @@ class Ps3PathReader(PyCdLibPathReader):
             return bytes.fromhex(debug_key)
 
         # Check the key db if it exists
-        db_file = (pathlib.Path(__file__).parent) / "keys.db"
-        if not db_file.exists():
+        if not self.db:
             LOGGER.warning("Could not find key db. Disc will not be decrypted!")
             return
 
-        db = sqlite3.connect(db_file)
-        c = db.cursor()
+        c = self.db.cursor()
         keys = c.execute('SELECT * FROM keys WHERE size = ?', [str(self.fp.length())]).fetchall()
         for key in keys:
             f.disc_key = key[-1]
@@ -140,6 +139,7 @@ class Ps3PathReader(PyCdLibPathReader):
                 LOGGER.info("Found key: %s", key[-1].hex())
                 return key[-1]
 
+        self.decryption_status = "encrypted"
         LOGGER.warning("Could not find key for disc. Disc will not be decrypted!")
         return
 

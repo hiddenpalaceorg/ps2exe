@@ -482,7 +482,7 @@ class SELFDecrypter:
     NP_KLIC_KEY = bytearray([0xF2, 0xFB, 0xCA, 0x7A, 0x75, 0xB0, 0x4E, 0xDC, 0x13, 0x90, 0x63, 0x8C, 0xCD, 0xFD, 0xD1, 0xEE])
     NP_KLIC_FREE = bytearray([0x72, 0xF9, 0x90, 0x78, 0x8F, 0x9C, 0xFF, 0x74, 0x57, 0x25, 0xF0, 0x8E, 0x4C, 0x12, 0x83, 0x87])
 
-    def __init__(self, fp, eboot_key=None):
+    def __init__(self, fp, self_key=None):
         self.fp = fp
         self.sce_hdr: SceHeader
         self.elf_hdr: Union[ElfHeader, ElfHeader32]
@@ -497,7 +497,7 @@ class SELFDecrypter:
         self.program_identification_hdr: ProgramIdentificationHeader
         self.program_headers: List[Union[ProgramSegmentHeader, ProgramSegmentHeader32]] = []
         self.supplemental_headers: List[SupplementalHeader] = []
-        self.eboot_key = eboot_key
+        self.self_key = self_key
 
     def load_headers(self):
         # Read SCE header.
@@ -617,7 +617,7 @@ class SELFDecrypter:
                 iv_idx=0xFFFFFFFF,
                 comp_algorithm=1,
             ))
-            return
+            return True
 
         meta_headers_and_section_size = self.sce_hdr.file_offset - (
                 SceHeader.struct.size + self.sce_hdr.ext_header_size + EncryptionRootHeader.struct.size)
@@ -639,27 +639,31 @@ class SELFDecrypter:
                 metadata_key = bytes.fromhex(self.npdrm_keys[self.sce_hdr.attribute][0])
                 metadata_iv = bytes.fromhex(self.npdrm_keys[self.sce_hdr.attribute][1])
         except KeyError:
-            print("Could not find decryption key")
-            return
+            return False
 
         if npd := self.get_npd_header():
             metadata_info = self.decrypt_npdrm(npd, metadata_info)
             if not metadata_info:
-                print("Failed to decrypt SCE metadata info!")
-                return
+                return False
+        else:
+            metadata_info = [metadata_info]
 
-        # Decrypt the metadata info.
-        aes = AES.new(metadata_key, AES.MODE_CBC, metadata_iv)
-        metadata_info = aes.decrypt(metadata_info)
+        for metadata_info_candidate in metadata_info:
+            # Decrypt the metadata info.
+            aes = AES.new(metadata_key, AES.MODE_CBC, metadata_iv)
+            metadata_info = aes.decrypt(metadata_info_candidate)
 
-        # Load the metadata info.
-        self.encryption_root_header = EncryptionRootHeader.unpack(metadata_info)
+            # Load the metadata info.
+            self.encryption_root_header = EncryptionRootHeader.unpack(metadata_info)
 
-        # If the padding is not NULL for the key or iv fields, the metadata info
-        # is not properly decrypted.
-        if self.encryption_root_header.key_pad[0] != 0x00 or self.encryption_root_header.iv_pad[0] != 0x00:
-            print("Failed to decrypt SCE metadata info!")
-            return
+            # Verify the metadata info.
+            # If the padding is not NULL for the key or iv fields, the metadata info
+            # is not properly decrypted.
+            if self.encryption_root_header.key_pad == b'\x00' * 16 and self.encryption_root_header.iv_pad == b'\x00' * 16:
+                break
+
+        if self.encryption_root_header.key_pad != b'\x00' * 16 or self.encryption_root_header.iv_pad != b'\x00' * 16:
+            return False
 
         # Perform AES-CTR encryption on the metadata headers.
         aes = AES.new(self.encryption_root_header.key, AES.MODE_CTR,
@@ -677,6 +681,8 @@ class SELFDecrypter:
         # Copy the decrypted data keys.
         data_keys_length = self.cert_header.attr_entry_num * 0x10
         self.data_keys = bytearray(metadata_headers.read(data_keys_length))
+
+        return True
 
     def decrypt_data(self, segment_cert_header):
         # Get the key and iv from the previously stored key buffer.
@@ -703,25 +709,32 @@ class SELFDecrypter:
 
     def decrypt_npdrm(self, npd, metadata) :
         if npd.license in [1, 2]:
-            if not self.eboot_key:
+            if not self.self_key:
                 return False
-            npdrm_key = self.eboot_key
-        elif npd.license == 3:  # Free license
-            npdrm_key = self.NP_KLIC_FREE
+            npdrm_key = [self.self_key]
+        elif npd.license == 3:
+            npdrm_key = []
+            if self.self_key:
+                npdrm_key.append(self.self_key)
+            npdrm_key.append(self.NP_KLIC_FREE)
         else:
             print("Invalid NPDRM license type!")
-            return metadata
+            return [metadata]
 
-        # Decrypt our key with NP_KLIC_KEY
-        cipher = AES.new(self.NP_KLIC_KEY, AES.MODE_ECB)
-        npdrm_key = cipher.decrypt(bytes(npdrm_key))
+        decrypted_metadata_candidates = []
 
-        # IV is empty (all zeros)
-        npdrm_iv = bytes(16)
+        for key in npdrm_key:
+            # Decrypt our key with NP_KLIC_KEY
+            cipher = AES.new(self.NP_KLIC_KEY, AES.MODE_ECB)
+            k = cipher.decrypt(bytes(key))
 
-        # Use our final key to decrypt the NPDRM layer
-        cipher = AES.new(npdrm_key, AES.MODE_CBC, npdrm_iv)
-        return cipher.decrypt(metadata)
+            # IV is empty (all zeros)
+            npdrm_iv = bytes(16)
+
+            # Use our final key to decrypt the NPDRM layer
+            cipher = AES.new(k, AES.MODE_CBC, npdrm_iv)
+            decrypted_metadata_candidates.append(cipher.decrypt(metadata))
+        return decrypted_metadata_candidates
 
     def get_decrypted_elf(self):
         # Allocate a buffer to store decrypted data.

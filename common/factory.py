@@ -199,7 +199,9 @@ class IsoProcessorFactory:
                 reader = Pkg(wrapper)
                 reader.parse_header()
                 reader.parse_metadata()
-                path_readers.append(NPDRMPathReader(reader, wrapper, parent_container))
+                path_reader = NPDRMPathReader(reader, wrapper, parent_container)
+                path_reader.edat_key, path_reader.self_key = path_reader.get_edat_key(pbar)
+                path_readers.append(path_reader)
             except Exception as e:
                 exceptions[NPDRMPathReader.volume_type] = e
 

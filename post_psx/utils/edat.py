@@ -39,6 +39,8 @@ class EdatFile(io.RawIOBase):
                             0x96, 0x9B, 0xEC, 0x68, 0xAA, 0x0B, 0xC0, 0x81])
     EDAT_HASH_1 = bytearray([0x3D, 0x92, 0x69, 0x9B, 0x70, 0x5B, 0x07, 0x38,
                              0x54, 0xD8, 0xFC, 0xC6, 0xC7, 0x67, 0x27, 0x47])
+    NP_KLIC_FREE = bytearray([0x72, 0xF9, 0x90, 0x78, 0x8F, 0x9C, 0xFF, 0x74, 0x57, 0x25, 0xF0, 0x8E, 0x4C, 0x12, 0x83, 0x87])
+
     EDAT_IV = bytearray(0x10)
 
     def __init__(self, fp, file_name, edat_key):
@@ -90,11 +92,11 @@ class EdatFile(io.RawIOBase):
 
         return bytes(key)
 
-    def validate_npd_hashes(self, file_name, dec_key):
+    def validate_npd_hashes(self, file_name):
         if self.edat_header.flags & self.EDAT_DEBUG_DATA_FLAG:
             return True
 
-        if not self.validate_dev_klic(dec_key):
+        if not self.validate_dev_klic(self.edat_key):
             return False
 
         # Build the title buffer (content_id + file_name).
@@ -158,6 +160,9 @@ class EdatFile(io.RawIOBase):
         if (self.npd_header.license & 0x3) != 0x3:
             return True
 
+        if not dec_key:
+            return False
+
         dev = bytearray(0x60)
 
         # Build the dev buffer (first 0x60 bytes of NPD header in big-endian)
@@ -171,11 +176,8 @@ class EdatFile(io.RawIOBase):
         dev[0x8:0xC] = license
         dev[0xC:0x10] = app_type
 
-        # Check for an empty dev_hash (can't validate if devklic is NULL)
-        klic = dec_key.to_bytes(length=16, byteorder="little")
-
         # Generate klicensee xor key
-        key = bytes(a ^ b for a, b in zip(klic, self.NP_OMAC_KEY_2))
+        key = bytes(a ^ b for a, b in zip(dec_key, self.NP_OMAC_KEY_2))
 
         # Hash with generated key and compare with dev_hash.
         key_bytes = key
