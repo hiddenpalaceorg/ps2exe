@@ -21,7 +21,8 @@ dependencies = [
     "bitarray~=3.8.1",
     "inflate64~=1.0.4",
     "stream-inflate",
-    "xor-cipher"
+    "xor-cipher",
+    "numba"
 ]
 
 [tool.uv]
