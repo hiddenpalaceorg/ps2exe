@@ -320,7 +320,7 @@ class EdatFile(io.RawIOBase):
 
         # Handle decompression if needed
         if should_decompress:
-            res = lz.LZDecompressor(dec_data.getvalue()).decompress(self.edat_header.block_size)
+            res = lz.decompress_bytes(dec_data.getvalue(), self.edat_header.block_size)
 
             if not res:
                 return -1
