@@ -123,6 +123,12 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
                     )
 
                     if result:
+                        # Store the key in the DB
+                        if self.db:
+                            title_id = self.iso.pkg_header.title_id.decode("utf-8")
+                            c = self.db.cursor()
+                            c.execute('INSERT INTO dev_klics VALUES (?, ?, NULL)', [result, title_id])
+                            self.db.commit()
                         if eboot_decryptor.self_key and eboot_decryptor.self_key != result:
                             LOGGER.info("Found EDAT key: %s", result.hex())
                             LOGGER.info("Found SELF key: %s", eboot_decryptor.self_key.hex())
@@ -135,7 +141,7 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
 
     def _get_potential_keys(self):
         """Get a list of potential keys to try."""
-        keys_to_try = [bytes.fromhex("F69F9C3711ADA2EC0AB663B3FE7002B0")]
+        keys_to_try = []
         file_dir = pathlib.Path(
             self.parent_container.get_file_path(
                 self.parent_container.get_file(str(pathlib.Path(self.fp.name).parent))
