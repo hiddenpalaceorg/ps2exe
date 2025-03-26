@@ -215,7 +215,9 @@ class IsoProcessorFactory:
                 reader = Pkg(wrapper)
                 reader.parse_header()
                 reader.parse_metadata()
-                path_readers.append(NPDRMPathReader(reader, wrapper, parent_container))
+                path_reader = NPDRMPathReader(reader, wrapper, parent_container)
+                path_reader.edat_key, path_reader.self_key = path_reader.get_edat_key(pbar)
+                path_readers.append(path_reader)
             except Exception as e:
                 exceptions[NPDRMPathReader.volume_type] = e
 
@@ -396,8 +398,11 @@ class IsoProcessorFactory:
             ps3_readers = [reader for reader in path_readers if isinstance(reader, Ps3PathReader)]
             if ps3_readers:
                 disc_key = ps3_readers[0].get_disc_key()
+                # get_disc_key also records whether the disc could be decrypted;
+                # it only runs on the first view, so share both with the rest
                 for reader in ps3_readers:
                     reader.disc_key = disc_key
+                    reader.decryption_status = ps3_readers[0].decryption_status
 
         return path_readers, exceptions
 

@@ -1,4 +1,5 @@
 import argparse
+import csv
 import pathlib
 import sqlite3
 import xml.etree.ElementTree as ET
@@ -19,24 +20,58 @@ if __name__ == '__main__':
                         required=True,
                         default=argparse.SUPPRESS)
 
+    parser.add_argument('-l',
+                        '--dev-klics',
+                        help="dev_klics.txt file",
+                        type=str,
+                        required=False,
+                        default=argparse.SUPPRESS)
+
+    parser.add_argument('-r',
+                        '--rap-dir',
+                        help="Directory containing rap files",
+                        type=str,
+                        required=False,
+                        default=argparse.SUPPRESS)
+
     parser.add_argument('-o',
                         '--output',
                         help="Output directory",
                         type=str,
-                        default=str(((pathlib.Path(__file__).parent / 'ps3').absolute())))
+                        default=str(((pathlib.Path(__file__).parent / 'post_psx').absolute())))
+
+    parser.add_argument('-t',
+                        '--tsv',
+                        help="PS3/PSP_GAMES.TSV file path",
+                        nargs='+',
+                        action='append',
+                        type=str)
+
+    parser.add_argument('-a',
+                        '--append',
+                        help="Append to db instead of overwriting it",
+                        action='store_true',
+                        default=False)
 
     args = parser.parse_args()
 
     key_dir = pathlib.Path(args.keyfolder)
 
     db_file = pathlib.Path(args.output) / 'keys.db'
-    db_file.unlink(missing_ok=True)
+    if not args.append:
+        db_file.unlink(missing_ok=True)
     db = sqlite3.connect(db_file)
     c = db.cursor()
     try:
         c.execute("BEGIN")
         c.execute("""
-        CREATE TABLE keys (name TEXT, size TEXT, crc32 TEXT, md5 TEXT, sha1 TEXT, key BLOB);
+        CREATE TABLE IF NOT EXISTS keys (name TEXT, size TEXT, crc32 TEXT, md5 TEXT, sha1 TEXT, key BLOB, UNIQUE (size, md5, sha1, key));
+        """)
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS dev_klics (key BLOB, title_id TEXT, name TEXT, UNIQUE(key, title_id));
+        """)
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS raps (key BLOB, title_id TEXT, UNIQUE(key));
         """)
 
         key_list = []
@@ -63,7 +98,64 @@ if __name__ == '__main__':
                 key)
             )
         c.executemany("""
-            INSERT INTO keys VALUES (?, ?, ?, ?, ?, ?)""", key_list)
+            INSERT OR IGNORE INTO keys VALUES (?, ?, ?, ?, ?, ?)""", key_list)
+
+
+        if args.dev_klics:
+            klics = []
+            dev_klics = pathlib.Path(args.dev_klics)
+            if dev_klics.exists():
+                with dev_klics.open("r") as f:
+                    for line in f:
+                        if line.startswith("-"):
+                            continue
+                        entry = line.strip().split(' ', maxsplit=2)
+                        if len(entry) != 3 or len(entry[0]) != 32 or len(entry[1]) != 36:
+                            continue
+
+                        klics.append((
+                            bytes.fromhex(entry[0]),
+                            entry[1],
+                            entry[2]
+                        ))
+            if klics:
+                c.executemany("""
+                    INSERT OR IGNORE INTO dev_klics VALUES (?, ?, ?)""", klics)
+
+        raps = set()
+        if args.rap_dir:
+            rap_dir = pathlib.Path(args.rap_dir)
+            if rap_dir.exists():
+                for rap_file in rap_dir.glob("*.rap"):
+                    with rap_file.open("rb") as f:
+                        rap_data = f.read()
+                        if len(rap_data) == 256:
+                            rap_data = rap_data[:16]
+                        title_id = rap_file.stem
+                        raps.add((
+                            rap_data,
+                            title_id
+                        ))
+            if raps:
+                c.executemany("""
+                    INSERT OR IGNORE INTO raps VALUES (?, ?)""", raps)
+
+        if args.tsv:
+            for tsv in args.tsv:
+                tsv_path = pathlib.Path(tsv[0])
+                if tsv_path.exists():
+                    with tsv_path.open("r", encoding="utf-8") as infile:
+                        reader = csv.DictReader(infile, delimiter="\t")
+                        for row in reader:
+                            if row["RAP"] and row["Content ID"] and len(row["RAP"]) == 32 and len(row["Content ID"]) == 36:
+                                raps.add((
+                                    bytes.fromhex(row["RAP"]),
+                                    row["Content ID"]
+                                ))
+        if raps:
+            c.executemany("""
+                INSERT OR IGNORE INTO raps VALUES (?, ?)""", list(raps))
+
         c.execute("COMMIT")
     except:
         c.execute("ROLLBACK")
