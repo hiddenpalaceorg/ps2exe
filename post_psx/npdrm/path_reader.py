@@ -10,6 +10,7 @@ from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 from post_psx.npdrm.pkg import Pkg
 from post_psx.path_reader import PostPsxPathReader
 from post_psx.utils.edat import EdatFile
+from post_psx.utils.iso_bin_enc import IsoBinEncFile
 from ps3.self_parser import SELFDecrypter
 from utils import pycdlib
 from utils.files import OffsetFile
@@ -417,6 +418,19 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
                 LOGGER.warning("Could not locate decryption key for %s. File will not be decrypted", file_path)
             else:
                 f = edat_file
+        elif file_path.lower().endswith("iso.bin.enc"):
+            f.__enter__()
+            iso_bin_file = IsoBinEncFile(f, os.path.basename(file_path), self.edat_key)
+            if iso_bin_file.edat_header.file_size == 0:
+                f.__exit__()
+                f = io.BytesIO(b"")
+            if not self.edat_key:
+                self._decryption_status["edat"] = 0
+                LOGGER.warning("Could not locate decryption key for %s. File will not be decrypted", file_path)
+            elif not iso_bin_file.test_decrypt(self.edat_key):
+                LOGGER.warning("Decryption failed for %s, file will not be decrypted", file_path)
+            else:
+                f = iso_bin_file
 
         f.name = self.get_file_path(file)
         return f
@@ -426,11 +440,12 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
 
     def get_file_size(self, file):
         file_path = self.get_file_path(file)
-        if file_path.lower().endswith("edat"):
+        if file_path.lower().endswith("edat") or file_path.lower().endswith("iso.bin.enc"):
+            file_cls = EdatFile if file_path.lower().endswith("edat") else IsoBinEncFile
             inode = pycdlib.inode.Inode()
             inode.parse(file.file_offset // 16, file.file_size, self.fp, 16)
             with DecryptedFileReader(inode, 16, self.iso, file) as f:
-                edat_size = EdatFile(f, os.path.basename(file_path), self.edat_key).edat_header.file_size
+                edat_size = file_cls(f, os.path.basename(file_path), self.edat_key).edat_header.file_size
                 if edat_size == 0 or self.edat_key:
                     return edat_size
         return file.file_size
