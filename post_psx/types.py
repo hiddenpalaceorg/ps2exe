@@ -234,3 +234,11 @@ class EDATHeader(Struct):
     file_size: int
 
     struct = struct.Struct(">iiQ")
+
+
+@dataclass
+class IsoBinEncMeta(Struct):
+    sha1: bytes = field(default_factory=lambda: b'\x00' * 20)
+    block_id: int = 0
+
+    struct = struct.Struct(">20sI8x")
