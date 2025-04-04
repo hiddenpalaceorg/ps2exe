@@ -6,9 +6,10 @@ from Crypto.Hash import CMAC, SHA1, HMAC
 
 from post_psx.types import NPDHeader, EDATHeader
 from post_psx.utils import lz
+from post_psx.utils.base import BaseFile
 
 
-class EdatFile(io.RawIOBase):
+class NPDFile(BaseFile):
     SDAT_FLAG = 0x01000000
     EDAT_COMPRESSED_FLAG = 0x00000001
     EDAT_FLAG_0x02 = 0x00000002
@@ -44,7 +45,7 @@ class EdatFile(io.RawIOBase):
     EDAT_IV = bytearray(0x10)
 
     def __init__(self, fp, file_name, edat_key):
-        self.fp = fp
+        super().__init__(fp)
         self.fp.seek(0)
         self.npd_header = NPDHeader.unpack(fp.read(NPDHeader.struct.size))
         self.fp.seek(0x80)
@@ -277,6 +278,8 @@ class EdatFile(io.RawIOBase):
         # Prepare decryption buffers
         self.fp.seek(offset)
         enc_data = self.fp.read(length)
+        if len(enc_data) != length:
+            return -1
         dec_data = io.BytesIO()
 
         b_key = self.get_block_key(block_num)
@@ -320,7 +323,7 @@ class EdatFile(io.RawIOBase):
 
         # Handle decompression if needed
         if should_decompress:
-            res = lz.decompress_bytes(dec_data.getvalue(), self.edat_header.block_size)
+            res = lz.decompress_bytes(dec_data.getvalue(), self.edat_header.block_size, version=2)
 
             if not res:
                 return -1

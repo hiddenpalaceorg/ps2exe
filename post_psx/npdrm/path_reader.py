@@ -3,14 +3,17 @@ import logging
 import multiprocessing
 import os
 import pathlib
-import sqlite3
+import re
+from copy import copy
 
 from common.iso_path_reader.methods.base import IsoPathReader
 from common.iso_path_reader.methods.chunked_hash_trait import ChunkedHashTrait
 from post_psx.npdrm.pkg import Pkg
 from post_psx.path_reader import PostPsxPathReader
-from post_psx.utils.edat import EdatFile
+from post_psx.utils.eboot_pbp import EbootPBPFile
+from post_psx.utils.npd import NPDFile
 from post_psx.utils.iso_bin_enc import IsoBinEncFile
+from post_psx.utils.pspedat import PSPEdatFile
 from ps3.self_parser import SELFDecrypter
 from utils import pycdlib
 from utils.files import OffsetFile
@@ -154,7 +157,7 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
             rap_path = str((file_dir / title_id).with_suffix(".rap"))
             try:
                 with self.parent_container.open_file(self.parent_container.get_file(rap_path)) as f:
-                    keys_to_try.append(EdatFile.rap_to_rif(f.read()))
+                    keys_to_try.append(NPDFile.rap_to_rif(f.read()))
             except FileNotFoundError:
                 pass
         except (UnicodeDecodeError, AttributeError):
@@ -166,7 +169,7 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
             # Try to find a rap file with a title
             rap = c.execute('SELECT * FROM raps WHERE title_id = ?', [title_id]).fetchone()
             if rap and len(rap[0]) == 16:
-                keys_to_try.append(EdatFile.rap_to_rif(rap[0]))
+                keys_to_try.append(NPDFile.rap_to_rif(rap[0]))
 
             # Try to find a match. If no matches, just load the entire klics list
             keys = c.execute('SELECT * FROM dev_klics WHERE title_id = ?', [title_id]).fetchall()
@@ -179,7 +182,7 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
                     keys_to_try.append(key[0])
 
         # Add standard keys
-        keys_to_try.append(bytes(EdatFile.NP_KLIC_FREE))
+        keys_to_try.append(bytes(NPDFile.NP_KLIC_FREE))
         keys_to_try.append(bytes(bytearray(16)))
 
         return set(keys_to_try)
@@ -188,8 +191,16 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
         """Find and return the EDAT, EBOOT, and SELF files."""
         root_dir = self.get_root_dir()
 
-        edat_file = next((file for file in self.iso_iterator(root_dir, recursive=True) if
-                          self.get_file_path(file).lower().endswith(".edat") and self.get_file_size(file) > 0), None)
+        edat_file = None
+        for file in self.iso_iterator(root_dir, recursive=True):
+            if self.get_file_path(file).lower().endswith(".edat"):
+                inode = pycdlib.inode.Inode()
+                inode.parse(file.file_offset // 16, file.file_size, self.fp, 16)
+                with DecryptedFileReader(inode, 16, self.iso, file) as f:
+                    if f.read(0x4) == b"NPD\x00" and self.get_file_size(file) > 0:
+                        edat_file = file
+                        break
+
         eboot_file = next((file for file in self.iso_iterator(root_dir, recursive=True) if
                            self.get_file_path(file).lower().endswith("eboot.bin")), None)
         self_file = next((file for file in self.iso_iterator(root_dir, recursive=True) if
@@ -249,7 +260,7 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
                 inode.parse(edat_file.file_offset // 16, edat_file.file_size, self.fp, 16)
                 with DecryptedFileReader(inode, 16, self.iso, edat_file) as f:
                     edat_data = io.BytesIO(f.read())
-                    return EdatFile(edat_data, os.path.basename(self.get_file_path(edat_file)), None)
+                    return NPDFile(edat_data, os.path.basename(self.get_file_path(edat_file)), None)
             except Exception as e:
                 LOGGER.error(f"Failed to prepare EDAT file for search: {str(e)}")
 
@@ -347,7 +358,7 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
                         progress.value += 100
 
                 try:
-                    if isinstance(encrypted_file, EdatFile) and encrypted_file.decrypt_block(0, edat_key) != -1:
+                    if isinstance(encrypted_file, NPDFile) and encrypted_file.decrypt_block(0, edat_key) != -1:
                         return edat_key
                     elif isinstance(encrypted_file, SELFDecrypter):
                         encrypted_file.self_key = edat_key
@@ -368,7 +379,7 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
         inode = pycdlib.inode.Inode()
         inode.parse(file.file_offset // 16, file.file_size, self.fp, 16)
         with DecryptedFileReader(inode, 16, self.iso, file) as f, \
-                EdatFile(f, os.path.basename(file_path), key) as f:
+                NPDFile(f, os.path.basename(file_path), key) as f:
             return f.decrypt_block(0, key) != -1
 
     def get_root_dir(self):
@@ -378,7 +389,23 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
         for entry in base_dir.entries:
             if self.is_directory(entry) and not include_dirs:
                 continue
-            yield entry
+            file_path = self.get_file_path(entry)
+            # Check if this is a multi-disc file and spawn a file for each disc
+            if file_path.lower().endswith("eboot.pbp"):
+                inode = pycdlib.inode.Inode()
+                inode.parse(entry.file_offset // 16, entry.file_size, self.fp, 16)
+                with DecryptedFileReader(inode, 16, self.iso, entry) as f:
+                    pbp = EbootPBPFile(f)
+                    if pbp.load_header():
+                        if pbp.num_discs > 1:
+                            disc_entry = copy(entry)
+                            for disc_num in range(pbp.num_discs):
+                                disc_entry.name_decoded = entry.name_decoded.replace("EBOOT.PBP", f"EBOOT.{disc_num+1}.pbp")
+                                yield disc_entry
+                        else:
+                            yield entry
+            else:
+                yield entry
 
         if not recursive:
             return
@@ -387,6 +414,9 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
 
     def get_file(self, path):
         normalized_path = pathlib.Path(path).as_posix().strip('/')
+
+        if not normalized_path or normalized_path == ".":
+            return self.get_root_dir()
 
         for file in self.iso_iterator(self.get_root_dir(), recursive=True, include_dirs=True):
             if file.name_decoded == normalized_path:
@@ -407,13 +437,19 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
         file_path = self.get_file_path(file)
         if file_path.lower().endswith("edat"):
             f.__enter__()
-            edat_file = EdatFile(f, os.path.basename(file_path), self.edat_key)
-            if not edat_file.validate_npd_hashes(os.path.basename(file_path)):
-                LOGGER.warning("Could not validate header hashes for %s", file_path)
-            if edat_file.edat_header.file_size == 0:
+            magic = f.read(0x8)
+            if magic == b"\x00PSPEDAT":
+                edat_file = PSPEdatFile(f, os.path.basename(file_path), self.edat_key)
+                file_size = edat_file.size
+            else:
+                edat_file = NPDFile(f, os.path.basename(file_path), self.edat_key)
+                file_size = edat_file.edat_header.file_size
+                if not edat_file.validate_npd_hashes(os.path.basename(file_path)):
+                    LOGGER.warning("Could not validate header hashes for %s", file_path)
+            if file_size == 0:
                 f.__exit__()
                 f = io.BytesIO(b"")
-            elif not self.edat_key:
+            elif isinstance(edat_file, NPDFile) and not self.edat_key:
                 self._decryption_status["edat"] = 0
                 LOGGER.warning("Could not locate decryption key for %s. File will not be decrypted", file_path)
             else:
@@ -431,6 +467,15 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
                 LOGGER.warning("Decryption failed for %s, file will not be decrypted", file_path)
             else:
                 f = iso_bin_file
+        elif file_path.lower().endswith("eboot.pbp") or re.match(r".*eboot\.[0-9]\.pbp$", file_path.lower()):
+            eboot_match = re.match(r".*eboot\.([0-9])\.pbp$", file_path.lower())
+            disc_num = int(eboot_match.group(1)) if eboot_match else 1
+            f.__enter__()
+            eboot_pbp_file = EbootPBPFile(f, disc_num-1)
+            if not eboot_pbp_file.load_header():
+                LOGGER.warning("Decryption failed for %s, file will not be decrypted", file_path)
+            else:
+                f = eboot_pbp_file
 
         f.name = self.get_file_path(file)
         return f
@@ -441,13 +486,31 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
     def get_file_size(self, file):
         file_path = self.get_file_path(file)
         if file_path.lower().endswith("edat") or file_path.lower().endswith("iso.bin.enc"):
-            file_cls = EdatFile if file_path.lower().endswith("edat") else IsoBinEncFile
             inode = pycdlib.inode.Inode()
             inode.parse(file.file_offset // 16, file.file_size, self.fp, 16)
             with DecryptedFileReader(inode, 16, self.iso, file) as f:
-                edat_size = file_cls(f, os.path.basename(file_path), self.edat_key).edat_header.file_size
+                if file_path.lower().endswith("iso.bin.enc"):
+                    edat_size = IsoBinEncFile(f, os.path.basename(file_path), self.edat_key).edat_header.file_size
+                else:
+                    magic = f.read(0x8)
+                    if magic == b"\x00PSPEDAT":
+                        return PSPEdatFile(f, os.path.basename(file_path), self.edat_key).size
+                    else:
+                        edat_size = NPDFile(f, os.path.basename(file_path), self.edat_key).edat_header.file_size
+
                 if edat_size == 0 or self.edat_key:
                     return edat_size
+        elif file_path.lower().endswith("eboot.pbp") or re.match(r".*eboot\.[0-9]\.pbp$", file_path.lower()):
+            eboot_match = re.match(r".*eboot\.([0-9])\.pbp$", file_path.lower())
+            disc_num = int(eboot_match.group(1)) if eboot_match else 1
+
+            inode = pycdlib.inode.Inode()
+            inode.parse(file.file_offset // 16, file.file_size, self.fp, 16)
+            with DecryptedFileReader(inode, 16, self.iso, file) as f:
+                pbp = EbootPBPFile(f, disc_num-1)
+                if pbp.load_header():
+                    return pbp.size
+
         return file.file_size
 
     def is_directory(self, file):

@@ -4,10 +4,10 @@ from Crypto.Cipher import AES
 from Crypto.Hash import SHA1
 
 from post_psx.types import IsoBinEncMeta
-from post_psx.utils.edat import EdatFile
+from post_psx.utils.npd import NPDFile
 
 
-class IsoBinEncFile(EdatFile):
+class IsoBinEncFile(NPDFile):
     ps2_key_cex_data = bytes([0x10, 0x17, 0x82, 0x34, 0x63, 0xF4, 0x68, 0xC1,
                               0xAA, 0x41, 0xD7, 0x00, 0xB1, 0x40, 0xF2, 0x57])
     ps2_key_cex_meta = bytes([0x38, 0x9D, 0xCB, 0xA5, 0x20, 0x3C, 0x81, 0x59,
