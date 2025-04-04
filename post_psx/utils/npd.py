@@ -1,4 +1,5 @@
 import io
+import logging
 import struct
 
 from Crypto.Cipher import AES
@@ -6,9 +7,12 @@ from Crypto.Hash import CMAC, SHA1, HMAC
 
 from post_psx.types import NPDHeader, EDATHeader
 from post_psx.utils import lz
+from post_psx.utils.base import BaseFile
+
+LOGGER = logging.getLogger(__name__)
 
 
-class EdatFile(io.RawIOBase):
+class NPDFile(BaseFile):
     SDAT_FLAG = 0x01000000
     EDAT_COMPRESSED_FLAG = 0x00000001
     EDAT_FLAG_0x02 = 0x00000002
@@ -44,7 +48,8 @@ class EdatFile(io.RawIOBase):
     EDAT_IV = bytearray(0x10)
 
     def __init__(self, fp, file_name, edat_key):
-        self.fp = fp
+        super().__init__(fp)
+        self.file_name = file_name
         self.fp.seek(0)
         self.npd_header = NPDHeader.unpack(fp.read(NPDHeader.struct.size))
         self.fp.seek(0x80)
@@ -277,6 +282,8 @@ class EdatFile(io.RawIOBase):
         # Prepare decryption buffers
         self.fp.seek(offset)
         enc_data = self.fp.read(length)
+        if len(enc_data) != length:
+            return -1
         dec_data = io.BytesIO()
 
         b_key = self.get_block_key(block_num)
@@ -320,7 +327,7 @@ class EdatFile(io.RawIOBase):
 
         # Handle decompression if needed
         if should_decompress:
-            res = lz.decompress_bytes(dec_data.getvalue(), self.edat_header.block_size)
+            res = lz.decompress_bytes(dec_data.getvalue(), self.edat_header.block_size, version=2)
 
             if not res:
                 return -1
@@ -389,7 +396,7 @@ class EdatFile(io.RawIOBase):
             cipher = AES.new(key_final, AES.MODE_CBC, iv_final)
             out_data.write(cipher.decrypt(in_data[:length]))
         else:
-            print("Unknown crypto algorithm!")
+            LOGGER.warning("Unsupported NPD crypto mode 0x%02x in %s", crypto_mode & 0xFF, self.file_name)
             return False
 
         # Verify the hash
@@ -406,7 +413,7 @@ class EdatFile(io.RawIOBase):
             h.update(in_data)
             return h.digest() == test_hash[:hash_len]
         else:
-            print("Unknown hashing algorithm!")
+            LOGGER.warning("Unsupported NPD hash mode 0x%02x in %s", hash_mode & 0xFF, self.file_name)
             return False
 
     def readinto(self, b):
