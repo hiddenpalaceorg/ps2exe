@@ -46,11 +46,19 @@ class DecryptedFileIO(PyCdlibIO):
                     break
 
             chunk_size = min(self._buffer_filled - self._buffer_offset, read_size - bytes_read)
+            if chunk_size <= 0:
+                break
+
             result[bytes_read:bytes_read + chunk_size] = self._buffer[
                                                          self._buffer_offset:self._buffer_offset + chunk_size]
 
             self._buffer_offset += chunk_size
             bytes_read += chunk_size
+
+        # We can hit EOF before read_size bytes if the file extends past the end of the
+        # image. Return a short read rather than the zero padding left in the buffer.
+        if bytes_read < read_size:
+            del result[bytes_read:]
         return bytes(result)
 
     def _fill_buffer(self, desired_size):
@@ -70,12 +78,20 @@ class DecryptedFileIO(PyCdlibIO):
         data = super().read(blocks_to_read * self.logical_block_size)
         if not data:
             self._buffer_filled = 0
+            self._buffer_offset = 0
             return
 
+        # If we didn't get a full block (ie. file is smaller than the logical block size), we need to
+        # read the rest of the base file to get the rest of the encrypted block
         if len(data) < self.logical_block_size * blocks_to_read:
             read_extra = (self.logical_block_size * blocks_to_read) - len(data)
-            data += self._fp.read(read_extra)
-            self._offset += read_extra
+            # Read the underlying file directly to bypass the length check in read().
+            # We need the actual encrypted data and can't just pad with zeroes
+            extra = self._fp.read(read_extra)
+            data += extra
+            # Only count what we actually got, or the offset runs ahead of the stream
+            # once the image ends before the block does
+            self._offset += len(extra)
 
         # Decrypt all blocks at once
         decrypted_data = self.decrypt_blocks(data)
@@ -87,7 +103,6 @@ class DecryptedFileIO(PyCdlibIO):
     def seek(self, offset, whence=0):
         new_offset = super().seek(offset, whence)
         self._buffer_offset = 0
-        self._buffer_size = 0
         self._buffer_filled = 0
         return new_offset
 

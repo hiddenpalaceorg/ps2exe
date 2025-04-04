@@ -16,6 +16,10 @@ class PostPsxIsoProcessor(BaseIsoProcessor):
     ]
     SFO_HEADER_BYTES = 20
 
+    def __init__(self, iso_path_reader, filename, system_type, progress_manager):
+
+        super().__init__(iso_path_reader, filename, system_type, progress_manager)
+
     @property
     def ignored_paths(self):
         return self.exe_patterns + [self.update_folder]
