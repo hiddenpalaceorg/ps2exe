@@ -72,8 +72,12 @@ class DecryptedFileIO(PyCdlibIO):
             self._buffer_filled = 0
             return
 
+        # If we didn't get a full block (ie. file is smaller than the logical block size), we need to
+        # read the rest of the base file to get the rest of the encrypted block
         if len(data) < self.logical_block_size * blocks_to_read:
             read_extra = (self.logical_block_size * blocks_to_read) - len(data)
+            # Read the underlying file directly to bypass the length check in read().
+            # We need the actual encrypted data and can't just pad with zeroes
             data += self._fp.read(read_extra)
             self._offset += read_extra
 
@@ -87,7 +91,6 @@ class DecryptedFileIO(PyCdlibIO):
     def seek(self, offset, whence=0):
         new_offset = super().seek(offset, whence)
         self._buffer_offset = 0
-        self._buffer_size = 0
         self._buffer_filled = 0
         return new_offset
 
