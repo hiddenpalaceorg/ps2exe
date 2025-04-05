@@ -93,6 +93,8 @@ class IsoProcessorFactory:
                                 break
                             except ImportError:
                                 LOGGER.warning("gzip support not available, not able to decompress %s", file_name)
+                            except EOFError:
+                                break
                             except Exception as e:
                                 if e.__class__.__name__ == "BadGzipFile":
                                     LOGGER.warning("Gzipped file %s could not be decompressed", file_name)
