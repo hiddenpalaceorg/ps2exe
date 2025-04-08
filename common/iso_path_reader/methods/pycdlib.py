@@ -169,7 +169,23 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
     def get_pvd(self):
         if self.volume_type == "joliet":
             return self.iso.joliet_vd
-        return self.iso.pvd
+        pvd =  self.iso.pvd
+        for field in (
+                "volume_creation_date",
+                "volume_modification_date",
+                "volume_expiration_date",
+                "volume_effective_date",
+        ):
+            # PS1 hack: PS1 games set Y2K at 0000 and count up from there
+            if getattr(pvd, 'system_identifier') == 'PLAYSTATION' and getattr(pvd, field) is None or getattr(pvd, field).year < 1000:
+                date_field = getattr(pvd, field)
+                if date_field.date_str[0:16] != '0000000000000000' and (year := int(date_field.date_str[0:4])) < 1000:
+                    new_date = bytearray(date_field.date_str.encode())
+                    year += 2000
+                    new_date[0:4] = str(year).encode()
+                    date_field._initialized = False
+                    date_field.parse(bytes(new_date))
+        return pvd
 
     def get_pvd_info(self):
         if not self.volume_type == "udf":

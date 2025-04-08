@@ -10,8 +10,17 @@ def apply_patches():
         datestr = datestr.replace(b"\x00\x00", b"00")
         if datestr[15:16] == b"\x00":
             datestr = datestr[0:15] + b"0" + datestr[16:]
-        return orig_parse(self, datestr)
+        ret = orig_parse(self, datestr)
+        self.date_str = datestr.decode("utf-8")
+        return ret
     pycdlib.dates.VolumeDescriptorDate.parse = parse
+
+    orig_string_to_timestruct = pycdlib.dates.string_to_timestruct
+    def string_to_timestruct(input_string):
+        input_string = input_string.rstrip(b"0").ljust(12, b"0")
+        return orig_string_to_timestruct(input_string)
+    pycdlib.dates.string_to_timestruct = string_to_timestruct
+
 
     # Hack to bypass any endian tests in pycdlib
     class mockint(int):
