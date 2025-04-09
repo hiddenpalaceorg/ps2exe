@@ -48,6 +48,8 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
         return None
 
     def get_file_path(self, file):
+        if file == self.get_root_dir():
+            return ""
         if self.is_directory(file):
             return file.path.rstrip("/").rstrip("\\")
         return file.path
