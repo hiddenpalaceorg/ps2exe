@@ -77,7 +77,8 @@ class IsoProcessorFactory:
                 except Exception as e:
                     if getattr(e, "msg", "").startswith("Passphrase required for this entry"):
                         LOGGER.warning("Error processing %s: %s", file_name, e.msg)
-                    elif getattr(e, "msg", "").startswith("Unrecognized archive format") or getattr(e, "msg", "") == 'Lzma library error: format not recognized':
+                    elif (getattr(e, "msg", "").startswith("Unrecognized archive format") or
+                          getattr(e, "msg", "").startswith('Lzma library error')):
                         if magic_to_try not in [b"\x1F\x8B", b"BZh", b"\xFD7zXZ\x00"]:
                             LOGGER.warning("Error processing %s: %s", file_name, e.msg)
                         elif magic_to_try == b"\x1F\x8B":
