@@ -149,6 +149,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
                 readers.append(FakeMemoryMap(f))
                 offsets.append(alloc_desc.extent_length + offsets[-1])
             f = ConcatenatedFile(readers, offsets[0:-1])
+            f.starting_sector = offsets[0] // self.iso.logical_block_size
         elif getattr(file, "data_continuation", None):
             f = file_io_cls(file.inode, self.iso.logical_block_size)
             f.__enter__()

@@ -138,6 +138,7 @@ class ConcatenatedFile(AccessBySliceFile):
         self.offsets.sort()
         self.pos = 0
         self.name = fps[0].name
+        self.starting_sector = 0
 
         for fp in fps:
             if not isinstance(fp, BaseFile):
