@@ -169,8 +169,25 @@ class PyCdlib(_PyCdlib):
     def _walk_directories(self, vd, extent_to_ptr, extent_to_inode,
                           path_table_records):
         if not self.is_hs:
-            return super()._walk_directories(vd, extent_to_ptr, extent_to_inode,
-                                             path_table_records)
+            dr_get_data_length = DirectoryRecord.get_data_length
+            try:
+                return super()._walk_directories(vd, extent_to_ptr, extent_to_inode,
+                                                 path_table_records)
+            except pycdlibexception.PyCdlibInvalidISO as e:
+                if str(e) != 'Invalid padding on ISO':
+                    raise
+
+                # Ugly hack: Workaround pycdlib bug that mis-calcualtes the padding at the end of a Directory entry
+                self.pvd.root_dir_record.children = []
+                def patched_dr_data_length(*args, **kwargs):
+                    return max(dr_get_data_length(*args, **kwargs), self.logical_block_size)
+                pycdlib.dr.DirectoryRecord.get_data_length = patched_dr_data_length
+
+                ret = super()._walk_directories(vd, extent_to_ptr, extent_to_inode, path_table_records)
+                return ret
+            finally:
+                pycdlib.dr.DirectoryRecord.get_data_length = dr_get_data_length
+
         cdfp = self._cdfp
         iso_file_length = self._get_iso_size()
 
@@ -728,6 +745,15 @@ class DirectoryRecord(pycdlib.dr.DirectoryRecord):
             else:
                 ret = self.rock_ridge.rr_version
             return ret
+
+    def __lt__(self, other):
+        ret = super().__lt__(other)
+        if not other.initialized:
+            return ret
+        if not ret:
+            if self.file_identifier() == other.file_identifier() and self.data_continuation:
+                return True
+        return ret
 
 
 pycdlib.dr.DirectoryRecord = DirectoryRecord
