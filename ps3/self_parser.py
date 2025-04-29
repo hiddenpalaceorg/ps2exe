@@ -1,33 +1,13 @@
-import dataclasses
 import io
 import struct
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Union, List, Optional
 
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 
-
-class StructMeta(type):
-    def __init__(cls, name, bases, d):
-        if dataclasses.is_dataclass(d):
-            raise ValueError("Class {} is not a dataclass".format(name))
-        if 'struct' not in d:
-            raise ValueError("Class {} doesn't define struct".format(name))
-        type.__init__(cls, name, bases, d)
-
-
-class Struct:
-    __metaclass__ = StructMeta
-    struct = None
-    size = 0
-
-    def pack(self):
-        return self.struct.pack(*dataclasses.astuple(self))
-
-    @classmethod
-    def unpack(cls, data):
-        return cls(*cls.struct.unpack(data))
+from post_psx.types import Struct, NPDHeader
 
 
 @dataclass
@@ -126,18 +106,18 @@ class SegmentCertHeader(Struct):
 
 @dataclass
 class Attributes(Struct):
-    key: bytearray = bytearray(0x10)
-    iv: bytearray = bytearray(0x10)
+    key: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv: bytearray = field(default_factory=lambda: bytearray(0x10))
 
     struct = struct.Struct(">16s16s")
 
 
 @dataclass
 class EncryptionRootHeader(Struct):
-    key: bytearray = bytearray(0x10)
-    key_pad: bytearray = bytearray(0x10)
-    iv: bytearray = bytearray(0x10)
-    iv_pad: bytearray = bytearray(0x10)
+    key: bytearray = field(default_factory=lambda: bytearray(0x10))
+    key_pad: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv: bytearray = field(default_factory=lambda: bytearray(0x10))
+    iv_pad: bytearray = field(default_factory=lambda: bytearray(0x10))
 
     struct = struct.Struct(">16s16s16s16s")
 
@@ -268,6 +248,56 @@ class ElfSectionHeader32(Struct):
     struct = struct.Struct(">IIIIIIIIII")
 
 
+@dataclass
+class PS3PlaintextCapabilityHeader(Struct):
+    ctrl_flag1: int = 0
+    unknown1: int = 0
+    unknown2: int = 0
+    unknown3: int = 0
+    unknown4: int = 0
+    unknown5: int = 0
+    unknown6: int = 0
+    unknown7: int = 0
+    struct = struct.Struct(">8I")  # 8 uint32
+
+
+@dataclass
+class PS3ElfDigestHeader40(Struct):
+    constant: bytes = b'\x00' * 0x14
+    elf_digest: bytes = b'\x00' * 0x14
+    required_system_version: int = 0
+    struct = struct.Struct(">20s20sQ")  # 20 bytes + 20 bytes + uint64
+
+
+@dataclass
+class PS3ElfDigestHeader30(Struct):
+    constant_or_elf_digest: bytes = b'\x00' * 0x14
+    padding: bytes = b'\x00' * 0xC
+    struct = struct.Struct(">20s12s")  # 20 bytes + 12 bytes padding
+
+
+@dataclass
+class SupplementalHeader(Struct):
+    type: int = 0  # uint32
+    size: int = 0  # uint32
+    next: int = 0  # uint64
+    struct = struct.Struct(">IIQ")
+
+    def __post_init__(self):
+        # Based on type, create the appropriate subheader
+        self.subheader: Optional[Struct] = None
+        self.subheader_cls = None
+        if self.type == 1:
+            self.subheader_cls = PS3PlaintextCapabilityHeader
+        elif self.type == 2:
+            if self.size == 0x40:
+                self.subheader_cls = PS3ElfDigestHeader40
+            elif self.size == 0x30:
+                self.subheader_cls = PS3ElfDigestHeader30
+        elif self.type == 3:
+            self.subheader_cls = NPDHeader
+
+
 class SELFDecrypter:
     apploader_keys = {
         0x0000: [
@@ -383,19 +413,91 @@ class SELFDecrypter:
             "ACB9945914EBB7B9A31ECE320AE09F2D",
         ],
     }
+    npdrm_keys = {
+        0x0001: [
+            "F9EDD0301F770FABBA8863D9897F0FEA6551B09431F61312654E28F43533EA6B",
+            "A551CCB4A42C37A734A2B4F9657D5540",
+        ],
+        0x0002: [
+            "8E737230C80E66AD0162EDDD32F1F774EE5E4E187449F19079437A508FCF9C86",
+            "7AAECC60AD12AED90C348D8C11D2BED5",
+        ],
+        0x0003: [
+            "1B715B0C3E8DC4C1A5772EBA9C5D34F7CCFE5B82025D453F3167566497239664",
+            "E31E206FBB8AEA27FAB0D9A2FFB6B62F",
+        ],
+        0x0004: [
+            "BB4DBF66B744A33934172D9F8379A7A5EA74CB0F559BB95D0E7AECE91702B706",
+            "ADF7B207A15AC601110E61DDFC210AF6",
+        ],
+        0x0006: [
+            "8B4C52849765D2B5FA3D5628AFB17644D52B9FFEE235B4C0DB72A62867EAA020",
+            "05719DF1B1D0306C03910ADDCE4AF887",
+        ],
+        0x0007: [
+            "3946DFAA141718C7BE339A0D6C26301C76B568AEBC5CD52652F2E2E0297437C3",
+            "E4897BE553AE025CDCBF2B15D1C9234E",
+        ],
+        0x0009: [
+            "0786F4B0CA5937F515BDCE188F569B2EF3109A4DA0780A7AA07BD89C3350810A",
+            "04AD3C2F122A3B35E804850CAD142C6D",
+        ],
+        0x000A: [
+            "03C21AD78FBB6A3D425E9AAB1298F9FD70E29FD4E6E3A3C151205DA50C413DE4",
+            "0A99D4D4F8301A88052D714AD2FB565E",
+        ],
+        0x000C: [
+            "357EBBEA265FAEC271182D571C6CD2F62CFA04D325588F213DB6B2E0ED166D92",
+            "D26E6DD2B74CD78E866E742E5571B84F",
+        ],
+        0x000D: [
+            "337A51416105B56E40D7CAF1B954CDAF4E7645F28379904F35F27E81CA7B6957",
+            "8405C88E042280DBD794EC7E22B74002",
+        ],
+        0x000F: [
+            "135C098CBE6A3E037EBE9F2BB9B30218DDE8D68217346F9AD33203352FBB3291",
+            "4070C898C2EAAD1634A288AA547A35A8",
+        ],
+        0x0010: [
+            "4B3CD10F6A6AA7D99F9B3A660C35ADE08EF01C2C336B9E46D1BB5678B4261A61",
+            "C0F2AB86E6E0457552DB50D7219371C5",
+        ],
+        0x0013: [
+            "265C93CF48562EC5D18773BEB7689B8AD10C5EB6D21421455DEBC4FB128CBF46",
+            "8DEA5FF959682A9B98B688CEA1EF4A1D",
+        ],
+        0x0016: [
+            "7910340483E419E55F0D33E4EA5410EEEC3AF47814667ECA2AA9D75602B14D4B",
+            "4AD981431B98DFD39B6388EDAD742A8E",
+        ],
+        0x0019: [
+            "FBDA75963FE690CFF35B7AA7B408CF631744EDEF5F7931A04D58FD6A921FFDB3",
+            "F72C1D80FFDA2E3BF085F4133E6D2805",
+        ],
+        0x001C: [
+            "8103EA9DB790578219C4CEDF0592B43064A7D98B601B6C7BC45108C4047AA80F",
+            "246F4B8328BE6A2D394EDE20479247C5",
+        ],
+    }
+    NP_KLIC_KEY = bytearray([0xF2, 0xFB, 0xCA, 0x7A, 0x75, 0xB0, 0x4E, 0xDC, 0x13, 0x90, 0x63, 0x8C, 0xCD, 0xFD, 0xD1, 0xEE])
+    NP_KLIC_FREE = bytearray([0x72, 0xF9, 0x90, 0x78, 0x8F, 0x9C, 0xFF, 0x74, 0x57, 0x25, 0xF0, 0x8E, 0x4C, 0x12, 0x83, 0x87])
 
-    def __init__(self, fp):
+    def __init__(self, fp, self_key=None):
         self.fp = fp
-        self.sce_hdr = None
-        self.elf_hdr = None
-        self.encryption_root_header = None
-        self.cert_header = None
-        self.segment_cert_header = []
+        self.sce_hdr: SceHeader
+        self.elf_hdr: Union[ElfHeader, ElfHeader32]
+        self.encryption_root_header: EncryptionRootHeader
+        self.cert_header: CertificationHeader
+        self.segment_cert_header: List[SegmentCertHeader] = []
         self.data_keys = None
-        self.self_header = None
+        self.self_header: SelfHeader
         self.key_v = None
-        self.segment_headers = []
-        self.segment_ext_table = []
+        self.segment_headers: List[Union[ElfSectionHeader, ElfSectionHeader32]] = []
+        self.segment_ext_table: List[SegmentExtendedHeader] = []
+        self.program_identification_hdr: ProgramIdentificationHeader
+        self.program_headers: List[Union[ProgramSegmentHeader, ProgramSegmentHeader32]] = []
+        self.supplemental_headers: List[SupplementalHeader] = []
+        self.self_key = self_key
 
     def load_headers(self):
         # Read SCE header.
@@ -409,6 +511,10 @@ class SELFDecrypter:
 
         # Read SELF header.
         self.self_header = SelfHeader.unpack(self.fp.read(SelfHeader.struct.size))
+
+        # Read APP INFO
+        self.fp.seek(self.self_header.program_identification_hdr_offset)
+        self.program_identification_hdr = ProgramIdentificationHeader.unpack(self.fp.read(ProgramIdentificationHeader.struct.size))
 
         # Determine if this is a 32 or 64 bit ELF
         self.fp.seek(self.self_header.elf_hdr_offset)
@@ -442,6 +548,15 @@ class SELFDecrypter:
         self.scev_info = SCEVersionHeader.unpack(self.fp.read(SCEVersionHeader.struct.size))
         if self.scev_info.present:
             self.scev_version = SCEVersionBody.unpack(self.fp.read(SCEVersionBody.struct.size))
+
+        # Read control info.
+        self.fp.seek(self.self_header.supplemental_hdr_offset)
+        i = 0
+        while i < self.self_header.supplemental_hdr_size:
+            supp_hdr = SupplementalHeader.unpack(self.fp.read(SupplementalHeader.struct.size))
+            supp_hdr.subheader = supp_hdr.subheader_cls.unpack(self.fp.read(supp_hdr.subheader_cls.struct.size))
+            self.supplemental_headers.append(supp_hdr)
+            i += SupplementalHeader.struct.size + supp_hdr.subheader_cls.struct.size
 
         # Read ELF section headers.
         self.segment_headers = []
@@ -502,7 +617,7 @@ class SELFDecrypter:
                 iv_idx=0xFFFFFFFF,
                 comp_algorithm=1,
             ))
-            return
+            return True
 
         meta_headers_and_section_size = self.sce_hdr.file_offset - (
                 SceHeader.struct.size + self.sce_hdr.ext_header_size + EncryptionRootHeader.struct.size)
@@ -517,24 +632,38 @@ class SELFDecrypter:
 
         # Find the right keyset from the key vault.
         try:
-            metadata_key = bytes.fromhex(self.apploader_keys[self.sce_hdr.attribute][0])
-            metadata_iv = bytes.fromhex(self.apploader_keys[self.sce_hdr.attribute][1])
+            if self.program_identification_hdr.program_type == 4:
+                metadata_key = bytes.fromhex(self.apploader_keys[self.sce_hdr.attribute][0])
+                metadata_iv = bytes.fromhex(self.apploader_keys[self.sce_hdr.attribute][1])
+            elif self.program_identification_hdr.program_type == 8:
+                metadata_key = bytes.fromhex(self.npdrm_keys[self.sce_hdr.attribute][0])
+                metadata_iv = bytes.fromhex(self.npdrm_keys[self.sce_hdr.attribute][1])
         except KeyError:
-            print("Could not find decryption key")
-            return
+            return False
 
-        # Decrypt the metadata info.
-        aes = AES.new(metadata_key, AES.MODE_CBC, metadata_iv)
-        metadata_info = aes.decrypt(metadata_info)
+        if npd := self.get_npd_header():
+            metadata_info = self.decrypt_npdrm(npd, metadata_info)
+            if not metadata_info:
+                return False
+        else:
+            metadata_info = [metadata_info]
 
-        # Load the metadata info.
-        self.encryption_root_header = EncryptionRootHeader.unpack(metadata_info)
+        for metadata_info_candidate in metadata_info:
+            # Decrypt the metadata info.
+            aes = AES.new(metadata_key, AES.MODE_CBC, metadata_iv)
+            metadata_info = aes.decrypt(metadata_info_candidate)
 
-        # If the padding is not NULL for the key or iv fields, the metadata info
-        # is not properly decrypted.
-        if self.encryption_root_header.key_pad[0] != 0x00 or self.encryption_root_header.iv_pad[0] != 0x00:
-            print("Failed to decrypt SCE metadata info!")
-            return
+            # Load the metadata info.
+            self.encryption_root_header = EncryptionRootHeader.unpack(metadata_info)
+
+            # Verify the metadata info.
+            # If the padding is not NULL for the key or iv fields, the metadata info
+            # is not properly decrypted.
+            if self.encryption_root_header.key_pad == b'\x00' * 16 and self.encryption_root_header.iv_pad == b'\x00' * 16:
+                break
+
+        if self.encryption_root_header.key_pad != b'\x00' * 16 or self.encryption_root_header.iv_pad != b'\x00' * 16:
+            return False
 
         # Perform AES-CTR encryption on the metadata headers.
         aes = AES.new(self.encryption_root_header.key, AES.MODE_CTR,
@@ -553,6 +682,8 @@ class SELFDecrypter:
         data_keys_length = self.cert_header.attr_entry_num * 0x10
         self.data_keys = bytearray(metadata_headers.read(data_keys_length))
 
+        return True
+
     def decrypt_data(self, segment_cert_header):
         # Get the key and iv from the previously stored key buffer.
         data_key_offset = segment_cert_header.key_idx * 0x10
@@ -567,6 +698,43 @@ class SELFDecrypter:
         # Perform AES-CTR encryption on the data blocks.
         aes = AES.new(data_key, AES.MODE_CTR, counter=Counter.new(128, initial_value=int.from_bytes(data_iv, "big")))
         return aes.encrypt(buf)
+
+    def get_npd_header(self) -> Optional[NPDHeader]:
+        # Iterate through supplemental headers
+        for info in self.supplemental_headers:
+            if info.type == 3:  # Type 3 indicates NPDRM control info
+                return info.subheader
+
+        return None
+
+    def decrypt_npdrm(self, npd, metadata) :
+        if npd.license in [1, 2]:
+            if not self.self_key:
+                return False
+            npdrm_key = [self.self_key]
+        elif npd.license == 3:
+            npdrm_key = []
+            if self.self_key:
+                npdrm_key.append(self.self_key)
+            npdrm_key.append(self.NP_KLIC_FREE)
+        else:
+            print("Invalid NPDRM license type!")
+            return [metadata]
+
+        decrypted_metadata_candidates = []
+
+        for key in npdrm_key:
+            # Decrypt our key with NP_KLIC_KEY
+            cipher = AES.new(self.NP_KLIC_KEY, AES.MODE_ECB)
+            k = cipher.decrypt(bytes(key))
+
+            # IV is empty (all zeros)
+            npdrm_iv = bytes(16)
+
+            # Use our final key to decrypt the NPDRM layer
+            cipher = AES.new(k, AES.MODE_CBC, npdrm_iv)
+            decrypted_metadata_candidates.append(cipher.decrypt(metadata))
+        return decrypted_metadata_candidates
 
     def get_decrypted_elf(self):
         # Allocate a buffer to store decrypted data.

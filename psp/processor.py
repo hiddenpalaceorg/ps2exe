@@ -3,6 +3,7 @@ import logging
 import pathlib
 import re
 
+from post_psx.npdrm.path_reader import NPDRMPathReader
 from post_psx.processor import PostPsxIsoProcessor
 from utils.files import ConcatenatedFile, BinWrapper
 
@@ -12,10 +13,12 @@ LOGGER = logging.getLogger(__name__)
 class PspIsoProcessor(PostPsxIsoProcessor):
 
     update_folder = re.compile(".*/PSP_GAME/SYSDIR/UPDATE/$", re.IGNORECASE)
-    sfo_path = "/PSP_GAME/PARAM.SFO"
 
     def __init__(self, iso_path_reader, iso_filename, system, progress_manager):
-        self.disc_type = "umd"
+        if isinstance(iso_path_reader, NPDRMPathReader):
+            self.disc_type = "hdd"
+        else:
+            self.disc_type = "umd"
         parent_container = iso_path_reader.parent_container
         iso_dir = parent_container.get_file(str(pathlib.Path(iso_filename).parent))
         rule = re.compile(fnmatch.translate("*USER_L*.IMG"), re.IGNORECASE)
@@ -54,18 +57,41 @@ class PspIsoProcessor(PostPsxIsoProcessor):
                 fp, iso_filename, iso_path_reader.parent_container, progress_manager
             )[0][0]
 
+        self.base_dir = ""
+        for file in iso_path_reader.iso_iterator(iso_path_reader.get_root_dir(), include_dirs=True):
+            if iso_path_reader.is_directory(file):
+                if iso_path_reader.get_file_path(file).strip("/") == "PSP_GAME":
+                    self.base_dir = "/PSP_GAME"
+                    break
+
         super().__init__(iso_path_reader, iso_filename, system, progress_manager)
+
+    @property
+    def sfo_path(self):
+        return f"{self.base_dir}/PARAM.SFO"
 
     def get_disc_type(self):
         return {"disc_type": self.disc_type}
 
     def get_exe_filename(self):
-        return "/PSP_GAME/SYSDIR/EBOOT.BIN"
+        try:
+            self.iso_path_reader.get_file(f"{self.base_dir}/SYSDIR/EBOOT.BIN")
+            return f"{self.base_dir}/SYSDIR/EBOOT.BIN"
+        except FileNotFoundError:
+            return None
 
     def get_extra_fields(self):
-        self.get_exe_filename = lambda: "/PSP_GAME/SYSDIR/BOOT.BIN"
-        alt_exe_hash = super().hash_exe()
-        params = self.parse_param_sfo()
+        try:
+            self.iso_path_reader.get_file(f"{self.base_dir}/SYSDIR/BOOT.BIN")
+            self.get_exe_filename = lambda: f"{self.base_dir}/SYSDIR/BOOT.BIN"
+            alt_exe_hash = super().hash_exe()
+        except FileNotFoundError:
+            alt_exe_hash = {}
+
+        try:
+            params = self.parse_param_sfo()
+        except FileNotFoundError:
+            params = {}
 
         return {
             "sfo_category": params.get("CATEGORY"),
@@ -77,5 +103,7 @@ class PspIsoProcessor(PostPsxIsoProcessor):
             "alt_exe_filename": alt_exe_hash.get("exe_filename"),
             "alt_exe_date": alt_exe_hash.get("exe_date"),
             "alt_md5": alt_exe_hash.get("md5"),
+            "decryption_status": getattr(self.iso_path_reader, "decryption_status", None),
+
         }
 
