@@ -83,10 +83,10 @@ class InMemoryRolloverTempFile(BaseFile):
                 m = mmap.mmap(-1, 2, access=mmap.ACCESS_WRITE)
                 m.resize(1)
                 m.close()
-            except OSError:
+            except (OSError, SystemError):
                 return
             try:
                 self.mmap.resize(size)
                 self.mmap_size = size
-            except OSError:
+            except (OSError, SystemError):
                 return
