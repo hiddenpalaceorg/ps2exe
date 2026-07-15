@@ -726,14 +726,21 @@ class DirectoryRecord(pycdlib.dr.DirectoryRecord):
 
                 is_first_dir_record_of_root = False
 
+                # The reference record (root's dot entry, or the parent dir) has
+                # no rock_ridge when it carries no system-use area at all — Toast
+                # writes Apple extensions on files but leaves the dot records
+                # bare. No SUSP offset to inherit then; the AA/AB record starts
+                # at the beginning of this record's system-use area.
                 if self.parent.is_root:
                     if self.file_ident == b'\x00':
                         is_first_dir_record_of_root = True
                         bytes_to_skip = 0
                     else:
-                        bytes_to_skip = self.parent.children[0].rock_ridge.bytes_to_skip
+                        first = self.parent.children[0].rock_ridge if self.parent.children else None
+                        bytes_to_skip = first.bytes_to_skip if first else 0
                 else:
-                    bytes_to_skip = self.parent.rock_ridge.bytes_to_skip
+                    parent_rr = self.parent.rock_ridge
+                    bytes_to_skip = parent_rr.bytes_to_skip if parent_rr else 0
 
                 self.rock_ridge.parse(record[record_offset:],
                                       is_first_dir_record_of_root,
