@@ -43,6 +43,16 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             if not file or file.is_dot() or file.is_dotdot():
                 continue
 
+            if self.volume_type != "udf" and file.is_associated_file():
+                # ISO9660 associated files (Mac resource forks on hybrid discs)
+                # sort directly before the same-named data-fork record, which
+                # _yield_children then hides as a same-name duplicate. Yield the
+                # data fork instead; a fork with no data sibling stays as-is.
+                for sibling in file.parent.children:
+                    if sibling.file_ident == file.file_ident and not sibling.is_associated_file():
+                        file = sibling
+                        break
+
             if file.is_dir():
                 if recursive:
                     if include_dirs:
