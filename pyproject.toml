@@ -1,23 +1,30 @@
-[tool.poetry]
+[project]
 name = "ps2exe"
 version = "0.0.1"
-description = ""
-authors = ["Hidden Palace <hp@hiddenpalace.org>"]
+description = "Game disc image scanner"
+authors = [{ name = "Hidden Palace", email = "hp@hiddenpalace.org" }]
+requires-python = ">=3.9,<3.11"
+dependencies = [
+    "enlighten",
+    "pycdlib==1.14.0",
+    "pyisotools",
+    "methodtools==0.4.7",
+    "pefile==2024.8.26",
+    "pycryptodome==3.23.0",
+    "libarchive-c==5.3",
+    "numpy",
+    "pathlab==0.2",
+    "xxhash~=3.7.0",
+    "machfs==1.3",
+    "rarfile~=4.2",
+    "psutil~=7.2.2",
+    "bitarray~=3.8.1",
+    "inflate64~=1.0.4",
+    "stream-inflate"
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9,<3.12"
-enlighten = "^1.11.2"
-pycdlib = "^1.14.0"
-pyisotools = "^2.4.6"
-methodtools = "^0.4.7"
-pefile = "^2023.2.7"
-pycryptodome = "^3.18.0"
-libarchive-c = "^4.0"
-numpy = "^1.25.0"
-pathlab = "^0.2"
-xxhash = "^3.2.0"
+[tool.uv]
+package = false
 
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv.sources]
+pyisotools = { url = "https://github.com/hiddenpalaceorg/pyisotools/archive/a9373ba22c8c5ce3c1af684f7e74a103e09aa3ac.zip" }
