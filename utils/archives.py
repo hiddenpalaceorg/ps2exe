@@ -76,6 +76,13 @@ class ArchiveWrapper:
         self.tempfile_used = 0
         self.entries = {}
         self._entries_pos = dict()
+        # The entry the stream is currently positioned on, and a count of
+        # stream advances so stale entry readers can be detected
+        self._live_entry = None
+        self._stream_serial = 0
+        # Next free offset in the shared buffer, its tell() is a shared
+        # cursor that reads move, so it can't allocate ranges
+        self.alloc_pos = 0
         self.rar_tmpfile = None
         self.counter = None
         self.total_size = get_file_size(self.fp)
@@ -196,7 +203,14 @@ class ArchiveWrapper:
             return
 
         entry = None
-        for entry in self.reader:
+        reader_iter = iter(self.reader)
+        while True:
+            # Read the rest of our last entry if we haven't finished it for some reason
+            self._finish_live_entry()
+            entry = next(reader_iter, None)
+            if entry is None:
+                break
+            self._stream_serial += 1
             if isinstance(entry, (rarfile.RarInfo, zipfile.ZipInfo)):
                 file_path = entry.filename
                 file_size = entry.file_size
@@ -215,19 +229,19 @@ class ArchiveWrapper:
             if isinstance(file_path, bytes):
                 file_path = file_path.decode(errors='replace')
 
-            entry_fp = OffsetFile(self.uncompressed, self.uncompressed.tell(), self.uncompressed.tell() + file_size, file_path)
+            entry_fp = OffsetFile(self.uncompressed, self.alloc_pos, self.alloc_pos + file_size, file_path)
+            self.alloc_pos += file_size
             entry_wrapper = ArchiveEntryWrapper(self, entry, entry_fp, self.reader, pbar=self.counter)
+            entry_wrapper.stream_serial = self._stream_serial
             self.entries[file_path] = entry_wrapper
             self.counter.update(incr=0, file_name=format_bar_desc(entry_wrapper.file_name, 30))
+            self._live_entry = entry_wrapper
             yield entry_wrapper
-            try:
-                entry_wrapper.close()
-            except Exception:
-                entry_wrapper.closed = True
-                raise
-            self.entries[file_path] = CompletedEntryWrapper(entry_wrapper)
+            if self._live_entry is entry_wrapper:
+                self._finish_live_entry()
             del entry_wrapper
-        self.ctx.__exit__(None, None, None)
+        if self.ctx:
+            self.ctx.__exit__(None, None, None)
         self.ctx = None
         entry = None
         self.close_readers()
@@ -239,6 +253,21 @@ class ArchiveWrapper:
             last_entry = next(reversed(self.entries))
             self.uncompressed.finalize(self.entries[last_entry].end_pos)
         gc.collect()
+
+    def _finish_live_entry(self):
+        entry_wrapper = self._live_entry
+        self._live_entry = None
+        if entry_wrapper is None or entry_wrapper.closed:
+            return
+        if not isinstance(self.entries.get(entry_wrapper.file_name), ArchiveEntryWrapper):
+            # A recovery path already promoted or dropped it
+            return
+        try:
+            entry_wrapper.close()
+        except Exception:
+            entry_wrapper.closed = True
+            raise
+        self.entries[entry_wrapper.file_name] = CompletedEntryWrapper(entry_wrapper)
 
     def recover_decompressor(self, libarchive_exception):
         self.ctx.__exit__(None, None, None)
@@ -540,6 +569,12 @@ class BlockReader(ArchiveEntryReader):
         amount_need_read = min(self.size, self.pos + n)
         left = n
         if amount_need_read > self.read_bytes:
+            stream_serial = getattr(self.entry, "stream_serial", self.archive._stream_serial)
+            if stream_serial != self.archive._stream_serial:
+                # guards against potential segfaults if we read past the end of an entry
+                raise libarchive.ArchiveError(
+                    "Archive stream advanced past %s with %d of %d bytes read" %
+                    (self.entry.path, self.read_bytes, self.size))
             # Hack: store the file name inside the module globally for logging purposes
             libarchive.current_file_path = self.entry.path
             self.fp.seek(self.read_bytes)
