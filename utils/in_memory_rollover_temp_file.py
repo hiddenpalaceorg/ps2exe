@@ -13,6 +13,18 @@ class InMemoryRolloverTempFile(BaseFile):
     """
     In-memory mmap that rolls-over into a temporary file if too large
     """
+    @classmethod
+    def with_memory_budget(cls, max_size=None):
+        """Allocate against a decreasing share of free physical memory,
+        optionally capped at max_size"""
+        for fraction in (.8, .6):
+            budget = int(psutil.virtual_memory().available * fraction)
+            try:
+                return cls(budget if max_size is None else min(max_size, budget))
+            except OSError:
+                continue
+        return cls(0)
+
     def __init__(self, max_size=0):
         self.pos = 0
         self.mmap = None

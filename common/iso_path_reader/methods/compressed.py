@@ -92,3 +92,7 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
 
     def close(self):
         self.iso.__exit__(None, None, None)
+
+
+class InstallShieldPathReader(CompressedPathReader):
+    volume_type = "installshield"
