@@ -1,4 +1,3 @@
-import dataclasses
 import io
 import struct
 import zlib
@@ -7,27 +6,7 @@ from dataclasses import dataclass
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 
-
-class StructMeta(type):
-    def __init__(cls, name, bases, d):
-        if dataclasses.is_dataclass(d):
-            raise ValueError("Class {} is not a dataclass".format(name))
-        if 'struct' not in d:
-            raise ValueError("Class {} doesn't define struct".format(name))
-        type.__init__(cls, name, bases, d)
-
-
-class Struct:
-    __metaclass__ = StructMeta
-    struct = None
-    size = 0
-
-    def pack(self):
-        return self.struct.pack(*dataclasses.astuple(self))
-
-    @classmethod
-    def unpack(cls, data):
-        return cls(*cls.struct.unpack(data))
+from utils.structs import Struct
 
 
 @dataclass
