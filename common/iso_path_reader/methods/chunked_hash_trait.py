@@ -17,12 +17,16 @@ class ChunkedHashTrait:
         hash = algo()
         bytes_read = 0
         with self.open_file(file) as f:
-            try:
-                for chunk in iter(lambda: f.read(65536), b""):
-                    bytes_read += len(chunk)
-                    hash.update(chunk)
-            except ValueError:
-                pass
+            while True:
+                try:
+                    chunk = f.read(65536)
+                except ValueError:
+                    # early EOF
+                    break
+                if not chunk:
+                    break
+                bytes_read += len(chunk)
+                hash.update(chunk)
 
         if bytes_read:
             if bytes_read != self.get_file_size(file):
