@@ -9,8 +9,13 @@ class HashProgressWrapper:
         return self
 
     def update(self, data):
-        self.progress_bar.update(len(data))
-        return self.hash_obj.update(data)
+        result = self.hash_obj.update(data)
+        try:
+            self.progress_bar.update(len(data))
+        except Exception:
+            # A progress display failure must not abort or truncate hashing
+            pass
+        return result
 
     def __getattr__(self, item):
         return getattr(self.hash_obj, item)
