@@ -49,7 +49,7 @@ class IsoPathReader:
 
         for field in ("system_identifier", "volume_identifier", "volume_set_identifier"):
             info[field] = getattr(pvd, field).rstrip(b"\x00"). \
-                decode(encoding=encoding, errors='replace').strip()
+                decode(encoding=encoding, errors='replace').replace("\x00", "").strip()
 
         for field in (
                 "volume_creation_date",

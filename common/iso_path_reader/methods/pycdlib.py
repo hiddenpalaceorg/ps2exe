@@ -182,6 +182,14 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             return self.iso.joliet_vd
         return self.iso.pvd
 
+    @staticmethod
+    def _decode_dstring(dstring):
+        if not dstring or not dstring[-1]:
+            return ""
+        encoding = "utf-16-be" if dstring[0] == 16 else "latin-1"
+        result = dstring[1:dstring[-1]].decode(encoding, errors='replace')
+        return result.replace("\x00", "").strip()
+
     def get_pvd_info(self):
         if not self.volume_type == "udf":
             return super().get_pvd_info()
@@ -190,11 +198,8 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
 
         info = {}
 
-        vol_ident = pvd.vol_ident[1:pvd.vol_ident[-1]]
-        vol_set_ident = pvd.vol_set_ident[1:pvd.vol_set_ident[-1]]
-
-        info["volume_identifier"] = vol_ident.decode(errors='replace')
-        info["volume_set_identifier"] = vol_set_ident.decode(errors='replace')
+        info["volume_identifier"] = self._decode_dstring(pvd.vol_ident)
+        info["volume_set_identifier"] = self._decode_dstring(pvd.vol_set_ident)
         info["volume_creation_date"] = datetime_from_iso_date(pvd.recording_date)
 
         return info
