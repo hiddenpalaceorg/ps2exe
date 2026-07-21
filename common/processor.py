@@ -25,6 +25,9 @@ class BaseIsoProcessor:
     _hash_bar_fmt = '    Hashing {file_name} {desc_pad}{percentage:3.0f}%|{bar}| ' \
                     '{count:!.2k}{unit} / {total:!.2k}{unit} ' \
                     '[{elapsed}<{eta}, {rate:!.2k}{unit}/s]'
+    # Used instead of _hash_bar_fmt whenever count exceeds total
+    _hash_counter_fmt = '    Hashing {file_name} {desc_pad}{count:!.2k}{unit} / {total:!.2k}{unit} ' \
+                        '[{elapsed}, {rate:!.2k}{unit}/s]{fill}'
 
     def get_disc_type(self):
         return {"disc_type": "unknown"}
@@ -202,7 +205,8 @@ class BaseIsoProcessor:
         with self.progress_manager.counter(total=len(file_list), desc="Getting file hashes", unit='files') as pbar:
             with self.progress_manager.counter(total=0.0,
                                                file_name="", unit='B',
-                                               leave=False, bar_format=self._hash_bar_fmt) as hash_bar:
+                                               leave=False, bar_format=self._hash_bar_fmt,
+                                               counter_format=self._hash_counter_fmt) as hash_bar:
                 for file in file_list:
                     file_path = self.iso_path_reader.get_file_path(file)
                     hash_bar.update(incr=0, file_name=format_bar_desc(file_path, 25))
@@ -288,7 +292,8 @@ class BaseIsoProcessor:
 
         with self.progress_manager.counter(total=0.0,
                                            file_name="", unit='B',
-                                           leave=False, bar_format=self._hash_bar_fmt) as hash_bar:
+                                           leave=False, bar_format=self._hash_bar_fmt,
+                                           counter_format=self._hash_counter_fmt) as hash_bar:
             hash_bar.update(incr=0, file_name=format_bar_desc(most_recent_path, 25))
             hash_bar.total = float(self.iso_path_reader.get_file_size(most_recent_file))
             hash_bar.count = 0.0
