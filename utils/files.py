@@ -1,3 +1,4 @@
+import _compression
 import io
 import logging
 import math
@@ -107,10 +108,17 @@ class MmappedFile(MmapWrapper):
             self.mmap = fp
             self.name = None
         else:
-            try:
-                self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
-            except (AttributeError, UnsupportedOperation):
-                self.mmap = FakeMemoryMap(fp)
+            if isinstance(fp, _compression.BaseStream):
+                # gz/xz/bz2 files have their fileno() point to the
+                # real file, which makes the mmap return compressed data
+                # this instead returns an mmap-like interface for a decompressed buffer
+                from utils.in_memory_rollover_temp_file import DecompressedFile
+                self.mmap = DecompressedFile(fp)
+            else:
+                try:
+                    self.mmap = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)
+                except (AttributeError, UnsupportedOperation):
+                    self.mmap = FakeMemoryMap(fp)
             self.name = getattr(fp, "name", "")
 
     def __getattr__(self, item):

@@ -1,9 +1,12 @@
+import logging
 import mmap
 import tempfile
 
 import psutil
 
-from utils.files import BaseFile
+from utils.files import BaseFile, OffsetFile
+
+LOGGER = logging.getLogger(__name__)
 
 
 class InMemoryRolloverTempFile(BaseFile):
@@ -90,3 +93,34 @@ class InMemoryRolloverTempFile(BaseFile):
                 self.mmap_size = size
             except (OSError, SystemError):
                 return
+
+
+class DecompressedFile(OffsetFile):
+    """
+    Eagerly decompresses a stream (GzipFile/BZ2File/LZMAFile) into an
+    InMemoryRolloverTempFile so consumers can seek freely without
+    re-decompressing from the start on every backwards seek.
+    """
+    CHUNK_SIZE = 4 * 1024 * 1024
+
+    def __init__(self, fp):
+        buffer = InMemoryRolloverTempFile.with_memory_budget()
+        LOGGER.debug("Decompressing %s to a rollover temp file", getattr(fp, "name", "stream"))
+        fp.seek(0)
+        size = 0
+        while chunk := fp.read(self.CHUNK_SIZE):
+            buffer.write(chunk)
+            size += len(chunk)
+        buffer.finalize(size)
+        buffer.name = getattr(fp, "name", "")
+        super().__init__(buffer, 0, size, buffer.name)
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            start = 0 if item.start is None else item.start
+            stop = self.length() if item.stop is None else item.stop
+            return super().__getitem__(slice(start, stop, item.step))
+        return super().__getitem__(item)[0]
+
+    def close(self):
+        self.mmap.close()
