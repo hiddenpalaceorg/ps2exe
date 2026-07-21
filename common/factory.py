@@ -9,7 +9,7 @@ from common import pycdlib
 from pyisotools.iso import GamecubeISO
 
 from cdi.path_reader import CdiPathReader
-from common.iso_path_reader.methods.compressed import CompressedPathReader
+from common.iso_path_reader.methods.compressed import CompressedPathReader, InstallShieldPathReader
 from common.iso_path_reader.methods.hfs import HfsPathReader
 from common.iso_path_reader.methods.pathlab import PathlabPathReader
 from common.iso_path_reader.methods.pycdlib import PyCdLibPathReader
@@ -35,6 +35,7 @@ from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from p3do.operafs import OperaFs
 from utils.archives import ArchiveWrapper
+from utils.installshield import InstallShieldCabWrapper, InstallShieldEmptyCabinet, InstallShieldNotFirstVolume
 from utils.files import BinWrapper, ConcatenatedFile, OffsetFile, MmappedFile, BinWrapperException
 from wii.path_reader import WiiPathReader
 from wii.processor import WiiIsoProcessor
@@ -124,6 +125,21 @@ class IsoProcessorFactory:
                                 LOGGER.warning("lzma support not available, not able to decompress %s", file_name)
                     else:
                         exceptions[CompressedPathReader.volume_type] = e
+
+        fp.seek(0)
+        if fp.read(4) == b"ISc(":
+            try:
+                return [
+                    InstallShieldPathReader(
+                        InstallShieldCabWrapper(fp, file_name, parent_container, pbar), fp, parent_container
+                    )
+                ], []
+            except (InstallShieldNotFirstVolume, InstallShieldEmptyCabinet) as e:
+                LOGGER.debug("Skipping InstallShield cabinet %s: %s", file_name, e)
+                return [], []
+            except Exception as e:
+                LOGGER.warning("Error processing %s: %s", file_name, e)
+                return [], {InstallShieldPathReader.volume_type: e}
 
         fp.seek(0)
         if fp.read(4) == b"LIVE":

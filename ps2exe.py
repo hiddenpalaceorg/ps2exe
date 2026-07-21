@@ -9,12 +9,14 @@ import sys
 
 import enlighten
 
+import utils.installshield
 from common.factory import IsoProcessorFactory
 from common.iso_path_reader.methods.directory import DirectoryPathReader
 from common.processor import BaseIsoProcessor
 from exceptions import SkippableError
 from patches import apply_patches
 from utils.common import is_path_allowed
+from utils.disc_sets import DiscSetResolver
 
 try:
     import pycdlib
@@ -23,6 +25,15 @@ except ImportError:
 
 LOGGER = logging.getLogger(__name__)
 PROGRESS_MANAGER = enlighten.get_manager()
+DISC_SET_RESOLVER = None
+
+
+def get_disc_set_resolver():
+    global DISC_SET_RESOLVER
+    if DISC_SET_RESOLVER is None:
+        DISC_SET_RESOLVER = DiscSetResolver(IsoProcessorFactory, PROGRESS_MANAGER)
+        utils.installshield.SIBLING_DISC_RESOLVER = DISC_SET_RESOLVER
+    return DISC_SET_RESOLVER
 
 
 def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
@@ -58,6 +69,7 @@ def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
 
 
 def process_containers_recursive(iso_filename, disable_contents_checksum):
+    get_disc_set_resolver().set_root(iso_filename)
     root_path_reader = DirectoryPathReader(pathlib.Path(iso_filename).parent)
 
     iso_path = iso_filename.encode("cp1252", errors="replace")
@@ -273,12 +285,29 @@ if __name__ == '__main__':
                         nargs='+',
                         default=[])
 
+    parser.add_argument('--disc-sets',
+                        help="JSON manifest of multi-disc sets: a list of lists of disc "
+                             "image paths, resolved relative to the manifest file",
+                        type=str,
+                        default=None)
+
+    parser.add_argument('--no-disc-set-search',
+                        help="Don't search sibling disc images for missing installer "
+                             "cabinet volumes",
+                        action='store_true',
+                        default=False)
+
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.logLevel))
 
     results = []
     apply_patches()
+
+    DISC_SET_RESOLVER = DiscSetResolver(IsoProcessorFactory, PROGRESS_MANAGER,
+                                        manifest_path=args.disc_sets,
+                                        search_siblings=not args.no_disc_set_search)
+    utils.installshield.SIBLING_DISC_RESOLVER = DISC_SET_RESOLVER
 
     if args.output == '-':
         csv_file = sys.stdout
@@ -382,4 +411,5 @@ if __name__ == '__main__':
         except Exception:
             LOGGER.exception("Error reading %s", path)
         finally:
+            DISC_SET_RESOLVER.close()
             gc.collect()

@@ -9,13 +9,13 @@ import struct
 import sys
 import tempfile
 
-import psutil
 import rarfile
 import zipfile
 
 from utils.in_memory_rollover_temp_file import InMemoryRolloverTempFile
 from utils.common import format_bar_desc
 from utils.files import AccessBySliceFile, OffsetFile, get_file_size, iterate_patterns
+from utils.progress import DecompressionCounterMixin
 from utils.zip_explode import ExplodingInputStream
 
 LOGGER = logging.getLogger(__name__)
@@ -59,11 +59,7 @@ except ImportError:
     from stream_inflate import stream_inflate64
 
 
-class ArchiveWrapper:
-    BAR_FMT = '{desc} {file_name}{desc_pad}{percentage:3.0f}%|{bar}| ' \
-              '{count:!.2j}{unit} / {total:!.2j}{unit} ' \
-              '[{elapsed}<{eta}, {rate:!.2j}{unit}/s]'
-
+class ArchiveWrapper(DecompressionCounterMixin):
     def __init__(self, file, parent_container, pbar=None):
         file.seek(0)
         self.ctx = None
@@ -112,29 +108,12 @@ class ArchiveWrapper:
         file.seek(0)
         self.ctx = libarchive.stream_reader(file, block_size=self.block_size)
 
-        # 80% of free physical memory
-        try:
-            self.uncompressed = InMemoryRolloverTempFile(int(psutil.virtual_memory().available * .8))
-        except OSError:
-            # Try 60%
-            try:
-                self.uncompressed = InMemoryRolloverTempFile(int(psutil.virtual_memory().available * .6))
-            except:
-                # Give up
-                self.uncompressed = InMemoryRolloverTempFile(0)
+        self.uncompressed = InMemoryRolloverTempFile.with_memory_budget()
 
     def __enter__(self):
         try:
             self.reader = self.ctx.__enter__()
-            if not self.counter:
-                self.counter = self.pbar.counter(
-                    total=float(self.total_size),
-                    desc=f"Decompressing",
-                    unit='B',
-                    leave=False,
-                    bar_format=self.BAR_FMT,
-                    file_name=""
-                )
+            self._create_counter(float(self.total_size))
             return self
         except libarchive.ArchiveError as e:
             self.recover_decompressor(e)
@@ -147,17 +126,7 @@ class ArchiveWrapper:
             self.ctx = None
         if self.uncompressed:
             self.uncompressed.close()
-        if self.counter:
-            try:
-                self.counter.update(incr=0, file_name="")
-            except KeyError:
-                pass
-            try:
-                if not self.counter._closed:
-                    self.counter.close()
-            except KeyError:
-                pass
-            self.counter = None
+        self._close_counter()
         self.close_readers()
         libarchive.current_file_path = None
         gc.collect()
@@ -232,9 +201,7 @@ class ArchiveWrapper:
         entry = None
         self.close_readers()
         self.reader = []
-        self.counter.update(incr=0, file_name="")
-        self.counter.close()
-        self.counter = None
+        self._close_counter()
         if self.entries:
             last_entry = next(reversed(self.entries))
             self.uncompressed.finalize(self.entries[last_entry].end_pos)
@@ -458,8 +425,7 @@ class ArchiveWrapper:
                 self.entries[last_entry] = CompletedEntryWrapper(self.entries[last_entry])
             self.close_readers()
             self.reader = []
-            self.counter.update(incr=0, file_name="")
-            self.counter.close()
+            self._close_counter()
             LOGGER.warning("Archive %s could not be fully extracted. Last file: %s", self.path, last_entry)
             return
         else:
