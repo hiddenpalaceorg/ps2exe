@@ -63,6 +63,9 @@ class ArchiveWrapper(DecompressionCounterMixin):
     def __init__(self, file, parent_container, pbar=None):
         file.seek(0)
         self.ctx = None
+        # False once the libarchive handle has been freed; see _release_libarchive.
+        # Set here too so a constructor that bails before opening one stays safe.
+        self._libarchive_live = False
         self.uncompressed = None
         self.fp = file
         self.path = file.name
@@ -114,8 +117,30 @@ class ArchiveWrapper(DecompressionCounterMixin):
             raise libarchive.ArchiveError("Unrecognized archive format")
         file.seek(0)
         self.ctx = libarchive.stream_reader(file, block_size=self.block_size)
+        self._libarchive_live = True
 
         self.uncompressed = InMemoryRolloverTempFile.with_memory_budget()
+
+    def _release_libarchive(self):
+        """Mark the libarchive handle dead and unlink every entry from it.
+
+        Call this immediately *before* freeing the handle. libarchive checks
+        its handle's magic on the way in and, when it doesn't match, prints
+        "PROGRAMMER ERROR ... invalid archive handle" and calls abort() — a
+        process kill no Python `except` can catch. So a reader that outlives
+        the handle must never reach the C library: dropping `_archive_p` makes
+        libarchive-c's own guard in `get_blocks` raise TypeError instead.
+
+        Readers do outlive it whenever an error path tears the archive down
+        mid-listing — an unsupported or corrupt member leaves entries open, and
+        the gc.collect() in __exit__ then finalizes them, whose close() drains
+        to EOF straight into the freed handle.
+        """
+        self._libarchive_live = False
+        for wrapper in self.entries.values():
+            entry = getattr(wrapper, "entry", None)
+            if isinstance(entry, ArchiveEntry):
+                entry._archive_p = None
 
     def __enter__(self):
         try:
@@ -129,6 +154,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
 
     def __exit__(self, *args):
         if self.ctx:
+            self._release_libarchive()
             self.ctx.__exit__(*args)
             self.ctx = None
         if self.uncompressed:
@@ -210,6 +236,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
                 self._finish_live_entry()
             del entry_wrapper
         if self.ctx:
+            self._release_libarchive()
             self.ctx.__exit__(None, None, None)
         self.ctx = None
         entry = None
@@ -237,6 +264,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
         self.entries[entry_wrapper.file_name] = CompletedEntryWrapper(entry_wrapper)
 
     def recover_decompressor(self, libarchive_exception):
+        self._release_libarchive()
         self.ctx.__exit__(None, None, None)
         self.ctx = None
         gc.collect()
@@ -436,6 +464,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
     def recover_partial_data(self, exception):
         self.reader = []
         if self.ctx:
+            self._release_libarchive()
             self.ctx.__exit__(None, None, None)
             self.ctx = None
         gc.collect()
@@ -531,10 +560,28 @@ class BlockReader(ArchiveEntryReader):
         self.size = entry.file_size
         super().__init__(entry, archive, *args, **kwargs)
 
+    def close(self):
+        # The base close() drains to EOF, which is exactly the call that would
+        # reach a freed handle when a reader is finalized after teardown. With
+        # the handle gone there is nothing left to drain anyway, so just mark
+        # this reader closed instead of raising out of a __del__.
+        if not self._closed and not self.archive._libarchive_live:
+            self._closed = True
+            return
+        super().close()
+
     def _get_data(self, n=None, discard=False):
         amount_need_read = min(self.size, self.pos + n)
         left = n
         if amount_need_read > self.read_bytes:
+            if not self.archive._libarchive_live:
+                # The handle backing this entry is gone (an error path tore the
+                # archive down while we were still open). Reading would hand
+                # libarchive a freed handle, which aborts the process rather
+                # than raising — see ArchiveWrapper._release_libarchive.
+                raise libarchive.ArchiveError(
+                    "Archive closed before %s was read (%d of %d bytes)" %
+                    (self.entry.path, self.read_bytes, self.size))
             stream_serial = getattr(self.entry, "stream_serial", self.archive._stream_serial)
             if stream_serial != self.archive._stream_serial:
                 # guards against potential segfaults if we read past the end of an entry
