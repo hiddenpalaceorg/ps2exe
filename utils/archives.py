@@ -63,6 +63,8 @@ class ArchiveWrapper(DecompressionCounterMixin):
     def __init__(self, file, parent_container, pbar=None):
         file.seek(0)
         self.ctx = None
+        # False once the libarchive handle is freed, see _release_libarchive
+        self._libarchive_live = False
         self.uncompressed = None
         self.fp = file
         self.path = file.name
@@ -114,8 +116,21 @@ class ArchiveWrapper(DecompressionCounterMixin):
             raise libarchive.ArchiveError("Unrecognized archive format")
         file.seek(0)
         self.ctx = libarchive.stream_reader(file, block_size=self.block_size)
+        self._libarchive_live = True
 
         self.uncompressed = InMemoryRolloverTempFile.with_memory_budget()
+
+    def _release_libarchive(self):
+        """Unlink entries from the handle, called just before freeing it.
+
+        Touching a freed handle aborts or segfaults the process instead of
+        raising. Dropping _archive_p makes get_blocks raise TypeError instead.
+        """
+        self._libarchive_live = False
+        for wrapper in self.entries.values():
+            entry = getattr(wrapper, "entry", None)
+            if isinstance(entry, ArchiveEntry):
+                entry._archive_p = None
 
     def __enter__(self):
         try:
@@ -129,6 +144,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
 
     def __exit__(self, *args):
         if self.ctx:
+            self._release_libarchive()
             self.ctx.__exit__(*args)
             self.ctx = None
         if self.uncompressed:
@@ -210,6 +226,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
                 self._finish_live_entry()
             del entry_wrapper
         if self.ctx:
+            self._release_libarchive()
             self.ctx.__exit__(None, None, None)
         self.ctx = None
         entry = None
@@ -237,6 +254,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
         self.entries[entry_wrapper.file_name] = CompletedEntryWrapper(entry_wrapper)
 
     def recover_decompressor(self, libarchive_exception):
+        self._release_libarchive()
         self.ctx.__exit__(None, None, None)
         self.ctx = None
         gc.collect()
@@ -436,6 +454,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
     def recover_partial_data(self, exception):
         self.reader = []
         if self.ctx:
+            self._release_libarchive()
             self.ctx.__exit__(None, None, None)
             self.ctx = None
         gc.collect()
@@ -531,10 +550,22 @@ class BlockReader(ArchiveEntryReader):
         self.size = entry.file_size
         super().__init__(entry, archive, *args, **kwargs)
 
+    def close(self):
+        # Nothing left to drain, and the base close() would drain into a freed handle
+        if not self._closed and not self.archive._libarchive_live:
+            self._closed = True
+            return
+        super().close()
+
     def _get_data(self, n=None, discard=False):
         amount_need_read = min(self.size, self.pos + n)
         left = n
         if amount_need_read > self.read_bytes:
+            if not self.archive._libarchive_live:
+                # Reading a freed handle takes the process down, not an exception
+                raise libarchive.ArchiveError(
+                    "Archive closed before %s was read (%d of %d bytes)" %
+                    (self.entry.path, self.read_bytes, self.size))
             stream_serial = getattr(self.entry, "stream_serial", self.archive._stream_serial)
             if stream_serial != self.archive._stream_serial:
                 # guards against potential segfaults if we read past the end of an entry
