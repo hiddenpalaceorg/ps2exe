@@ -1,5 +1,7 @@
 import logging
 import mmap
+import os
+import re
 import tempfile
 
 import psutil
@@ -7,6 +9,23 @@ import psutil
 from utils.files import BaseFile, OffsetFile
 
 LOGGER = logging.getLogger(__name__)
+
+BYTE_SUFFIXES = {"": 1, "K": 1024, "M": 1024 ** 2, "G": 1024 ** 3, "T": 1024 ** 4}
+
+
+def _byte_size_from_env(name):
+    value = os.environ.get(name)
+    if not value:
+        return None
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([KMGT]?)B?\s*", value, re.IGNORECASE)
+    if not match:
+        LOGGER.warning("Ignoring unparseable %s=%r", name, value)
+        return None
+    return int(float(match.group(1)) * BYTE_SUFFIXES[match.group(2).upper()])
+
+
+# Hard memory limit, overrides runtime setting if lower
+MEMORY_BUDGET_LIMIT = _byte_size_from_env("PS2EXE_MEM_BUDGET")
 
 
 class InMemoryRolloverTempFile(BaseFile):
@@ -16,9 +35,11 @@ class InMemoryRolloverTempFile(BaseFile):
     @classmethod
     def with_memory_budget(cls, max_size=None):
         """Allocate against a decreasing share of free physical memory,
-        optionally capped at max_size"""
+        optionally capped at max_size and at PS2EXE_MEM_BUDGET"""
         for fraction in (.8, .6):
             budget = int(psutil.virtual_memory().available * fraction)
+            if MEMORY_BUDGET_LIMIT is not None:
+                budget = min(budget, MEMORY_BUDGET_LIMIT)
             try:
                 return cls(budget if max_size is None else min(max_size, budget))
             except OSError:
