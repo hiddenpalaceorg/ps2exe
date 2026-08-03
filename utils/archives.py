@@ -20,6 +20,9 @@ from utils.zip_explode import ExplodingInputStream
 
 LOGGER = logging.getLogger(__name__)
 
+# Size of the buffer libarchive asks for on each read callback
+ARCHIVE_BLOCK_SIZE = 1024 * 1024
+
 try:
     import libarchive
 except TypeError:
@@ -93,13 +96,7 @@ class ArchiveWrapper(DecompressionCounterMixin):
             file.seek(0)
             rarfile.RarFile(file)
         file.seek(0)
-        try:
-            if self.path:
-                self.block_size = os.stat(self.path).st_blksize
-            else:
-                self.block_size = 65536
-        except (OSError, AttributeError):
-            self.block_size = 65536
+        self.block_size = ARCHIVE_BLOCK_SIZE
         try:
             with libarchive.stream_reader(file, block_size=self.block_size) as f:
                 next(iter(f))
