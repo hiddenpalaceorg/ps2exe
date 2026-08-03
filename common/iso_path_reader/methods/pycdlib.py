@@ -19,6 +19,7 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
     def __init__(self, iso, fp, *args, volume_type, **kwargs):
         super().__init__(iso, fp, *args, **kwargs)
         self.volume_type = volume_type
+        self._path_index = None
 
     @property
     def pycdlib_volume_type(self):
@@ -102,6 +103,24 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
     def is_directory(self, file):
         return file.is_dir()
 
+    def path_index(self):
+        """
+        Builds a path table so repeated directory tree lookups for
+        files that don't exist don't kill performance
+        """
+        if self._path_index is not None:
+            return self._path_index
+        index = {}
+        try:
+            for file in self.iso_iterator(self.get_root_dir(), recursive=True):
+                # First record wins, as in the linear scan this replaced
+                index.setdefault(self.get_file_path(file).lower(), file)
+        except Exception:
+            # don't cache a messed up tree
+            return index
+        self._path_index = index
+        return index
+
     def get_file(self, path):
         if path[0] == "\\":
             path = pathlib.Path(path).as_posix()
@@ -113,12 +132,9 @@ class PyCdLibPathReader(ChunkedHashTrait, IsoPathReader):
             try:
                 f = self.iso.get_record(**{f"{self.pycdlib_volume_type}_path":path + ";1"})
             except (PyCdlibInvalidInput, IndexError):
-                try:
-                    for file in self.iso_iterator(self.get_root_dir(), recursive=True):
-                        if path.lower() == self.get_file_path(file).lower():
-                            return file
-                except Exception:
-                    pass
+                file = self.path_index().get(path.lower())
+                if file is not None:
+                    return file
                 raise FileNotFoundError(e)
         if not f:
             raise FileNotFoundError
