@@ -2,10 +2,21 @@ from dates import datetime_from_iso_date
 
 
 class IsoPathReader:
-    def __init__(self, iso, fp, parent_container):
+    def __init__(self, iso, fp, parent_container, *, extent_cache=None):
         self.iso = iso
         self.fp = fp
         self.parent_container = parent_container
+        self.extent_cache = extent_cache
+
+    @property
+    def volume_type_chain(self):
+        # e.g. "directory->iso9660" for the iso9660 view of a top level image
+        chain = []
+        container = self
+        while container:
+            chain.append(container.volume_type)
+            container = container.parent_container
+        return "->".join(reversed(chain))
 
     def get_root_dir(self):
         raise NotImplementedError
@@ -33,6 +44,22 @@ class IsoPathReader:
 
     def get_file_sector(self, file):
         raise NotImplementedError
+
+    def get_file_extents(self, file):
+        # (lba, byte_length) pairs describing exactly what open_file would read,
+        # or None when the filesystem can't express that (disables extent dedup)
+        return None
+
+    def begin_namespace_recording(self):
+        # Only volumes that can expose the same file under several views need to
+        # record how containers inside them resolve names (see PyCdLibPathReader)
+        return None
+
+    def end_namespace_recording(self):
+        pass
+
+    def namespace_replays(self, log, source_reader):
+        return False
 
     def is_directory(self, file):
         raise NotImplementedError
