@@ -10,6 +10,7 @@ import sys
 import enlighten
 
 import utils.installshield
+from common.extent_dedup import ExtentDedup
 from common.factory import IsoProcessorFactory
 from common.iso_path_reader.methods.directory import DirectoryPathReader
 from common.processor import BaseIsoProcessor
@@ -38,13 +39,8 @@ def get_disc_set_resolver():
 
 def extract_info(path_reader, basename, iso_path, disable_contents_checksum):
     info = {"name": basename.decode("cp1252"), "path": iso_path, "volume_type": path_reader.volume_type}
-    parent_volume_types = []
-    current_container = path_reader
-    while current_container.parent_container:
-        current_container = current_container.parent_container
-        parent_volume_types.append(current_container.volume_type)
-
-    info["parent_volume_type"] = "->".join(reversed(parent_volume_types))
+    parent = path_reader.parent_container
+    info["parent_volume_type"] = parent.volume_type_chain if parent else ""
 
     system = BaseIsoProcessor.get_system_type(path_reader)
     info.update({"system": system})
@@ -75,13 +71,15 @@ def process_containers_recursive(iso_filename, disable_contents_checksum):
     iso_path = iso_filename.encode("cp1252", errors="replace")
     LOGGER.info("Reading %s", iso_path.decode("cp1252"))
 
+    rows = []
+
     stack = [
         ([root_path_reader],
          iso_filename,
-         iter([(root_path_reader, root_path_reader.get_file(iso_filename))]))
+         iter([(root_path_reader, root_path_reader.get_file(iso_filename))]),
+         ExtentDedup(rows, enabled=not args.no_extent_dedup),
+         None)
     ]
-
-    rows = []
 
     def flat_file_iterator(path_readers):
         for path_reader in path_readers:
@@ -89,12 +87,24 @@ def process_containers_recursive(iso_filename, disable_contents_checksum):
                 yield path_reader, file
 
     while stack:
-        path_readers, current_base_path, file_iterator = stack[-1]
+        path_readers, current_base_path, file_iterator, dedup, own_scan = stack[-1]
 
         while iter_next := next(file_iterator, None):
             path_reader, file = iter_next
             file_path = path_reader.get_file_path(file)
             if not is_path_allowed(file_path, args.allow_extensions):
+                continue
+
+            if file_path != iso_filename:
+                nested_path = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
+            else:
+                nested_path = iso_filename
+
+            dedup_key = dedup.key_for(path_reader, file)
+            if reusable := dedup.reusable_scan(dedup_key, path_reader):
+                # another reference already scanned these bytes, so just record
+                # where this view reaches them
+                dedup.reuse(reusable, path_reader, file_path, nested_path)
                 continue
 
             fp = path_reader.open_file(file)
@@ -104,6 +114,10 @@ def process_containers_recursive(iso_filename, disable_contents_checksum):
                 pass
 
             basename = os.path.basename(file_path).encode("cp1252", errors="replace")
+            # From here until this container is fully explored the reader writes
+            # down every name resolved in it, so another view can tell whether it
+            # would have found the same things
+            scan = dedup.begin_scan(dedup_key, path_reader, nested_path)
             nested_path_readers, exceptions = IsoProcessorFactory.get_iso_path_readers(
                 fp, basename.decode("cp1252"), path_reader, PROGRESS_MANAGER
             )
@@ -129,6 +143,11 @@ def process_containers_recursive(iso_filename, disable_contents_checksum):
                     LOGGER.error("Volume type: %s", volume_type, exc_info=exception)
 
             if not nested_path_readers:
+                if scan is not None:
+                    # remember that these bytes hold no volume, so other references
+                    # skip the open and sniff too. A sniff that errored isn't
+                    # remembered, since the failure itself may be view-dependent
+                    scan.finish(remember=not exceptions)
                 try:
                     fp.__exit__()
                 except AttributeError:
@@ -139,12 +158,12 @@ def process_containers_recursive(iso_filename, disable_contents_checksum):
                     pass
                 continue
 
-            if file_path != iso_filename:
-                nested_path = str(pathlib.Path(current_base_path) / file_path.lstrip("/"))
-            else:
-                nested_path = iso_filename
             if path_reader != root_path_reader:
                 LOGGER.info("Found nested container %s", nested_path)
+
+            if not dedup.enabled:
+                for nested_path_reader in nested_path_readers:
+                    nested_path_reader.extent_cache = None
 
             for nested_path_reader in nested_path_readers:
                 LOGGER.info("Found volume type %s", nested_path_reader.volume_type)
@@ -170,12 +189,17 @@ def process_containers_recursive(iso_filename, disable_contents_checksum):
 
             # Find sub-containers in this file immediately.
             # Pick up where we left off on this container once all sub-containers on this file are exhausted
-            stack.append((nested_path_readers, nested_path, flat_file_iterator(nested_path_readers)))
+            stack.append((nested_path_readers, nested_path, flat_file_iterator(nested_path_readers),
+                          dedup.child(), scan))
             if len(stack) == 2:
                 LOGGER.info("Checking for nested containers")
             break
 
         if not iter_next:
+            if own_scan is not None:
+                # this container is fully explored, so its rows are final and it
+                # becomes available for other references to reuse
+                own_scan.finish()
             # No more files for this container, close all path readers
             for path_reader in path_readers:
                 path_reader.close()
@@ -262,6 +286,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--no-contents-checksum',
                         help="Disable calculating the hash of the image contents",
+                        action='store_true',
+                        default=False)
+
+    parser.add_argument('--no-extent-dedup',
+                        help="Don't reuse reads for files occupying identical extents "
+                             "across volume views of the same image",
                         action='store_true',
                         default=False)
 

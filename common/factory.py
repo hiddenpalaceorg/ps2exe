@@ -311,6 +311,10 @@ class IsoProcessorFactory:
         if is_ps3:
             path_reader_class = Ps3PathReader
 
+        # All views of this image share one digest cache, keyed by extent
+        # ranges within `wrapper`
+        extent_cache = {}
+
         iso = pycdlib.PyCdlib()
         try:
             iso.open_fp(wrapper)
@@ -329,16 +333,19 @@ class IsoProcessorFactory:
 
         if iso._initialized:
             if iso.pvd.root_dir_record.children:
-                path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="iso9660"))
+                path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="iso9660",
+                                                      extent_cache=extent_cache))
 
             if iso.rock_ridge:
                 if next((child for child in
                          iso.pvd.root_dir_record.children
                          if not child.is_dot() and child.is_dotdot() and child.rock_ridge), None):
-                    path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="rock_ridge"))
+                    path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="rock_ridge",
+                                                          extent_cache=extent_cache))
 
             if iso.joliet_vd:
-                path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="joliet"))
+                path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="joliet",
+                                                      extent_cache=extent_cache))
 
             if wrapper.starting_sector == 0 and wrapper.length() > 45000 * iso.logical_block_size:
                 hd_addr = 45000 * iso.logical_block_size
@@ -363,7 +370,8 @@ class IsoProcessorFactory:
         if iso._has_udf:
             iso = PyCdlibUdf()
             iso.open_fp(wrapper)
-            path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="udf"))
+            path_readers.append(path_reader_class(iso, wrapper, parent_container, volume_type="udf",
+                                                  extent_cache=extent_cache))
 
         if not iso._initialized and not iso._has_udf:
             try:
@@ -371,6 +379,13 @@ class IsoProcessorFactory:
                 path_readers.append(PathlabPathReader(iso_accessor, wrapper, parent_container, pvd=iso.pvd))
             except Exception as e:
                 exceptions[PathlabPathReader.volume_type] = e
+
+        if is_ps3:
+            ps3_readers = [reader for reader in path_readers if isinstance(reader, Ps3PathReader)]
+            if ps3_readers:
+                disc_key = ps3_readers[0].get_disc_key()
+                for reader in ps3_readers:
+                    reader.disc_key = disc_key
 
         return path_readers, exceptions
 

@@ -73,7 +73,6 @@ class Ps3PathReader(PyCdLibPathReader):
         self.number_of_unencrypted_regions = struct.unpack('>i4x', self.fp.read(8))
         self.regions = self.get_regions()
         self.disc_key = None
-        self.disc_key = self.get_disc_key()
 
     def get_regions(self):
         Region = collections.namedtuple("Region", "start end encrypted")
