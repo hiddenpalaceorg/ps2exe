@@ -33,6 +33,7 @@ from ps3.path_reader import Ps3PathReader
 from psx.processor import PsxIsoProcessor
 from psp.processor import PspIsoProcessor
 from ps3.processor import Ps3IsoProcessor
+from vita.processor import PsVitaIsoProcessor
 from saturn.processor import SaturnIsoProcessor
 from megacd.processor import MegaCDIsoProcessor
 from p3do.operafs import OperaFs
@@ -421,6 +422,8 @@ class IsoProcessorFactory:
             return PspIsoProcessor
         elif system_type == "ps3":
             return Ps3IsoProcessor
+        elif system_type == "vita":
+            return PsVitaIsoProcessor
         elif system_type == "3do":
             return P3doIsoProcessor
         elif system_type == "cd32":
