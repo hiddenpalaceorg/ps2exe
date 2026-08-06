@@ -685,7 +685,16 @@ class ZipFileReader(CompressedFileAsFileIoReader):
                 elif "\\" in entry.orig_filename:
                     entry.orig_filename = entry.orig_filename.replace("\\", "//")
                 else:
-                    raise
+                    pattern = r"File name in directory '([^']+)' and header b'([^']+)' differ\."
+                    match = re.search(pattern, str(e))
+
+                    if match:
+                        LOGGER.warning(e)
+                        header_filename = match.group(2)
+                        header_filename = header_filename.replace('\\\\', '\\')
+                        entry.orig_filename = header_filename
+                    else:
+                        raise
                 return self.archive.open(entry, "r")
             elif str(e).startswith("Overlapped entries"):
                 entry._end_offset = None
