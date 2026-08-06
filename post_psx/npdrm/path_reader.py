@@ -143,7 +143,7 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
                     return None, self_key
 
             # If we have a decrypted EBOOT and an encrypted file (EDAT or SELF), try brute force search
-            if eboot_file and (edat_file or self_file):
+            if eboot_file and (edat_file or (self_file and not self_decryptor.data_keys)):
                 encrypted_file = self._prepare_search_target(edat_file, self_file)
                 if encrypted_file:
                     eboot_elf = eboot_decryptor.get_decrypted_elf()
@@ -247,9 +247,35 @@ class NPDRMPathReader(ChunkedHashTrait, PostPsxPathReader, IsoPathReader):
 
         eboot_file = next((file for file in self.iso_iterator(root_dir, recursive=True) if
                            self.get_file_path(file).lower().endswith("eboot.bin")), None)
-        self_file = next((file for file in self.iso_iterator(root_dir, recursive=True) if
-                          self.get_file_path(file).lower().endswith(".sprx") or
-                          self.get_file_path(file).lower().endswith(".self")), None)
+
+        # Pick a SELF that a klic search could actually make progress on. Taking
+        # the first one by name lands on files that are already readable, and
+        # every one of those sends _prepare_search_target off on a brute force
+        # that had nothing to find
+        self_file = None
+        for file in self.iso_iterator(root_dir, recursive=True):
+            if self.get_file_path(file).lower().endswith(".sprx") or self.get_file_path(file).lower().endswith(".self"):
+                try:
+                    inode = pycdlib.inode.Inode()
+                    inode.parse(file.file_offset // 16, file.file_size, self.fp, 16)
+                    with DecryptedFileReader(inode, 16, self.iso, file) as f:
+                        decryptor = SELFDecrypter(f)
+                        if not decryptor.load_headers() or decryptor.sce_hdr.attribute & 0x8000 == 0x8000:
+                            continue
+
+                        # Not an npdrm self, no klic involved
+                        if (npd := decryptor.get_npd_header()) is None:
+                            continue
+
+                        # A free license carries its own key material
+                        if npd.license == 3 and decryptor.load_metadata():
+                            continue
+                except Exception as e:
+                    LOGGER.warning("Could not read SELF header for %s: %s", self.get_file_path(file), e)
+                    continue
+
+                self_file = file
+                break
 
         return {
             'edat': edat_file,
