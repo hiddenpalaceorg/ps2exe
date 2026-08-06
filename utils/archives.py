@@ -627,6 +627,11 @@ class CompressedFileAsFileIoReader(ArchiveEntryReader):
                     self.fp.end_pos = self.fp.offset + self.read_bytes
                     raise
                 read = len(data)
+                if not read:
+                    # The entry header promised more bytes than the stream holds,
+                    # and a zero-length read leaves size_left untouched forever
+                    self.fp.end_pos = self.fp.offset + self.read_bytes
+                    break
                 self.fp.write(data)
                 self.recovery_buf = b""
                 size_left -= read
