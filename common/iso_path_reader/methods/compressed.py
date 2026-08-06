@@ -28,7 +28,8 @@ class CompressedPathReader(ChunkedHashTrait, IsoPathReader):
                 "Passphrase required for this entry",
                 "password required for extraction",
                 "Unsupported ZIP compression method",
-                "That compression method is not supported"
+                "That compression method is not supported",
+                "Truncated ZIP file header"
             ]
             if any(error for error in skippable_errors if error in str(e)):
                 self.iso.__exit__(e)
