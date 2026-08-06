@@ -374,7 +374,12 @@ class ArchiveWrapper(DecompressionCounterMixin):
                 fake_central_dir = io.BytesIO()
                 self.fp.seek(pos)
                 local_header = self.fp.read(0x1E)
-                filename_raw = self.fp.read(struct.unpack("<H", local_header[0x1A:0x1C])[0])
+                if len(local_header) < 0x1E:
+                    break
+                filename_len = struct.unpack("<H", local_header[0x1A:0x1C])[0]
+                filename_raw = self.fp.read(filename_len)
+                if len(filename_raw) < filename_len:
+                    break
 
                 if self.ctx.filelist:
                     flags = struct.unpack("<H", local_header[0x06:0x08])[0]
