@@ -716,6 +716,14 @@ class ZipFileReader(CompressedFileAsFileIoReader):
                 LOGGER.warning(e)
                 return super()._get_data(n, discard)
             raise
+        except EOFError:
+            # The base reader has already marked where the data really stops, so
+            # hand back what decompressed cleanly rather than losing the entry
+            LOGGER.warning("Compressed data ended before the end-of-stream marker, "
+                           "keeping %d of %d bytes, file: %s", self.read_bytes, self.size, self.name)
+            if discard:
+                return
+            return self.fp[self.pos:self.pos + n]
 
 
 class RarFileReader(CompressedFileAsFileIoReader):
