@@ -311,6 +311,12 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False)
 
+    parser.add_argument('--ignore-existing-by-name',
+                        help="Match --ignore-existing entries on file name instead of full path, "
+                             "for rescanning a set that has moved or is mounted somewhere else",
+                        action='store_true',
+                        default=False)
+
     parser.add_argument('--allow-extensions',
                         help="Allow these normally ignored extensions to be processed",
                         nargs='+',
@@ -366,8 +372,11 @@ if __name__ == '__main__':
         writer.writeheader()
         csv_file.flush()
 
-    existing_files = []
-    if args.ignore_existing:
+    def existing_key(path):
+        return os.path.basename(path) if args.ignore_existing_by_name else path
+
+    existing_files = set()
+    if args.ignore_existing or args.ignore_existing_by_name:
         class NotNullTextWrapper(io.TextIOWrapper):
 
             def read(self, *args, **kwargs):
@@ -382,7 +391,7 @@ if __name__ == '__main__':
             reader = csv.DictReader(text_file)
             if f.tell() != 0:
                 f.seek(0)
-                existing_files = [line["path"] for line in reader]
+                existing_files = {existing_key(line["path"]) for line in reader}
                 csv_file.seek(0, os.SEEK_END)
 
     format = PROGRESS_MANAGER.term.bold_underline_bright_white_on_lightslategray(
@@ -397,7 +406,7 @@ if __name__ == '__main__':
     file_count = 0
     files = []
     if args.file:
-        if args.file not in existing_files:
+        if existing_key(args.file) not in existing_files:
             if is_path_allowed(args.file, args.allow_extensions):
                 file_count += 1
                 files.append(args.file)
@@ -417,7 +426,7 @@ if __name__ == '__main__':
                         break
                 if skip:
                     continue
-                if path in existing_files:
+                if existing_key(path) in existing_files:
                     continue
                 if not is_path_allowed(path, args.allow_extensions):
                     continue
@@ -442,7 +451,7 @@ if __name__ == '__main__':
     for path in files:
         status_bar.update(game_name=os.path.basename(path))
 
-        if path in existing_files:
+        if existing_key(path) in existing_files:
             continue
         if not is_path_allowed(path, args.allow_extensions):
             continue
