@@ -365,7 +365,7 @@ if __name__ == '__main__':
                 data = super().readline(*args, **kwargs)
                 return data.replace('\x00', '')
         with open(args.output, "ba+") as f, \
-                NotNullTextWrapper(f) as text_file:
+                NotNullTextWrapper(f, encoding="utf-8") as text_file:
             reader = csv.DictReader(text_file)
             if f.tell() != 0:
                 f.seek(0)
