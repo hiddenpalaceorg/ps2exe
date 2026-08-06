@@ -704,7 +704,7 @@ class ZipFileReader(CompressedFileAsFileIoReader):
 
     def _get_data(self, n, discard=False):
         try:
-            super()._get_data(n, discard)
+            return super()._get_data(n, discard)
         except zipfile.BadZipFile as e:
             if str(e).startswith("Bad CRC-32"):
                 self._recover_buf()
