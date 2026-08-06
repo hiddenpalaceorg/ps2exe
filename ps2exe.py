@@ -275,6 +275,11 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--log", dest="logLevel", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                         help="Set the logging level", default="INFO")
 
+    parser.add_argument('--log-file',
+                        help="File to output log data to",
+                        type=str,
+                        required=False)
+
     group = parser.add_mutually_exclusive_group(required=True)
 
     group.add_argument("input_dir", nargs="?")
@@ -331,6 +336,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.logLevel))
+
+    if args.log_file:
+        log_dir = os.path.dirname(args.log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        log_file_handler = logging.FileHandler(args.log_file, "a+")
+        log_file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        logging.getLogger().addHandler(log_file_handler)
 
     results = []
     apply_patches()
