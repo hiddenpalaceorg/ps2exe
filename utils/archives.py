@@ -523,8 +523,19 @@ class ArchiveEntryReader(AccessBySliceFile, io.IOBase):
 
     def close(self):
         if not self._closed:
-            self.seek(0, io.SEEK_END)
-            self._closed = True
+            try:
+                self.seek(0, io.SEEK_END)
+            finally:
+                self._closed = True
+
+    def truncated(self):
+        # Keep the readable prefix, but never retry draining a failed stream
+        # during wrapper cleanup or destruction.
+        self.fp.end_pos = self.fp.offset + self.read_bytes
+        if isinstance(self.fp, OffsetFile):
+            self.fp._length = self.read_bytes
+        self._closed = True
+        raise EOFError("Compressed member ended before its declared size")
 
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -820,7 +831,7 @@ class Inflate64Reader(ArchiveEntryReader):
         self._running_crc = None
         self.open(self.entry)
         self.size = self.entry.file_size
-        self.start_pos = 0
+        self.compressed_left = self.entry.compress_size
 
     def _get_data(self, n=None, discard=False):
         amount_need_read = min(self.size, self.pos + n)
@@ -828,10 +839,17 @@ class Inflate64Reader(ArchiveEntryReader):
             self.fp.seek(self.read_bytes)
             size_left = amount_need_read - self.read_bytes
             while size_left > 0:
-                chunk_size = min(65536, size_left)
+                if self.compressed_left <= 0:
+                    self.truncated()
+                chunk_size = min(65536, self.compressed_left)
                 chunk = self.archive.fp.read(chunk_size)
+                self.compressed_left -= len(chunk)
+                if not chunk:
+                    self.truncated()
                 data = self.decomp.inflate(chunk)
                 read = len(data)
+                if not read and self.decomp.eof:
+                    self.truncated()
                 self._update_crc(data)
                 self.fp.write(data)
                 size_left -= read
@@ -874,7 +892,6 @@ class ImplodedReader(ArchiveEntryReader):
         self.decomp = None
         self.open(self.entry)
         self.size = self.entry.file_size
-        self.start_pos = 0
 
     def _get_data(self, n=None, discard=False):
         amount_need_read = min(self.size, self.pos + n)
@@ -885,6 +902,8 @@ class ImplodedReader(ArchiveEntryReader):
                 chunk_size = min(65536, size_left)
                 data = self.decomp.read(chunk_size)
                 read = len(data)
+                if not read:
+                    self.truncated()
                 self._update_crc(data)
                 self.fp.write(data)
                 size_left -= read
