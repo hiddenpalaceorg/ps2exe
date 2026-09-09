@@ -737,14 +737,14 @@ class InstallShieldCabWrapper(DecompressionCounterMixin):
                 return name
         return ""
 
-    def _directory_name(self, index):
+    def _directory_name(self, index, raw=False):
         if index >= self.cab.directory_count:
             if index != 0xFFFF:
                 LOGGER.warning("Invalid directory index %d in %s", index, self.path)
             return ""
         name = self._read_string(
             self.common.cab_descriptor_offset + self.cab.file_table_offset + self.file_table[index])
-        return name.replace("\\", "/").strip("/")
+        return name if raw else name.replace("\\", "/").strip("/")
 
     def _read_file_descriptor(self, index):
         base = self.common.cab_descriptor_offset
@@ -974,9 +974,18 @@ class InstallShieldCabWrapper(DecompressionCounterMixin):
         return raw
 
     def _open_external(self, fd, path):
-        directory = self._directory_name(fd.directory_index)
+        directory = self._directory_name(fd.directory_index, raw=True)
         name = self._read_string(
             self.common.cab_descriptor_offset + self.cab.file_table_offset + fd.name_offset)
+        # These names now address host files, not installation destinations.
+        # Validate before display-path normalization discards leading slashes.
+        for value in (directory, name):
+            normalized = value.replace("\\", "/")
+            if (normalized.startswith("/") or ":" in normalized or
+                    ".." in normalized.split("/") or "\x00" in normalized):
+                raise InstallShieldError("Unsafe external file path")
+        directory = directory.replace("\\", "/")
+        name = name.replace("\\", "/")
         reader = self._open_external_at_recorded_path(fd, directory, name, path)
         if reader is None:
             reader = self._open_external_by_search(fd, directory, name, path)
