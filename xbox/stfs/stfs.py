@@ -110,13 +110,17 @@ class STFS(object):
                 self.filelistings.append(FileListing(data[x:x + 0x40]))
             except AssertionError:
                 pass
-        for fl in self.filelistings:  # Build a dictionary to access filelistings by path
+        for index, fl in enumerate(self.filelistings):  # Build virtual paths
             path_components = [fl.filename]
             a = fl
-            while a.pathindex != -1 and a.pathindex < len(self.filelistings):
+            seen_parents = {index}
+            while a.pathindex != -1:
+                if a.pathindex < 0 or a.pathindex >= len(self.filelistings):
+                    raise ValueError("Invalid STFS parent index")
+                if a.pathindex in seen_parents or len(seen_parents) >= 128:
+                    raise ValueError("Cyclic or excessively deep STFS parent chain")
+                seen_parents.add(a.pathindex)
                 try:
-                    if self.filelistings[a.pathindex] == a:
-                        break
                     a = self.filelistings[a.pathindex]
                     path_components.append(a.filename)
                 except IndexError:
