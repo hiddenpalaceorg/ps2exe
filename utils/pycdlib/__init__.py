@@ -5,6 +5,7 @@ import collections
 import logging
 import os
 import struct
+from common.traversal import Traversal
 
 import pycdlib.dr
 import pycdlib.rockridge
@@ -200,9 +201,10 @@ class PyCdlib(_PyCdlib):
         parent_links = []
         child_links = []
         lastbyte = 0
-        dirs = collections.deque([root_dir_record])
+        walk = Traversal()
+        dirs = collections.deque([(root_dir_record, walk.enter(root_dir_record.extent_location(), frozenset()))])
         while dirs:
-            dir_record = dirs.popleft()
+            dir_record, ancestors = dirs.popleft()
 
             self._seek_to_extent(dir_record.extent_location())
             length = dir_record.get_data_length()
@@ -230,6 +232,7 @@ class PyCdlib(_PyCdlib):
                     continue
 
                 new_record = HsDirectoryRecord()
+                walk.take()
                 new_record.parse(vd, data[offset:offset + lenbyte], dir_record)
                 offset += lenbyte
 
@@ -303,7 +306,7 @@ class PyCdlib(_PyCdlib):
                         # record in the parent_links list for later linking.
                         parent_links.append(new_record)
                     if not dots and not rr_cl:
-                        dirs.append(new_record)
+                        dirs.append((new_record, walk.enter(new_extent_loc, ancestors)))
                         new_record.set_ptr(extent_to_ptr[new_extent_loc])
 
                 if new_record.parent is None:

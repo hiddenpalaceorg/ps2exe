@@ -2,6 +2,7 @@ import collections
 import functools
 import os
 import struct
+from common.traversal import Traversal
 
 from pycdlib import PyCdlib, pycdlibexception, headervd, inode, pycdlib
 from pycdlib import udf as udfmod
@@ -275,9 +276,11 @@ class PyCdlibUdf(PyCdlib):
                                                    self.udf_file_set.root_dir_icb,
                                                    None)
 
-        udf_file_entries = collections.deque([self.udf_root])
+        walk = Traversal()
+        root_extent = self.root_relative_location + self.udf_file_set.root_dir_icb.log_block_num
+        udf_file_entries = collections.deque([(self.udf_root, walk.enter(root_extent, frozenset()))])
         while udf_file_entries:
-            udf_file_entry = udf_file_entries.popleft()
+            udf_file_entry, ancestors = udf_file_entries.popleft()
 
             if udf_file_entry is None:
                 continue
@@ -309,6 +312,7 @@ class PyCdlibUdf(PyCdlib):
                 if desc_tag.tag_ident != 257:
                     raise pycdlibexception.PyCdlibInvalidISO('UDF File Identifier Tag identifier not 257')
                 file_ident = UDFFileIdentifierDescriptor()
+                walk.take()
                 offset += file_ident.parse(data[offset:],
                                            current_extent,
                                            desc_tag,
@@ -344,7 +348,7 @@ class PyCdlibUdf(PyCdlib):
                 next_entry.file_ident = file_ident
 
                 if file_ident.is_dir():
-                    udf_file_entries.append(next_entry)
+                    udf_file_entries.append((next_entry, walk.enter(abs_file_entry_extent, ancestors)))
                 else:
                     if next_entry.get_data_length() > 0:
                         abs_file_data_extent = part_start + next_entry.alloc_descs[0].log_block_num
