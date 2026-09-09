@@ -12,6 +12,28 @@ LOGGER = logging.getLogger(__name__)
 
 
 class DreamcastIsoProcessor(BaseIsoProcessor):
+    @staticmethod
+    def _track_name(name):
+        normalized = name.replace("\\", "/")
+        if (not normalized or normalized.startswith("/") or ":" in normalized or
+                ".." in normalized.split("/") or "\x00" in normalized):
+            raise ValueError("Unsafe disc track path")
+        return normalized
+
+    def _track_file(self, directory, name):
+        parent = self.iso_path_reader.parent_container
+        path = pathlib.Path(directory) / self._track_name(name)
+        # Directory readers address host files; resolve symlinks before lookup
+        # and reject any target outside the selected disc directory.
+        if parent.volume_type == "directory":
+            root = pathlib.Path(parent.get_root_dir()).resolve()
+            path = path.resolve()
+            try:
+                path.relative_to(root)
+            except ValueError:
+                raise ValueError("Disc track is outside the selected directory") from None
+        return parent.get_file(str(path))
+
     def __init__(self, iso_path_reader, iso_filename, *args):
         from common.factory import IsoProcessorFactory
         if iso_path_reader.fp.starting_sector == 0:
@@ -83,6 +105,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
 
 
                 track = match.groupdict()
+                track["file_name"] = self._track_name(track["file_name"])
 
                 for key in ("index", "sector", "type", "sector_size"):
                     # Fix for DIC's placeholder track 2
@@ -99,6 +122,8 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
             return tracks
 
     def get_fp_from_gdi(self, gdi_file, tracks):
+        for item in tracks:
+            self._track_name(item["file_name"])
         if len(tracks) < 3:
             data_tracks = [tracks[0]]
         else:
@@ -110,7 +135,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         gdi_path = self.iso_path_reader.parent_container.get_file_path(gdi_file)
         gdi_dir = pathlib.Path(gdi_path).parent
         try:
-            track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / data_tracks[0]["file_name"]))
+            track_file = self._track_file(gdi_dir, data_tracks[0]["file_name"])
         except FileNotFoundError:
             return
 
@@ -126,7 +151,7 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         files = [track]
         try:
             for track in data_tracks:
-                track_file = self.iso_path_reader.parent_container.get_file(str(gdi_dir / track["file_name"]))
+                track_file = self._track_file(gdi_dir, track["file_name"])
                 offsets.append(int(track["sector"]) * 2048)
                 track = BinWrapper(
                         MmappedFile(self.iso_path_reader.parent_container.open_file(track_file)),
@@ -160,13 +185,14 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
                 if match := re.match(r"FILE \"?(?P<file_name>[^\"\n]+)\"?", line):
                     if track:
                         if track["index"] != 2:
-                            file = self.iso_path_reader.parent_container.get_file(str(pathlib.Path(cue_dir) / track["file_name"]))
+                            file = self._track_file(cue_dir, track["file_name"])
                             try:
                                 sector += int(self.iso_path_reader.parent_container.get_file_size(file) / track["sector_size"])
                             except FileNotFoundError:
                                 pass
                         tracks.append(track)
                     track = match.groupdict()
+                    track["file_name"] = self._track_name(track["file_name"])
                     if track["file_name"] == iso_filename:
                         if self.iso_path_reader.fp.starting_sector:
                             sector = self.iso_path_reader.fp.starting_sector
@@ -223,4 +249,3 @@ class DreamcastIsoProcessor(BaseIsoProcessor):
         }
 
         return header_info
-
